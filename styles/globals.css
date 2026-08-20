@@ -1,0 +1,112 @@
+/* ─── TOKENS ─────────────────────────────────────────── */
+:root {
+  /* Brand Colors */
+  --color-primary:        #0D5C46;
+  --color-primary-dark:   #0a4a38;
+  --color-primary-light:  #1D9E75;
+  --color-primary-faint:  #E1F5EE;
+
+  --color-amber:          #BA7517;
+  --color-amber-light:    #EF9F27;
+  --color-amber-faint:    #FAEEDA;
+
+  /* Neutrals */
+  --color-bg:             #F0F4F2;
+  --color-surface:        #ffffff;
+  --color-surface-2:      #F7FAF8;
+  --color-border:         rgba(0, 0, 0, 0.08);
+  --color-border-md:      rgba(0, 0, 0, 0.14);
+
+  /* Text */
+  --color-text:           #1a2e25;
+  --color-text-2:         #444441;
+  --color-text-3:         #5F5E5A;
+  --color-text-4:         #888780;
+
+  /* Semantic */
+  --color-success:        #1D9E75;
+  --color-success-faint:  #E1F5EE;
+  --color-warning:        #BA7517;
+  --color-warning-faint:  #FAEEDA;
+  --color-danger:         #C0392B;
+  --color-danger-faint:   #FDECEA;
+
+  /* Typography — next/font injects these variables */
+  --font-sans:   var(--font-jakarta), 'Plus Jakarta Sans', sans-serif;
+  --font-serif:  var(--font-lora), 'Lora', serif;
+
+  /* Spacing */
+  --s1:  4px;  --s2:  8px;  --s3: 12px;
+  --s4: 16px;  --s5: 20px;  --s6: 24px;
+  --s8: 32px; --s10: 40px; --s12: 48px;
+
+  /* Border Radius */
+  --r-sm: 6px; --r-md: 10px; --r-lg: 14px;
+  --r-xl: 20px; --r-pill: 999px;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.04);
+  --shadow-lg: 0 8px 24px rgba(0,0,0,0.10), 0 4px 8px rgba(0,0,0,0.04);
+
+  /* Transitions */
+  --t-fast: 0.15s ease;
+  --t-base: 0.25s ease;
+  --t-slow: 0.4s ease;
+}
+
+/* ─── RESET ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html {
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--color-bg);
+  color: var(--color-text);
+  line-height: 1.6;
+  min-height: 100vh;
+}
+
+img, video { max-width: 100%; display: block; }
+a { color: inherit; text-decoration: none; }
+button { cursor: pointer; font-family: var(--font-sans); border: none; background: none; }
+input, select, textarea { font-family: var(--font-sans); font-size: 1rem; }
+
+/* ─── TYPOGRAPHY ── */
+h1, h2, h3, h4 {
+  font-family: var(--font-serif);
+  color: var(--color-primary);
+  line-height: 1.25;
+}
+h1 { font-size: clamp(24px, 4vw, 36px); font-weight: 600; }
+h2 { font-size: clamp(20px, 3vw, 28px); font-weight: 600; }
+h3 { font-size: clamp(16px, 2vw, 20px); font-weight: 500; }
+h4 { font-size: 16px; font-weight: 500; }
+p  { color: var(--color-text-3); line-height: 1.7; }
+
+/* ─── SCROLLBAR ── */
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 99px; }
+
+/* ─── ANIMATIONS ── */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.5; }
+}
+
+.fade-up { animation: fadeUp var(--t-slow) ease both; }
+.fade-in { animation: fadeIn var(--t-base) ease both; }
