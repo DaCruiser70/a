@@ -21,9 +21,13 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 
   if (!banking?.void_cheque_path) return NextResponse.json({ error: 'No void cheque on file' }, { status: 404 })
 
+  console.log('[void-cheque] void_cheque_path from DB:', banking.void_cheque_path)
+
   const { data: signedData, error } = await admin.storage
     .from('void-cheques')
     .createSignedUrl(banking.void_cheque_path, 60)
+
+  console.log('[void-cheque] createSignedUrl result:', { signedData, error: error ? { message: error.message, name: error.name, cause: (error as NodeJS.ErrnoException).cause } : null })
 
   if (error || !signedData) return NextResponse.json({ error: 'Failed to generate signed URL' }, { status: 500 })
 

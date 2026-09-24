@@ -6,6 +6,10 @@ import { useState, useEffect } from 'react'
 import '../../../../styles/pages/form-pages.css'
 import { createClient } from '@/lib/supabase/client'
 
+function getInitials(name: string) {
+  return name.split(' ').filter(Boolean).map(n => n[0]).join('').toUpperCase().slice(0, 2)
+}
+
 const FlaggedBanner = ({ reason }: { reason?: string | null }) => (
   <div style={{
     background: 'rgba(231,76,60,0.08)', border: '1.5px solid rgba(231,76,60,0.3)',
@@ -34,6 +38,7 @@ export default function PolicyForm() {
   const [flagReason, setFlagReason] = useState<string | null>(null)
   const [saving, setSaving]         = useState(false)
   const [saveError, setSaveError]   = useState('')
+  const [userName, setUserName]     = useState('')
 
   const today = new Date().toLocaleDateString('en-CA', { year: 'numeric', month: 'long', day: 'numeric' })
 
@@ -41,11 +46,15 @@ export default function PolicyForm() {
     const supabase = createClient()
     supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (!user) return
-      const { data } = await supabase
-        .from('policy_acknowledgements')
-        .select('signature,form_status,flag_reason')
-        .eq('user_id', user.id)
-        .maybeSingle()
+      const [{ data }, { data: profile }] = await Promise.all([
+        supabase
+          .from('policy_acknowledgements')
+          .select('signature,form_status,flag_reason')
+          .eq('user_id', user.id)
+          .maybeSingle(),
+        supabase.from('profiles').select('full_name').eq('id', user.id).single(),
+      ])
+      if (profile?.full_name) setUserName(profile.full_name)
       if (!data) return
       setSignature(data.signature ?? '')
       setAgreed(true)
@@ -86,8 +95,8 @@ export default function PolicyForm() {
         </div>
         <div className="form-page-nav-right">
           <div className="form-page-nav-user">
-            <div className="form-page-nav-avatar">LD</div>
-            <span className="form-page-nav-name">Lucas DaCruz</span>
+            <div className="form-page-nav-avatar">{userName ? getInitials(userName) : '…'}</div>
+            {userName && <span className="form-page-nav-name">{userName}</span>}
           </div>
         </div>
       </nav>

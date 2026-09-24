@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 import '../../../styles/pages/forms.css'
 import type { FormStatus } from '@/types'
+import { createClient } from '@/lib/supabase/client'
 
 const FORMS = [
   {
@@ -44,7 +45,25 @@ const FORMS = [
     tags: ['required'],
     href: '/newhire/forms/policy',
   },
+  {
+    id: 'documents',
+    step: 5,
+    title: 'Document Uploads',
+    desc: 'Upload required tax forms and optional certifications, licences, and ID.',
+    time: '10 min',
+    tags: ['required'],
+    href: '/newhire/forms/documents',
+  },
 ]
+
+function computeDocumentStatus(docs: Array<{ document_type: string; form_status: string }>): FormStatus {
+  const required = ['td1_federal', 'td1_provincial']
+  const requiredDocs = required.map(t => docs.find(d => d.document_type === t))
+  if (docs.some(d => d.form_status === 'rejected')) return 'flagged'
+  if (requiredDocs.every(d => d?.form_status === 'approved')) return 'approved'
+  if (requiredDocs.every(d => !!d)) return 'review'
+  return 'pending'
+}
 
 function getInitials(name: string) {
   return name.split(' ').filter(Boolean).map(n => n[0]).join('').toUpperCase().slice(0, 2)
@@ -58,15 +77,26 @@ export default function FormsPage() {
   const [loading, setLoading]           = useState(true)
 
   useEffect(() => {
-    fetch('/api/newhire/status')
-      .then(r => r.ok ? r.json() : Promise.reject())
-      .then(data => {
-        setFormStatuses(data.formStatuses)
-        setUserName(data.name)
+    Promise.all([
+      fetch('/api/newhire/status').then(r => r.ok ? r.json() : Promise.reject()),
+      fetch('/api/forms/documents').then(r => r.ok ? r.json() : { documents: [] }),
+    ])
+      .then(([statusData, docsData]) => {
+        setFormStatuses({
+          ...statusData.formStatuses,
+          documents: computeDocumentStatus(docsData.documents ?? []),
+        })
+        setUserName(statusData.name)
       })
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [])
+
+  async function handleSignOut() {
+    const supabase = createClient()
+    await supabase.auth.signOut()
+    router.push('/login')
+  }
 
   const total = FORMS.length
 
@@ -120,6 +150,23 @@ export default function FormsPage() {
             </div>
             <span className="forms-nav-name">{loading ? '' : userName}</span>
           </div>
+          <button
+            onClick={handleSignOut}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '5px',
+              padding: '5px 11px', borderRadius: '7px',
+              border: '1px solid rgba(0,0,0,0.12)',
+              background: 'transparent', color: '#888780',
+              cursor: 'pointer', fontSize: '12px', fontFamily: 'inherit', fontWeight: 500,
+            }}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ width: '13px', height: '13px' }}>
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+              <polyline points="16 17 21 12 16 7"/>
+              <line x1="21" y1="12" x2="9" y2="12"/>
+            </svg>
+            Sign out
+          </button>
         </div>
       </nav>
 

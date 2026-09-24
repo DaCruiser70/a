@@ -26,6 +26,10 @@ const FlaggedBanner = ({ reason }: { reason?: string | null }) => (
   </div>
 )
 
+function getInitials(name: string) {
+  return name.split(' ').filter(Boolean).map(n => n[0]).join('').toUpperCase().slice(0, 2)
+}
+
 export default function PersonalInfoForm() {
   const router = useRouter()
   const [form, setForm] = useState({
@@ -38,16 +42,21 @@ export default function PersonalInfoForm() {
   const [flagReason, setFlagReason] = useState<string | null>(null)
   const [saving, setSaving]         = useState(false)
   const [saveError, setSaveError]   = useState('')
+  const [userName, setUserName]     = useState('')
 
   useEffect(() => {
     const supabase = createClient()
     supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (!user) return
-      const { data } = await supabase
-        .from('personal_info')
-        .select('first_name,last_name,date_of_birth,phone,personal_email,street,city,province,postal_code,emergency_name,emergency_relationship,emergency_phone,form_status,flag_reason')
-        .eq('user_id', user.id)
-        .maybeSingle()
+      const [{ data }, { data: profile }] = await Promise.all([
+        supabase
+          .from('personal_info')
+          .select('first_name,last_name,date_of_birth,phone,personal_email,street,city,province,postal_code,emergency_name,emergency_relationship,emergency_phone,form_status,flag_reason')
+          .eq('user_id', user.id)
+          .maybeSingle(),
+        supabase.from('profiles').select('full_name').eq('id', user.id).single(),
+      ])
+      if (profile?.full_name) setUserName(profile.full_name)
       if (!data) return
       setForm({
         firstName:             data.first_name             ?? '',
@@ -101,8 +110,8 @@ export default function PersonalInfoForm() {
         </div>
         <div className="form-page-nav-right">
           <div className="form-page-nav-user">
-            <div className="form-page-nav-avatar">LD</div>
-            <span className="form-page-nav-name">Lucas DaCruz</span>
+            <div className="form-page-nav-avatar">{userName ? getInitials(userName) : '…'}</div>
+            {userName && <span className="form-page-nav-name">{userName}</span>}
           </div>
         </div>
       </nav>

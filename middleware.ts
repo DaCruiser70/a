@@ -53,7 +53,9 @@ export async function middleware(request: NextRequest) {
   // Logged in user hitting /login → redirect to their portal
   if (user && pathname === '/login') {
     const role = await getRole(user.id)
-    const dest = role === 'hr' ? '/hr/dashboard' : '/newhire/welcome'
+    const dest = role === 'hr'          ? '/hr/dashboard'
+               : role === 'stakeholder' ? '/stakeholder/dashboard'
+               : '/newhire/welcome'
     return NextResponse.redirect(new URL(dest, request.url))
   }
 
@@ -69,8 +71,8 @@ export async function middleware(request: NextRequest) {
     console.log('[middleware] /hr —', { userId: user.id, role, otpVerified: otpVerified ?? null })
 
     if (role !== 'hr') {
-      console.log('[middleware] /hr — role is not hr, redirecting to /newhire/welcome')
-      return NextResponse.redirect(new URL('/newhire/welcome', request.url))
+      const dest = role === 'stakeholder' ? '/stakeholder/dashboard' : '/newhire/welcome'
+      return NextResponse.redirect(new URL(dest, request.url))
     }
 
     // OTP gate: HR must have verified OTP this session
@@ -91,6 +93,21 @@ export async function middleware(request: NextRequest) {
     const role = await getRole(user.id)
     if (role === 'hr') {
       return NextResponse.redirect(new URL('/hr/dashboard', request.url))
+    }
+    if (role === 'stakeholder') {
+      return NextResponse.redirect(new URL('/stakeholder/dashboard', request.url))
+    }
+  }
+
+  // Stakeholder routes: must be authenticated as stakeholder
+  if (pathname.startsWith('/stakeholder')) {
+    if (!user) {
+      return NextResponse.redirect(new URL('/login', request.url))
+    }
+    const role = await getRole(user.id)
+    if (role !== 'stakeholder') {
+      const dest = role === 'hr' ? '/hr/dashboard' : '/newhire/welcome'
+      return NextResponse.redirect(new URL(dest, request.url))
     }
   }
 

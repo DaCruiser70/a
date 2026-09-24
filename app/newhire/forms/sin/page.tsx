@@ -4,6 +4,11 @@ import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import '../../../../styles/pages/form-pages.css'
+import { createClient } from '@/lib/supabase/client'
+
+function getInitials(name: string) {
+  return name.split(' ').filter(Boolean).map(n => n[0]).join('').toUpperCase().slice(0, 2)
+}
 
 const FlaggedBanner = ({ reason }: { reason?: string | null }) => (
   <div style={{
@@ -35,6 +40,16 @@ export default function SINForm() {
   const [flagReason, setFlagReason]   = useState<string | null>(null)
   const [saving, setSaving]           = useState(false)
   const [saveError, setSaveError]     = useState('')
+  const [userName, setUserName]       = useState('')
+
+  useEffect(() => {
+    const supabase = createClient()
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
+      if (!user) return
+      const { data } = await supabase.from('profiles').select('full_name').eq('id', user.id).single()
+      if (data?.full_name) setUserName(data.full_name)
+    }).catch(() => {})
+  }, [])
 
   function formatSIN(value: string) {
     const digits = value.replace(/\D/g, '').slice(0, 9)
@@ -92,8 +107,8 @@ export default function SINForm() {
         </div>
         <div className="form-page-nav-right">
           <div className="form-page-nav-user">
-            <div className="form-page-nav-avatar">LD</div>
-            <span className="form-page-nav-name">Lucas DaCruz</span>
+            <div className="form-page-nav-avatar">{userName ? getInitials(userName) : '…'}</div>
+            {userName && <span className="form-page-nav-name">{userName}</span>}
           </div>
         </div>
       </nav>

@@ -3,7 +3,7 @@
 import { useRouter, useParams } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import '../../../../styles/pages/hr-newhire.css'
-import type { NewHireDetail, FormStatus, HrNote, AuditEntry } from '@/types'
+import type { NewHireDetail, FormStatus, HrNote, AuditEntry, NewhireDocument, StakeholderTask } from '@/types'
 
 type HireDetail = NewHireDetail & {
   bank_details?: { institution_number: string; transit_number: string; account_number: string }
@@ -11,7 +11,57 @@ type HireDetail = NewHireDetail & {
   policy_signature?: string
 }
 
-type FlagModal = { formId: string } | null
+type FlagModal      = { formId: string } | null
+type RejectDocModal = { documentId: string } | null
+
+const DOC_SECTION_MAP: { title: string; types: string[] }[] = [
+  { title: 'Tax Forms',               types: ['td1_federal', 'td1_provincial'] },
+  { title: 'Identity & Insurance',    types: ['drivers_license', 'alternative_id', 'proof_of_insurance'] },
+  { title: 'Background Check',        types: ['cpic_background_check'] },
+  { title: 'Trade Licenses',          types: ['trade_license'] },
+  { title: 'Safety Certifications',   types: ['safety_certification'] },
+  { title: 'Work Authorization',      types: ['work_permit'] },
+]
+
+const DOC_LABEL_MAP: Record<string, string> = {
+  td1_federal:           'TD1 Federal Tax Form',
+  td1_provincial:        'TD1 Provincial Tax Form',
+  drivers_license:       "Driver's License",
+  alternative_id:        'Alternative ID',
+  proof_of_insurance:    'Proof of Insurance',
+  cpic_background_check: 'CPIC Background Check',
+  trade_license:         'Trade License',
+  safety_certification:  'Safety Certification',
+  work_permit:           'Work Permit',
+}
+
+function isExpiringSoon(dateStr: string | null): boolean {
+  if (!dateStr) return false
+  const diff = new Date(dateStr).getTime() - Date.now()
+  return diff > 0 && diff < 90 * 24 * 60 * 60 * 1000
+}
+
+function formatBytes(bytes: number | null): string {
+  if (!bytes) return ''
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function DocStatusBadge({ status }: { status: string }) {
+  const map: Record<string, { label: string; color: string; bg: string; border: string }> = {
+    review:   { label: 'Pending Review', color: '#C8920A', bg: 'rgba(200,146,10,0.1)',  border: 'rgba(200,146,10,0.25)' },
+    approved: { label: 'Approved',       color: '#0D5C46', bg: 'rgba(13,92,70,0.1)',    border: 'rgba(13,92,70,0.2)'   },
+    rejected: { label: 'Rejected',       color: '#E74C3C', bg: 'rgba(231,76,60,0.1)',   border: 'rgba(231,76,60,0.2)'  },
+    pending:  { label: 'Not Uploaded',   color: '#888780', bg: 'rgba(136,135,128,0.1)', border: 'rgba(136,135,128,0.2)' },
+  }
+  const s = map[status] ?? map.pending
+  return (
+    <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '100px', color: s.color, background: s.bg, border: `1px solid ${s.border}`, whiteSpace: 'nowrap', letterSpacing: '0.03em' }}>
+      {s.label}
+    </span>
+  )
+}
 
 const FORMS = [
   { id:'personal', step:1, name:'Personal Information',     sensitive:false },
@@ -40,6 +90,10 @@ const EQUIPMENT_LIST = [
   { category: 'Safety', items: [
     { id:'ppe',      label:'PPE Equipment',           note:'Hard hat, vest, boots' },
     { id:'training', label:'Safety Training',         note:'Mandatory first week' },
+  ]},
+  { category: 'Software — Jonas', items: [
+    { id:'jonas_regular', label:'Jonas Access — Regular', note:'Marley Element' },
+    { id:'jonas_emobile', label:'Jonas Access — e-Mobile', note:'Marley Element' },
   ]},
 ]
 
@@ -88,6 +142,10 @@ export default function HRNewHirePage() {
   const [flagReasons, setFlagReasons]     = useState<Record<string, string | null>>({})
   const [flagModal, setFlagModal]         = useState<FlagModal>(null)
   const [flagReasonInput, setFlagReasonInput] = useState('')
+  const [hireDocuments, setHireDocuments]     = useState<NewhireDocument[]>([])
+  const [rejectDocModal, setRejectDocModal]   = useState<RejectDocModal>(null)
+  const [rejectDocReason, setRejectDocReason] = useState('')
+  const [stakeholderTasks, setStakeholderTasks] = useState<(StakeholderTask & { stakeholder_name: string | null })[]>([])
 
   useEffect(() => {
     fetch(`/api/hr/hires/${hireId}`)
@@ -103,6 +161,22 @@ export default function HRNewHirePage() {
         setAuditLog(d.audit_log ?? [])
       })
       .catch(() => setLoadError(true))
+  }, [hireId])
+
+  useEffect(() => {
+    if (!hireId) return
+    fetch(`/api/hr/hires/${hireId}/documents`)
+      .then(r => r.ok ? r.json() : { documents: [] })
+      .then(data => setHireDocuments(data.documents ?? []))
+      .catch(() => {})
+  }, [hireId])
+
+  useEffect(() => {
+    if (!hireId) return
+    fetch(`/api/hr/hires/${hireId}/stakeholder-tasks`)
+      .then(r => r.ok ? r.json() : { tasks: [] })
+      .then(data => setStakeholderTasks(data.tasks ?? []))
+      .catch(() => {})
   }, [hireId])
 
   if (loadError) {
@@ -179,13 +253,72 @@ export default function HRNewHirePage() {
     setFlagReasonInput('')
   }
 
+  async function handleDocumentApprove(documentId: string) {
+    const res = await fetch(`/api/hr/hires/${hireId}/documents`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ documentId, action: 'approve' }),
+    })
+    if (!res.ok) { showToast('Failed to approve document'); return }
+    setHireDocuments(prev => prev.map(d => d.id === documentId ? { ...d, form_status: 'approved' as const } : d))
+    showToast('Document approved')
+  }
+
+  async function submitDocumentReject() {
+    if (!rejectDocModal || rejectDocReason.trim().length < 10) return
+    const { documentId } = rejectDocModal
+    const res = await fetch(`/api/hr/hires/${hireId}/documents`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ documentId, action: 'reject', reason: rejectDocReason.trim() }),
+    })
+    if (!res.ok) { showToast('Failed to reject document'); return }
+    const reason = rejectDocReason.trim()
+    setHireDocuments(prev => prev.map(d => d.id === documentId ? { ...d, form_status: 'rejected' as const, flag_reason: reason } : d))
+    showToast('Document rejected')
+    setRejectDocModal(null)
+    setRejectDocReason('')
+  }
+
+  async function handleDocumentView(documentId: string) {
+    const res = await fetch(`/api/hr/hires/${hireId}/documents/${documentId}/view`)
+    if (!res.ok) { showToast('Could not load document'); return }
+    const { url } = await res.json()
+    window.open(url, '_blank')
+  }
+
   async function handleSaveEquipment() {
+    // Only notify for items that are newly checked AND have no existing stakeholder task at all.
+    // Items with a pending task must not create a duplicate; confirmed items must never reset.
+    const existingTaskKeys = new Set(stakeholderTasks.map(t => t.task_key))
+    const newlyChecked = Object.entries(checkedItems)
+      .filter(([key, val]) => val && !savedItems[key] && !existingTaskKeys.has(key))
+      .map(([key]) => key)
+
     setSavedItems({ ...checkedItems })
     await fetch(`/api/hr/hires/${hireId}/equipment`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ items: checkedItems }),
     })
+
+    if (newlyChecked.length > 0) {
+      const notifyRes = await fetch(`/api/hr/hires/${hireId}/equipment/notify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ newlyCheckedItems: newlyChecked }),
+      })
+      if (notifyRes.ok) {
+        const { tasksCreated } = await notifyRes.json()
+        if (tasksCreated > 0) {
+          fetch(`/api/hr/hires/${hireId}/stakeholder-tasks`)
+            .then(r => r.ok ? r.json() : { tasks: [] })
+            .then(data => setStakeholderTasks(data.tasks ?? []))
+            .catch(() => {})
+        }
+      }
+    }
+
     const issuedCount = Object.values(checkedItems).filter(Boolean).length
     addAuditLocal('amber', `<strong>HR</strong> saved equipment provisioning — ${issuedCount} items issued`)
     showToast('Equipment checklist saved')
@@ -208,6 +341,15 @@ export default function HRNewHirePage() {
   }
 
   const allEquipItems  = EQUIPMENT_LIST.flatMap(c => c.items)
+
+  // Index stakeholder tasks by task_key so the render can look up state per item
+  type EnrichedTask = StakeholderTask & { stakeholder_name: string | null }
+  const tasksByKey: Record<string, EnrichedTask[]> = {}
+  for (const t of stakeholderTasks) {
+    if (!tasksByKey[t.task_key]) tasksByKey[t.task_key] = []
+    tasksByKey[t.task_key].push(t)
+  }
+
   const checkedCount   = allEquipItems.filter(i => checkedItems[i.id]).length
   const equipPct       = Math.round((checkedCount / allEquipItems.length) * 100)
   const approvedForms  = Object.values(formStatuses).filter(s => s === 'approved').length
@@ -525,23 +667,50 @@ export default function HRNewHirePage() {
                   <div key={cat.category} className="hrd-equip-category">
                     <div className="hrd-equip-category-label">{cat.category}</div>
                     <div className="hrd-equip-items">
-                      {cat.items.map(item => (
-                        <div
-                          key={item.id}
-                          className={`hrd-equip-item ${checkedItems[item.id] ? 'checked' : ''}`}
-                          onClick={() => setCheckedItems(prev => ({ ...prev, [item.id]: !prev[item.id] }))}
-                        >
-                          <div className="hrd-equip-checkbox">
-                            {checkedItems[item.id] && (
-                              <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round">
-                                <polyline points="20 6 9 17 4 12"/>
-                              </svg>
-                            )}
+                      {cat.items.map(item => {
+                        const itemTasks   = tasksByKey[item.id] ?? []
+                        const isConfirmed = itemTasks.length > 0 && itemTasks.every(t => t.status === 'confirmed')
+                        const isPending   = !isConfirmed && itemTasks.some(t => t.status === 'pending')
+                        const isChecked   = isConfirmed || (checkedItems[item.id] ?? false)
+                        const stakeholderName = itemTasks[0]?.stakeholder_name ?? null
+
+                        return (
+                          <div
+                            key={item.id}
+                            className={`hrd-equip-item ${isChecked ? 'checked' : ''}`}
+                            onClick={isConfirmed ? undefined : () => setCheckedItems(prev => ({ ...prev, [item.id]: !prev[item.id] }))}
+                            style={isConfirmed ? { background: 'rgba(13,92,70,0.06)', cursor: 'not-allowed', opacity: 0.85 } : undefined}
+                          >
+                            <div
+                              className="hrd-equip-checkbox"
+                              style={isConfirmed ? { background: '#0D5C46', borderColor: '#0D5C46' } : undefined}
+                            >
+                              {isChecked && (
+                                <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round">
+                                  <polyline points="20 6 9 17 4 12"/>
+                                </svg>
+                              )}
+                            </div>
+                            <div
+                              className="hrd-equip-item-label"
+                              style={isConfirmed ? { color: '#0D5C46' } : undefined}
+                            >
+                              {item.label}
+                            </div>
+                            <div className="hrd-equip-item-note">
+                              {isConfirmed ? (
+                                <span style={{ color: '#0D5C46', fontWeight: 600 }}>
+                                  ✓ Confirmed{stakeholderName ? ` by ${stakeholderName}` : ''}
+                                </span>
+                              ) : isPending ? (
+                                <span style={{ color: '#C8920A' }}>
+                                  Awaiting confirmation{stakeholderName ? ` from ${stakeholderName}` : ''}
+                                </span>
+                              ) : item.note}
+                            </div>
                           </div>
-                          <div className="hrd-equip-item-label">{item.label}</div>
-                          <div className="hrd-equip-item-note">{item.note}</div>
-                        </div>
-                      ))}
+                        )
+                      })}
                     </div>
                   </div>
                 ))}
@@ -556,6 +725,144 @@ export default function HRNewHirePage() {
                   </button>
                 </div>
               </div>
+            </div>
+
+            {/* ── Documents ── */}
+            <div className="hrd-card">
+              <div className="hrd-card-header">
+                <div className="hrd-card-icon navy">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="#1B3A6B" strokeWidth="1.8" strokeLinecap="round">
+                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                  </svg>
+                </div>
+                <div>
+                  <div className="hrd-card-title">Documents</div>
+                  <div className="hrd-card-sub">Uploaded documents by the new hire — approve or reject each one</div>
+                </div>
+                <div className="hrd-card-header-right" style={{ color: '#1B3A6B' }}>
+                  {hireDocuments.filter(d => d.form_status === 'approved').length}/{hireDocuments.length} approved
+                </div>
+              </div>
+
+              {hireDocuments.length === 0 ? (
+                <div style={{ padding: '2rem 1.75rem', textAlign: 'center', color: '#B0ABA4', fontSize: '13px' }}>
+                  No documents uploaded yet.
+                </div>
+              ) : (
+                <div style={{ padding: '1rem 0' }}>
+                  {DOC_SECTION_MAP.map(section => {
+                    const sectionDocs = hireDocuments.filter(d => section.types.includes(d.document_type))
+                    if (sectionDocs.length === 0) return null
+                    return (
+                      <div key={section.title}>
+                        <div style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#B0ABA4', padding: '0.5rem 1.75rem 0.25rem', marginTop: '0.25rem' }}>
+                          {section.title}
+                        </div>
+                        {sectionDocs.map(doc => (
+                          <div key={doc.id} style={{ padding: '0.875rem 1.75rem', borderTop: '1px solid rgba(0,0,0,0.05)' }}>
+                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '3px' }}>
+                                  <span style={{ fontWeight: 600, fontSize: '13px', color: '#1a2e25' }}>{doc.document_label}</span>
+                                  <DocStatusBadge status={doc.form_status} />
+                                </div>
+                                <div style={{ fontSize: '11px', color: '#888780', lineHeight: 1.5 }}>
+                                  {doc.file_name}
+                                  {doc.file_size ? ` · ${formatBytes(doc.file_size)}` : ''}
+                                  {' · '}Uploaded {new Date(doc.uploaded_at).toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                  {doc.expiry_date && (
+                                    <>
+                                      {' · '}Expires {doc.expiry_date}
+                                      {isExpiringSoon(doc.expiry_date) && (
+                                        <span style={{ color: '#C8920A', fontWeight: 700 }}> ⚠ Expiring soon</span>
+                                      )}
+                                    </>
+                                  )}
+                                </div>
+                                {doc.form_status === 'rejected' && doc.flag_reason && (
+                                  <div style={{ marginTop: '6px', padding: '8px 12px', background: 'rgba(231,76,60,0.06)', border: '1px solid rgba(231,76,60,0.2)', borderRadius: '8px', fontSize: '12px', color: '#C0392B' }}>
+                                    <strong>Rejection reason:</strong> {doc.flag_reason}
+                                  </div>
+                                )}
+                              </div>
+                              <div style={{ display: 'flex', gap: '6px', flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                                {(doc.form_status === 'approved' || doc.form_status === 'rejected') && (
+                                  <button
+                                    className="hrd-inline-btn expand"
+                                    onClick={() => handleDocumentView(doc.id)}
+                                  >
+                                    View
+                                  </button>
+                                )}
+                                {doc.form_status === 'review' && (
+                                  <>
+                                    <button className="hrd-inline-btn expand" onClick={() => handleDocumentView(doc.id)}>View</button>
+                                    <button className="hrd-inline-btn approve" onClick={() => handleDocumentApprove(doc.id)}>✓ Approve</button>
+                                    <button className="hrd-inline-btn flag" onClick={() => { setRejectDocModal({ documentId: doc.id }); setRejectDocReason('') }}>Reject</button>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* ── Stakeholder Confirmations ── */}
+            <div className="hrd-card">
+              <div className="hrd-card-header">
+                <div className="hrd-card-icon green">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="#0D5C46" strokeWidth="1.8" strokeLinecap="round">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                    <circle cx="9" cy="7" r="4"/>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                  </svg>
+                </div>
+                <div>
+                  <div className="hrd-card-title">Stakeholder Confirmations</div>
+                  <div className="hrd-card-sub">Third-party confirmations for equipment and access items</div>
+                </div>
+                <div className="hrd-card-header-right" style={{ color: '#0D5C46' }}>
+                  {stakeholderTasks.filter(t => t.status === 'confirmed').length}/{stakeholderTasks.length} confirmed
+                </div>
+              </div>
+
+              {stakeholderTasks.length === 0 ? (
+                <div style={{ padding: '2rem 1.75rem', textAlign: 'center', color: '#B0ABA4', fontSize: '13px' }}>
+                  No stakeholder tasks created yet. They are generated when equipment items are saved.
+                </div>
+              ) : (
+                <div style={{ padding: '0.5rem 0' }}>
+                  {stakeholderTasks.map(task => (
+                    <div key={task.id} style={{ padding: '0.875rem 1.75rem', borderTop: '1px solid rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 600, fontSize: '13px', color: '#1a2e25', marginBottom: '2px' }}>
+                          {task.task_name}
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#888780' }}>
+                          {task.stakeholder_name ?? '—'}
+                          {task.confirmed_at && (
+                            <> · Confirmed {new Date(task.confirmed_at).toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric' })}</>
+                          )}
+                        </div>
+                      </div>
+                      <span style={{
+                        fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '100px', whiteSpace: 'nowrap',
+                        color:      task.status === 'confirmed' ? '#0D5C46' : '#C8920A',
+                        background: task.status === 'confirmed' ? 'rgba(13,92,70,0.1)' : 'rgba(200,146,10,0.1)',
+                        border:     `1px solid ${task.status === 'confirmed' ? 'rgba(13,92,70,0.2)' : 'rgba(200,146,10,0.25)'}`,
+                      }}>
+                        {task.status === 'confirmed' ? 'Confirmed' : 'Pending'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
           </div>
@@ -573,27 +880,176 @@ export default function HRNewHirePage() {
                 <div><div className="hrd-card-title">Hire Details</div></div>
               </div>
               <div className="hrd-info-body">
-                {[
-                  { icon:'email', label:'Email',     value: hire.email },
-                  { icon:'phone', label:'Phone',     value: hire.phone },
-                  { icon:'date',  label:'Start Date',value: hire.start_date },
-                  { icon:'loc',   label:'Address',   value: hire.address },
-                  { icon:'emerg', label:'Emergency', value: `${hire.emergency_contact} · ${hire.emergency_phone}` },
-                ].map((row, i) => (
-                  <div key={i} className="hrd-info-row">
+
+                {/* AEM email */}
+                <div className="hrd-info-row">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>
+                  </svg>
+                  <div>
+                    <div className="hrd-info-label">AEM Email</div>
+                    <div className="hrd-info-value">{hire.email}</div>
+                  </div>
+                </div>
+
+                {/* Personal email */}
+                {hire.personal_email && (
+                  <div className="hrd-info-row">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                      {row.icon === 'email' && <><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></>}
-                      {row.icon === 'phone' && <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.4 2 2 0 0 1 3.6 1.22h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6z"/>}
-                      {row.icon === 'date'  && <><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></>}
-                      {row.icon === 'loc'   && <><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></>}
-                      {row.icon === 'emerg' && <><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></>}
+                      <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>
                     </svg>
                     <div>
-                      <div className="hrd-info-label">{row.label}</div>
-                      <div className="hrd-info-value">{row.value}</div>
+                      <div className="hrd-info-label">Personal Email</div>
+                      <div className="hrd-info-value">
+                        <a href={`mailto:${hire.personal_email}`} style={{ color:'#1B3A6B', textDecoration:'none' }}>
+                          {hire.personal_email}
+                        </a>
+                      </div>
                     </div>
                   </div>
-                ))}
+                )}
+
+                {/* Preferred name */}
+                {hire.preferred_name && (
+                  <div className="hrd-info-row">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+                    </svg>
+                    <div>
+                      <div className="hrd-info-label">Preferred Name</div>
+                      <div className="hrd-info-value">{hire.preferred_name}</div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Phone */}
+                <div className="hrd-info-row">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.4 2 2 0 0 1 3.6 1.22h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6z"/>
+                  </svg>
+                  <div>
+                    <div className="hrd-info-label">Phone</div>
+                    <div className="hrd-info-value">{hire.phone}</div>
+                  </div>
+                </div>
+
+                {/* Start date */}
+                <div className="hrd-info-row">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                    <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+                  </svg>
+                  <div>
+                    <div className="hrd-info-label">Start Date</div>
+                    <div className="hrd-info-value">{hire.start_date}</div>
+                  </div>
+                </div>
+
+                {/* Office location */}
+                {hire.office_location && (
+                  <div className="hrd-info-row">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
+                    </svg>
+                    <div>
+                      <div className="hrd-info-label">Office Location</div>
+                      <div className="hrd-info-value">{hire.office_location}</div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Address */}
+                <div className="hrd-info-row">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
+                  </svg>
+                  <div>
+                    <div className="hrd-info-label">Home Address</div>
+                    <div className="hrd-info-value">{hire.address}</div>
+                  </div>
+                </div>
+
+                {/* Reporting manager */}
+                {hire.reporting_manager_name && (
+                  <div className="hrd-info-row">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
+                      <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                    </svg>
+                    <div>
+                      <div className="hrd-info-label">Reporting Manager</div>
+                      <div className="hrd-info-value">{hire.reporting_manager_name}</div>
+                      {hire.reporting_manager_email && (
+                        <div className="hrd-info-value" style={{ marginTop:'2px' }}>
+                          <a href={`mailto:${hire.reporting_manager_email}`} style={{ color:'#1B3A6B', textDecoration:'none', fontSize:'12px' }}>
+                            {hire.reporting_manager_email}
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Form deadline */}
+                {hire.form_deadline && (
+                  <div className="hrd-info-row">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                      <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                    </svg>
+                    <div>
+                      <div className="hrd-info-label">Form Deadline</div>
+                      <div className="hrd-info-value">{hire.form_deadline}</div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Probation */}
+                {hire.probation_period && (
+                  <div className="hrd-info-row">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                      <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+                    </svg>
+                    <div>
+                      <div className="hrd-info-label">Probation Period</div>
+                      <div className="hrd-info-value">{hire.probation_period}</div>
+                      {hire.probation_end_date && (
+                        <div className="hrd-info-value" style={{ marginTop:'2px', fontSize:'12px', color:'#888780' }}>
+                          Ends {hire.probation_end_date}
+                        </div>
+                      )}
+                      {hire.probation_status && (
+                        <div style={{ marginTop:'4px' }}>
+                          <span style={{
+                            fontSize:'10px', fontWeight:700, letterSpacing:'0.04em',
+                            padding:'2px 7px', borderRadius:'4px',
+                            color:  hire.probation_status === 'waived'    ? '#888780' :
+                                    hire.probation_status === 'completed'  ? '#0D5C46' : '#C8920A',
+                            background: hire.probation_status === 'waived'    ? 'rgba(136,135,128,0.1)' :
+                                        hire.probation_status === 'completed'  ? 'rgba(13,92,70,0.1)'    : 'rgba(200,146,10,0.1)',
+                            border: `1px solid ${
+                              hire.probation_status === 'waived'    ? 'rgba(136,135,128,0.2)' :
+                              hire.probation_status === 'completed'  ? 'rgba(13,92,70,0.2)'    : 'rgba(200,146,10,0.2)'
+                            }`,
+                          }}>
+                            {hire.probation_status === 'waived' ? 'Waived' : hire.probation_status === 'completed' ? 'Completed' : 'In Progress'}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Emergency contact */}
+                <div className="hrd-info-row">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                  </svg>
+                  <div>
+                    <div className="hrd-info-label">Emergency Contact</div>
+                    <div className="hrd-info-value">{hire.emergency_contact} · {hire.emergency_phone}</div>
+                  </div>
+                </div>
+
               </div>
             </div>
 
@@ -705,6 +1161,49 @@ export default function HRNewHirePage() {
                 }}
               >
                 Submit Flag
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── REJECT DOCUMENT MODAL ── */}
+      {rejectDocModal && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.55)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:'1rem' }}
+          onClick={e => { if (e.target === e.currentTarget) { setRejectDocModal(null); setRejectDocReason('') } }}>
+          <div style={{ background:'#fff', borderRadius:'16px', padding:'28px 28px 24px', maxWidth:'440px', width:'100%', boxShadow:'0 20px 60px rgba(0,0,0,0.25)' }}>
+            <div style={{ fontFamily:'sans-serif', marginBottom:'18px' }}>
+              <div style={{ fontWeight:700, fontSize:'17px', color:'#1A1916', marginBottom:'6px' }}>Reject Document</div>
+              <div style={{ fontSize:'13px', color:'#7A7875', lineHeight:1.5 }}>
+                Please provide a reason so the new hire knows what to correct.
+              </div>
+            </div>
+            <textarea
+              autoFocus
+              rows={4}
+              placeholder="e.g. This document is expired — please upload a current version."
+              value={rejectDocReason}
+              onChange={e => setRejectDocReason(e.target.value)}
+              style={{ width:'100%', boxSizing:'border-box', resize:'vertical', padding:'10px 12px', border:'1.5px solid rgba(0,0,0,0.15)', borderRadius:'8px', fontFamily:'sans-serif', fontSize:'13px', lineHeight:1.5, outline:'none', color:'#1A1916' }}
+            />
+            <div style={{ display:'flex', gap:'10px', justifyContent:'flex-end', marginTop:'16px' }}>
+              <button
+                onClick={() => { setRejectDocModal(null); setRejectDocReason('') }}
+                style={{ padding:'8px 18px', borderRadius:'8px', border:'1.5px solid rgba(0,0,0,0.12)', background:'#fff', cursor:'pointer', fontFamily:'sans-serif', fontSize:'13px', color:'#4A4640' }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submitDocumentReject}
+                disabled={rejectDocReason.trim().length < 10}
+                style={{
+                  padding:'8px 18px', borderRadius:'8px', border:'none',
+                  background: rejectDocReason.trim().length >= 10 ? '#E74C3C' : 'rgba(231,76,60,0.35)',
+                  color:'#fff', cursor: rejectDocReason.trim().length >= 10 ? 'pointer' : 'not-allowed',
+                  fontFamily:'sans-serif', fontSize:'13px', fontWeight:600,
+                }}
+              >
+                Reject Document
               </button>
             </div>
           </div>

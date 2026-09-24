@@ -22,6 +22,20 @@ function getInitials(name: string) {
 
 type Hire = NewHireRow
 
+function OfficeLocationBadge({ location }: { location?: string | null }) {
+  if (!location) return null
+  return (
+    <span style={{
+      display: 'inline-block', marginTop: '3px',
+      fontSize: '10px', fontWeight: 600, letterSpacing: '0.03em',
+      color: '#1B3A6B', background: 'rgba(27,58,107,0.1)',
+      border: '1px solid rgba(27,58,107,0.2)', borderRadius: '4px', padding: '1px 6px',
+    }}>
+      {location}
+    </span>
+  )
+}
+
 function HireTable({
   paginated, filtered, currentPage, totalPages, search, filterStatus, activeNav, loading,
   onSearch, onFilter, onPage, onView, onApprove, onFlag,
@@ -93,7 +107,10 @@ function HireTable({
                   </div>
                 </div>
               </td>
-              <td style={{ color:'#5F5E5A', fontSize:'12px' }}>{hire.role}</td>
+              <td>
+                <div style={{ color:'#5F5E5A', fontSize:'12px' }}>{hire.role}</div>
+                <OfficeLocationBadge location={hire.office_location} />
+              </td>
               <td>
                 <div className="hr-table-progress-wrap">
                   <div className="hr-table-progress-bar">
@@ -152,26 +169,42 @@ function HireTable({
   )
 }
 
+const EMPTY_HIRE = {
+  name: '', preferredName: '', personalEmail: '', aemEmail: '',
+  role: '', officeLocation: '', reportingManagerName: '', reportingManagerEmail: '',
+  startDate: '', formDeadline: '', probationPeriod: '',
+}
+
+type CreatedHire = { name: string; aemEmail: string; personalEmail: string; tempPassword: string }
+
 export default function HRDashboard() {
   const router = useRouter()
   const [hires, setHires]               = useState<NewHireRow[]>([])
   const [activity, setActivity]         = useState<ActivityItem[]>(INITIAL_ACTIVITY)
   const [loading, setLoading]           = useState(true)
 
-  useEffect(() => {
-    fetch('/api/hr/hires')
+  function loadHires() {
+    return fetch('/api/hr/hires')
       .then(r => r.json())
       .then(data => { setHires(data.hires ?? []); setLoading(false) })
       .catch(() => setLoading(false))
-  }, [])
+  }
+
+  useEffect(() => { loadHires() }, [])
+
   const [search, setSearch]             = useState('')
   const [filterStatus, setFilterStatus] = useState('all')
   const [activeNav, setActiveNav]       = useState('dashboard')
   const [currentPage, setCurrentPage]   = useState(1)
   const [showAddModal, setShowAddModal] = useState(false)
+  const [showSuccessModal, setShowSuccessModal] = useState(false)
+  const [submitting, setSubmitting]     = useState(false)
+  const [addError, setAddError]         = useState('')
+  const [createdHire, setCreatedHire]   = useState<CreatedHire | null>(null)
+  const [copied, setCopied]             = useState(false)
   const [showNotifs, setShowNotifs]     = useState(false)
   const [toast, setToast]               = useState<string|null>(null)
-  const [newHire, setNewHire]           = useState({ name:'', email:'', role:'', startDate:'' })
+  const [newHire, setNewHire]           = useState(EMPTY_HIRE)
 
   const today = new Date().toLocaleDateString('en-CA', { weekday:'long', month:'long', day:'numeric', year:'numeric' })
 
@@ -201,6 +234,27 @@ export default function HRDashboard() {
     setActiveNav(nav); setFilterStatus(filter); setCurrentPage(1)
   }
 
+  function resetModal() {
+    setNewHire(EMPTY_HIRE)
+    setAddError('')
+    setSubmitting(false)
+  }
+
+  function openAddModal() {
+    resetModal()
+    setShowAddModal(true)
+  }
+
+  function closeAddModal() {
+    setShowAddModal(false)
+    resetModal()
+  }
+
+  // Deadline must not be after start date
+  const deadlineAfterStart = newHire.startDate && newHire.formDeadline
+    ? newHire.formDeadline > newHire.startDate
+    : false
+
   async function handleApprove(id: string, name: string, e: React.MouseEvent) {
     e.stopPropagation()
     await fetch(`/api/hr/hires/${id}/status`, {
@@ -226,8 +280,8 @@ export default function HRDashboard() {
   }
 
   function handleExport() {
-    const headers = ['Name','Email','Role','Status','Progress','Days Since Submission']
-    const rows = hires.map(h => [h.name, h.email, h.role, STATUS_LABELS[h.status], `${h.progress}%`, h.days === 0 ? 'Today' : `${h.days} days ago`])
+    const headers = ['Name','Email','Role','Office Location','Status','Progress','Days Since Submission']
+    const rows = hires.map(h => [h.name, h.email, h.role, h.office_location ?? '', STATUS_LABELS[h.status], `${h.progress}%`, h.days === 0 ? 'Today' : `${h.days} days ago`])
     const csv = [headers, ...rows].map(r => r.map(v => `"${v}"`).join(',')).join('\n')
     const blob = new Blob([csv], { type:'text/csv' })
     const url = URL.createObjectURL(blob)
@@ -241,23 +295,74 @@ export default function HRDashboard() {
 
   async function handleAddHire(e: React.SyntheticEvent<HTMLFormElement>) {
     e.preventDefault()
+    if (submitting || deadlineAfterStart) return
+    setSubmitting(true)
+    setAddError('')
+
     const res = await fetch('/api/hr/hires', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: newHire.name, email: newHire.email, role: newHire.role, startDate: newHire.startDate }),
+      body: JSON.stringify({
+        name:                 newHire.name,
+        preferredName:        newHire.preferredName,
+        personalEmail:        newHire.personalEmail,
+        aemEmail:             newHire.aemEmail,
+        role:                 newHire.role,
+        officeLocation:       newHire.officeLocation,
+        reportingManagerName: newHire.reportingManagerName,
+        reportingManagerEmail:newHire.reportingManagerEmail,
+        startDate:            newHire.startDate,
+        formDeadline:         newHire.formDeadline,
+        probationPeriod:      newHire.probationPeriod,
+      }),
     })
-    if (!res.ok) { showToast('Failed to add hire — check console'); return }
-    const hire: NewHireRow = {
-      id: crypto.randomUUID(), name: newHire.name, email: newHire.email, role: newHire.role,
-      status: 'not-started', progress: 0,
-      submitted: newHire.startDate || new Date().toISOString().slice(0, 10), days: 0,
+
+    if (!res.ok) {
+      const data = await res.json()
+      setAddError(data.error ?? 'Failed to add hire — please try again.')
+      setSubmitting(false)
+      return
     }
-    setHires(prev => [...prev, hire])
-    setActivity(prev => [{ type:'navy', msg:`<strong>${hire.name}</strong> added as new hire`, time:'Just now' }, ...prev])
-    setNewHire({ name:'', email:'', role:'', startDate:'' })
-    setShowAddModal(false)
-    showToast(`${hire.name} added successfully`)
+
+    const { tempPassword } = await res.json()
+
+    // Refresh the hires list with real data from the server
+    await loadHires()
+
+    setActivity(prev => [{ type:'navy', msg:`<strong>${newHire.name}</strong> added as new hire`, time:'Just now' }, ...prev])
+    setCreatedHire({ name: newHire.name, aemEmail: newHire.aemEmail, personalEmail: newHire.personalEmail, tempPassword })
+    closeAddModal()
+    setShowSuccessModal(true)
   }
+
+  function handleCopy() {
+    if (!createdHire) return
+    navigator.clipboard.writeText(createdHire.tempPassword).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }
+
+  const fieldStyle: React.CSSProperties = {
+    display:'flex', flexDirection:'column', gap:'5px', marginBottom:'14px',
+  }
+  const labelStyle: React.CSSProperties = {
+    fontSize:'12px', fontWeight:600, color:'#4A4640', fontFamily:'sans-serif',
+  }
+  const inputStyle: React.CSSProperties = {
+    width:'100%', boxSizing:'border-box', padding:'8px 10px',
+    border:'1.5px solid rgba(0,0,0,0.12)', borderRadius:'8px',
+    fontFamily:'sans-serif', fontSize:'13px', color:'#1A1916', outline:'none',
+    background:'#fff',
+  }
+  const sectionHeaderStyle: React.CSSProperties = {
+    fontWeight:700, fontSize:'11px', color:'#1B3A6B',
+    textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:'14px',
+  }
+  const dividerStyle: React.CSSProperties = {
+    borderTop:'1px solid rgba(0,0,0,0.08)', marginTop:'6px', paddingTop:'20px',
+  }
+  const requiredMark = <span style={{ color:'#E74C3C' }}>*</span>
 
   return (
     <div className="hr-page">
@@ -353,7 +458,7 @@ export default function HRDashboard() {
               </svg>
               Export CSV
             </button>
-            <button className="hr-topbar-btn primary" onClick={() => setShowAddModal(true)}>
+            <button className="hr-topbar-btn primary" onClick={openAddModal}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                 <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
               </svg>
@@ -474,7 +579,10 @@ export default function HRDashboard() {
                               </div>
                             </div>
                           </td>
-                          <td style={{ color:'#5F5E5A', fontSize:'12px' }}>{hire.role}</td>
+                          <td>
+                            <div style={{ color:'#5F5E5A', fontSize:'12px' }}>{hire.role}</div>
+                            <OfficeLocationBadge location={hire.office_location} />
+                          </td>
                           <td>
                             <div className="hr-table-progress-wrap">
                               <div className="hr-table-progress-bar">
@@ -577,41 +685,291 @@ export default function HRDashboard() {
 
       {/* ── ADD NEW HIRE MODAL ── */}
       {showAddModal && (
-        <div className="hr-modal-overlay" onClick={() => setShowAddModal(false)}>
-          <div className="hr-modal" onClick={e => e.stopPropagation()}>
+        <div className="hr-modal-overlay" onClick={closeAddModal}>
+          <div
+            className="hr-modal"
+            onClick={e => e.stopPropagation()}
+            style={{ maxHeight:'90vh', display:'flex', flexDirection:'column' }}
+          >
             <div className="hr-modal-header">
               <div>
                 <div className="hr-modal-title">Add New Hire</div>
-                <div className="hr-modal-sub">They will receive an email with login credentials</div>
+                <div className="hr-modal-sub">Complete all required fields — they will receive login credentials at their AEM email</div>
               </div>
-              <button className="hr-modal-close" onClick={() => setShowAddModal(false)}>
+              <button className="hr-modal-close" onClick={closeAddModal}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                   <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
                 </svg>
               </button>
             </div>
-            <form onSubmit={handleAddHire} className="hr-modal-body">
-              <div className="hr-modal-field">
-                <label>Full Name *</label>
-                <input required placeholder="Jane Smith" value={newHire.name} onChange={e => setNewHire(p=>({...p,name:e.target.value}))} />
+
+            <form
+              onSubmit={handleAddHire}
+              style={{ overflowY:'auto', flex:'1', padding:'20px 24px 0' }}
+            >
+              {/* ── Personal Information ── */}
+              <div style={sectionHeaderStyle}>Personal Information</div>
+
+              <div style={fieldStyle}>
+                <label style={labelStyle}>Full Name {requiredMark}</label>
+                <input
+                  required
+                  style={inputStyle}
+                  placeholder="Jane Smith"
+                  value={newHire.name}
+                  onChange={e => setNewHire(p => ({ ...p, name: e.target.value }))}
+                />
               </div>
-              <div className="hr-modal-field">
-                <label>Email Address *</label>
-                <input required type="email" placeholder="jane.smith@aemltd.com" value={newHire.email} onChange={e => setNewHire(p=>({...p,email:e.target.value}))} />
+
+              <div style={fieldStyle}>
+                <label style={labelStyle}>Preferred Name</label>
+                <input
+                  style={inputStyle}
+                  placeholder="What they like to be called"
+                  value={newHire.preferredName}
+                  onChange={e => setNewHire(p => ({ ...p, preferredName: e.target.value }))}
+                />
               </div>
-              <div className="hr-modal-field">
-                <label>Role / Position *</label>
-                <input required placeholder="e.g. Energy Auditor" value={newHire.role} onChange={e => setNewHire(p=>({...p,role:e.target.value}))} />
+
+              <div style={fieldStyle}>
+                <label style={labelStyle}>Personal Email {requiredMark}</label>
+                <input
+                  required
+                  type="email"
+                  style={inputStyle}
+                  placeholder="jane@gmail.com"
+                  value={newHire.personalEmail}
+                  onChange={e => setNewHire(p => ({ ...p, personalEmail: e.target.value }))}
+                />
+                <span style={{ fontSize:'11px', color:'#888780', marginTop:'2px' }}>
+                  All system notifications go here, not their AEM email
+                </span>
               </div>
-              <div className="hr-modal-field">
-                <label>Start Date</label>
-                <input type="date" value={newHire.startDate} onChange={e => setNewHire(p=>({...p,startDate:e.target.value}))} />
+
+              <div style={fieldStyle}>
+                <label style={labelStyle}>AEM Email Address {requiredMark}</label>
+                <input
+                  required
+                  type="email"
+                  style={inputStyle}
+                  placeholder="firstname.lastname@aemltd.com"
+                  value={newHire.aemEmail}
+                  onChange={e => setNewHire(p => ({ ...p, aemEmail: e.target.value }))}
+                />
               </div>
-              <div className="hr-modal-actions">
-                <button type="button" className="hr-modal-cancel" onClick={() => setShowAddModal(false)}>Cancel</button>
-                <button type="submit" className="hr-modal-submit">Add New Hire →</button>
+
+              {/* ── Role & Location ── */}
+              <div style={dividerStyle}>
+                <div style={sectionHeaderStyle}>Role &amp; Location</div>
+              </div>
+
+              <div style={fieldStyle}>
+                <label style={labelStyle}>Role / Position {requiredMark}</label>
+                <input
+                  required
+                  style={inputStyle}
+                  placeholder="e.g. Energy Auditor"
+                  value={newHire.role}
+                  onChange={e => setNewHire(p => ({ ...p, role: e.target.value }))}
+                />
+              </div>
+
+              <div style={fieldStyle}>
+                <label style={labelStyle}>Office Location {requiredMark}</label>
+                <select
+                  required
+                  style={inputStyle}
+                  value={newHire.officeLocation}
+                  onChange={e => setNewHire(p => ({ ...p, officeLocation: e.target.value }))}
+                >
+                  <option value="">Select location</option>
+                  <option>Dartmouth NS</option>
+                  <option>Moncton NB</option>
+                  <option>Oakville ON</option>
+                  <option>Remote</option>
+                </select>
+              </div>
+
+              <div style={fieldStyle}>
+                <label style={labelStyle}>Reporting Manager Name</label>
+                <input
+                  style={inputStyle}
+                  placeholder="Manager name"
+                  value={newHire.reportingManagerName}
+                  onChange={e => setNewHire(p => ({ ...p, reportingManagerName: e.target.value }))}
+                />
+              </div>
+
+              <div style={fieldStyle}>
+                <label style={labelStyle}>Reporting Manager Email</label>
+                <input
+                  type="email"
+                  style={inputStyle}
+                  placeholder="manager@aemltd.com"
+                  value={newHire.reportingManagerEmail}
+                  onChange={e => setNewHire(p => ({ ...p, reportingManagerEmail: e.target.value }))}
+                />
+              </div>
+
+              {/* ── Dates & Deadlines ── */}
+              <div style={dividerStyle}>
+                <div style={sectionHeaderStyle}>Dates &amp; Deadlines</div>
+              </div>
+
+              <div style={fieldStyle}>
+                <label style={labelStyle}>Start Date {requiredMark}</label>
+                <input
+                  required
+                  type="date"
+                  style={inputStyle}
+                  value={newHire.startDate}
+                  onChange={e => setNewHire(p => ({ ...p, startDate: e.target.value }))}
+                />
+              </div>
+
+              <div style={fieldStyle}>
+                <label style={labelStyle}>Form Completion Deadline {requiredMark}</label>
+                <input
+                  required
+                  type="date"
+                  style={{ ...inputStyle, borderColor: deadlineAfterStart ? '#E74C3C' : 'rgba(0,0,0,0.12)' }}
+                  value={newHire.formDeadline}
+                  onChange={e => setNewHire(p => ({ ...p, formDeadline: e.target.value }))}
+                />
+                {deadlineAfterStart && (
+                  <span style={{ fontSize:'12px', color:'#E74C3C', marginTop:'3px' }}>
+                    Deadline must not be after the start date
+                  </span>
+                )}
+                {!deadlineAfterStart && (
+                  <span style={{ fontSize:'11px', color:'#888780', marginTop:'2px' }}>
+                    New hires must complete all forms by this date
+                  </span>
+                )}
+              </div>
+
+              {/* ── Employment Details ── */}
+              <div style={dividerStyle}>
+                <div style={sectionHeaderStyle}>Employment Details</div>
+              </div>
+
+              <div style={{ ...fieldStyle, marginBottom:'0' }}>
+                <label style={labelStyle}>Probation Period {requiredMark}</label>
+                <select
+                  required
+                  style={inputStyle}
+                  value={newHire.probationPeriod}
+                  onChange={e => setNewHire(p => ({ ...p, probationPeriod: e.target.value }))}
+                >
+                  <option value="">Select period</option>
+                  <option>3 Months</option>
+                  <option>6 Months</option>
+                  <option>Waived</option>
+                </select>
+              </div>
+
+              <div className="hr-modal-actions" style={{ padding:'16px 0 20px', marginTop:'20px', borderTop:'1px solid rgba(0,0,0,0.08)', display:'flex', flexDirection:'column', gap:'10px' }}>
+                {addError && (
+                  <div style={{ padding:'10px 12px', background:'rgba(231,76,60,0.08)', border:'1px solid rgba(231,76,60,0.25)', borderRadius:'8px', color:'#C0392B', fontSize:'13px', fontFamily:'sans-serif' }}>
+                    {addError}
+                  </div>
+                )}
+                <div style={{ display:'flex', gap:'10px', justifyContent:'flex-end' }}>
+                  <button type="button" className="hr-modal-cancel" onClick={closeAddModal}>Cancel</button>
+                  <button
+                    type="submit"
+                    className="hr-modal-submit"
+                    disabled={submitting || !!deadlineAfterStart}
+                    style={{ opacity: submitting || deadlineAfterStart ? 0.6 : 1, cursor: submitting || deadlineAfterStart ? 'not-allowed' : 'pointer' }}
+                  >
+                    {submitting ? 'Creating…' : 'Add New Hire →'}
+                  </button>
+                </div>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── SUCCESS MODAL ── */}
+      {showSuccessModal && createdHire && (
+        <div className="hr-modal-overlay" onClick={() => setShowSuccessModal(false)}>
+          <div
+            className="hr-modal"
+            onClick={e => e.stopPropagation()}
+            style={{ maxWidth:'480px', padding:'0' }}
+          >
+            {/* Green header */}
+            <div style={{ background:'linear-gradient(135deg, #0D5C46, #0a7a5f)', borderRadius:'16px 16px 0 0', padding:'28px 28px 24px', textAlign:'center' }}>
+              <div style={{ width:'52px', height:'52px', background:'rgba(255,255,255,0.15)', borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 14px', border:'2px solid rgba(255,255,255,0.3)' }}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" style={{ width:'26px', height:'26px' }}>
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+              </div>
+              <div style={{ color:'#fff', fontWeight:700, fontSize:'18px', fontFamily:'sans-serif', marginBottom:'6px' }}>
+                New Hire Created Successfully
+              </div>
+              <div style={{ color:'rgba(255,255,255,0.75)', fontSize:'13px', fontFamily:'sans-serif' }}>
+                Account is ready — save the temporary password below
+              </div>
+            </div>
+
+            {/* Body */}
+            <div style={{ padding:'24px 28px 28px', fontFamily:'sans-serif' }}>
+              {/* Hire info */}
+              <div style={{ marginBottom:'20px' }}>
+                <div style={{ fontWeight:700, fontSize:'17px', color:'#1A1916', marginBottom:'4px' }}>{createdHire.name}</div>
+                <div style={{ fontSize:'13px', color:'#5F5E5A', marginBottom:'2px' }}>{createdHire.aemEmail}</div>
+                <div style={{ fontSize:'13px', color:'#5F5E5A' }}>
+                  {createdHire.personalEmail}
+                  <span style={{ marginLeft:'6px', fontSize:'11px', color:'#888780' }}>— a welcome email will be sent here</span>
+                </div>
+              </div>
+
+              {/* Temp password */}
+              <div style={{ background:'#F5F3EF', border:'1.5px solid rgba(0,0,0,0.1)', borderRadius:'10px', padding:'14px 16px', marginBottom:'12px' }}>
+                <div style={{ fontSize:'11px', fontWeight:700, color:'#888780', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:'8px' }}>
+                  Temporary Password
+                </div>
+                <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
+                  <code style={{ flex:1, fontSize:'15px', fontFamily:'monospace', color:'#1A1916', letterSpacing:'0.05em', userSelect:'all', wordBreak:'break-all' }}>
+                    {createdHire.tempPassword}
+                  </code>
+                  <button
+                    onClick={handleCopy}
+                    style={{
+                      flexShrink:0, padding:'6px 12px', borderRadius:'6px', border:'1.5px solid rgba(0,0,0,0.15)',
+                      background: copied ? '#0D5C46' : '#fff', color: copied ? '#fff' : '#4A4640',
+                      cursor:'pointer', fontFamily:'sans-serif', fontSize:'12px', fontWeight:600,
+                      transition:'all 0.15s',
+                    }}
+                  >
+                    {copied ? '✓ Copied' : 'Copy'}
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ display:'flex', alignItems:'flex-start', gap:'8px', padding:'10px 12px', background:'rgba(231,76,60,0.06)', border:'1px solid rgba(231,76,60,0.2)', borderRadius:'8px', marginBottom:'20px' }}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="#E74C3C" strokeWidth="2" strokeLinecap="round" style={{ width:'16px', height:'16px', flexShrink:0, marginTop:'1px' }}>
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                  <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+                <div style={{ fontSize:'13px', fontWeight:700, color:'#C0392B' }}>
+                  Save this password now — it will not be shown again
+                </div>
+              </div>
+
+              <button
+                onClick={() => setShowSuccessModal(false)}
+                style={{
+                  width:'100%', padding:'11px', background:'#1B3A6B', color:'#fff',
+                  border:'none', borderRadius:'10px', cursor:'pointer',
+                  fontFamily:'sans-serif', fontSize:'14px', fontWeight:600,
+                }}
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}

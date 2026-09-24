@@ -1,8 +1,44 @@
+'use client'
+
 import Link from 'next/link'
 import Image from 'next/image'
+import { useState, useEffect } from 'react'
 import '../../../styles/pages/welcome.css'
+import { createClient } from '@/lib/supabase/client'
+
+function getInitials(name: string) {
+  return name.split(' ').filter(Boolean).map(n => n[0]).join('').toUpperCase().slice(0, 2)
+}
 
 export default function WelcomePage() {
+  const [displayName, setDisplayName] = useState('')
+
+  useEffect(() => {
+    const supabase = createClient()
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
+      if (!user) return
+      const { data } = await supabase
+        .from('profiles')
+        .select('full_name, preferred_name')
+        .eq('id', user.id)
+        .single()
+      if (!data) return
+      setDisplayName(data.preferred_name ?? data.full_name ?? '')
+    }).catch(() => {})
+  }, [])
+
+  const initials  = displayName ? getInitials(displayName) : '…'
+
+  async function handleSignOut() {
+    const supabase = createClient()
+    await supabase.auth.signOut()
+    window.location.href = '/login'
+  }
+  // Split name for hero: everything up to last word / last word
+  const nameParts = displayName.trim().split(' ')
+  const heroFirst = nameParts.length > 1 ? nameParts.slice(0, -1).join(' ') : displayName
+  const heroLast  = nameParts.length > 1 ? nameParts[nameParts.length - 1] : ''
+
   return (
     <div className="welcome-page">
 
@@ -15,9 +51,27 @@ export default function WelcomePage() {
         </div>
         <div className="welcome-nav-right">
           <div className="welcome-nav-user">
-            <div className="welcome-nav-avatar">LD</div>
-            <span className="welcome-nav-name">Lucas DaCruz</span>
+            <div className="welcome-nav-avatar">{initials}</div>
+            {displayName && <span className="welcome-nav-name">{displayName}</span>}
           </div>
+          <button
+            onClick={handleSignOut}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '5px',
+              padding: '5px 11px', borderRadius: '7px',
+              border: '1px solid rgba(255,255,255,0.18)',
+              background: 'rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.6)',
+              cursor: 'pointer', fontSize: '12px', fontFamily: 'inherit', fontWeight: 500,
+              transition: 'background 0.15s',
+            }}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ width: '13px', height: '13px' }}>
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+              <polyline points="16 17 21 12 16 7"/>
+              <line x1="21" y1="12" x2="9" y2="12"/>
+            </svg>
+            Sign out
+          </button>
         </div>
       </nav>
 
@@ -33,7 +87,10 @@ export default function WelcomePage() {
             </div>
             <div className="welcome-hero-greeting">Welcome,</div>
             <div className="welcome-hero-name">
-              Lucas <em>DaCruz.</em>
+              {displayName
+                ? <>{heroFirst}{heroLast && <> <em>{heroLast}.</em></>}</>
+                : <span style={{ opacity: 0.35 }}>…</span>
+              }
             </div>
             <p className="welcome-hero-sub">
               We&apos;re so glad you&apos;re here. This portal will guide you through

@@ -59,6 +59,13 @@ export async function POST(request: Request) {
     console.error('[login] invalidate old OTPs error:', invalidateError.message, invalidateError.code)
   }
 
+  // Delete stale rows (used or expired) for this user before inserting a fresh code
+  await admin
+    .from('otp_codes')
+    .delete()
+    .eq('user_id', authData.user.id)
+    .or(`used.eq.true,expires_at.lt.${new Date().toISOString()}`)
+
   const { error: insertError } = await admin.from('otp_codes').insert({
     user_id:    authData.user.id,
     code,

@@ -1,20 +1,31 @@
 // ── Database row types ────────────────────────────────────────────────────────
 
-export type UserRole   = 'hr' | 'newhire'
+export type UserRole   = 'hr' | 'newhire' | 'stakeholder' | 'payroll' | 'manager'
 export type HireStatus = 'not-started' | 'in-progress' | 'needs-review' | 'approved' | 'flagged'
 export type FormStatus = 'pending' | 'review' | 'approved' | 'flagged'
+export type DocStatus  = 'pending' | 'review' | 'approved' | 'rejected'
 
 export type Profile = {
-  id:         string
-  full_name:  string
-  aem_email:  string
-  role:       UserRole
-  position:   string | null
-  start_date: string | null
-  status:     HireStatus
-  progress:   number
-  created_at: string
-  updated_at: string
+  id:                      string
+  full_name:               string
+  aem_email:               string
+  role:                    UserRole
+  position:                string | null
+  start_date:              string | null
+  status:                  HireStatus
+  progress:                number
+  preferred_name:          string | null
+  personal_email:          string | null
+  office_location:         string | null
+  reporting_manager_name:  string | null
+  reporting_manager_email: string | null
+  form_deadline:           string | null
+  probation_period:        string | null
+  probation_end_date:      string | null
+  probation_status:        string | null
+  reminder_sent:           boolean | null
+  created_at:              string
+  updated_at:              string
 }
 
 export type PersonalInfo = {
@@ -72,6 +83,37 @@ export type PolicyAcknowledgement = {
   flag_reason:  string | null
   submitted_at: string
   updated_at:   string
+}
+
+export type NewhireDocument = {
+  id:                  string
+  user_id:             string
+  document_type:       string
+  document_label:      string
+  file_path:           string
+  file_name:           string
+  file_size:           number | null
+  expiry_date:         string | null
+  form_status:         DocStatus
+  flag_reason:         string | null
+  uploaded_at:         string
+  updated_at:          string
+  reviewed_at:         string | null
+  reviewed_by:         string | null
+  sharepoint_filed:    boolean | null
+  sharepoint_filed_at: string | null
+}
+
+export type StakeholderTask = {
+  id:           string
+  newhire_id:   string
+  assigned_to:  string
+  task_key:     string
+  task_name:    string
+  task_details: string | null
+  status:       'pending' | 'confirmed'
+  confirmed_at: string | null
+  created_at:   string
 }
 
 export type EquipmentProvisioning = {
@@ -168,6 +210,18 @@ export type Database = {
         Update:        Partial<Pick<OtpCode, 'used'>>
         Relationships: []
       }
+      newhire_documents: {
+        Row:           NewhireDocument
+        Insert:        Omit<NewhireDocument, 'id' | 'uploaded_at' | 'updated_at'>
+        Update:        Partial<Omit<NewhireDocument, 'id' | 'user_id'>>
+        Relationships: []
+      }
+      stakeholder_tasks: {
+        Row:           StakeholderTask
+        Insert:        Omit<StakeholderTask, 'id' | 'created_at'>
+        Update:        Partial<Pick<StakeholderTask, 'status' | 'confirmed_at'>>
+        Relationships: []
+      }
     }
     Views: {}
     Functions: {
@@ -187,28 +241,37 @@ export type Database = {
 // ── API / UI helper types ─────────────────────────────────────────────────────
 
 export type NewHireRow = {
-  id:        string
-  name:      string
-  email:     string
-  role:      string
-  status:    HireStatus
-  progress:  number
-  submitted: string
-  days:      number
+  id:               string
+  name:             string
+  email:            string
+  role:             string
+  status:           HireStatus
+  progress:         number
+  submitted:        string
+  days:             number
+  office_location?: string | null
 }
 
 export type NewHireDetail = NewHireRow & {
-  phone:             string
-  start_date:        string
-  address:           string
-  emergency_contact: string
-  emergency_phone:   string
-  bank_name:         string
-  account_type:      string
-  form_statuses:     Record<string, FormStatus>
-  flag_reasons:      Record<string, string | null>
-  void_cheque_path:  string | null
-  equipment_items:   Record<string, boolean>
-  notes:             HrNote[]
-  audit_log:         AuditEntry[]
+  phone:                    string
+  start_date:               string
+  address:                  string
+  emergency_contact:        string
+  emergency_phone:          string
+  bank_name:                string
+  account_type:             string
+  form_statuses:            Record<string, FormStatus>
+  flag_reasons:             Record<string, string | null>
+  void_cheque_path:         string | null
+  equipment_items:          Record<string, boolean>
+  notes:                    HrNote[]
+  audit_log:                AuditEntry[]
+  preferred_name?:          string | null
+  personal_email?:          string | null
+  reporting_manager_name?:  string | null
+  reporting_manager_email?: string | null
+  form_deadline?:           string | null
+  probation_period?:        string | null
+  probation_end_date?:      string | null
+  probation_status?:        string | null
 }
