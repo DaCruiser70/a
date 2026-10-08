@@ -10,11 +10,13 @@ export async function GET() {
   const { data: callerProfile } = await admin.from('profiles').select('role').eq('id', user.id).single()
   if (callerProfile?.role !== 'stakeholder') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  // Fetch only this stakeholder's tasks — RLS also enforces this as a second layer
+  // Fetch only this stakeholder's visible tasks — hidden rows are excluded here.
+  // HR views use a separate route that ignores hidden_from_stakeholder.
   const { data: tasks } = await admin
     .from('stakeholder_tasks')
     .select('id, newhire_id, task_key, task_name, status, confirmed_at, created_at')
     .eq('assigned_to', user.id)
+    .eq('hidden_from_stakeholder', false)
     .order('created_at', { ascending: true })
 
   if (!tasks || tasks.length === 0) {

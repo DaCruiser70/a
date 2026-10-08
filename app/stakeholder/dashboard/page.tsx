@@ -18,6 +18,59 @@ function getInitials(name: string) {
   return name.split(' ').filter(Boolean).map(n => n[0]).join('').toUpperCase().slice(0, 2)
 }
 
+function HireCard({ hire, onView }: { hire: HireGroup; onView: () => void }) {
+  return (
+    <div style={{
+      background: '#fff', borderRadius: '14px',
+      border: `1px solid ${hire.pending_count > 0 ? 'rgba(200,146,10,0.25)' : 'rgba(0,0,0,0.07)'}`,
+      boxShadow: '0 1px 4px rgba(0,0,0,0.05)', overflow: 'hidden',
+    }}>
+      <div style={{ padding: '1.25rem 1.25rem 1rem' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px', marginBottom: '10px' }}>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: '15px', color: '#1A1916', marginBottom: '2px' }}>
+              {hire.hire_name}
+            </div>
+            {hire.hire_role && (
+              <div style={{ fontSize: '12px', color: '#888780' }}>{hire.hire_role}</div>
+            )}
+            {hire.hire_start_date && (
+              <div style={{ fontSize: '11px', color: '#B0ABA4', marginTop: '2px' }}>
+                Start: {new Date(hire.hire_start_date).toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric' })}
+              </div>
+            )}
+          </div>
+          <span style={{
+            fontSize: '11px', fontWeight: 700, padding: '3px 9px', borderRadius: '100px', whiteSpace: 'nowrap', flexShrink: 0,
+            color:      hire.pending_count > 0 ? '#C8920A' : '#0D5C46',
+            background: hire.pending_count > 0 ? 'rgba(200,146,10,0.1)' : 'rgba(13,92,70,0.1)',
+            border:     `1px solid ${hire.pending_count > 0 ? 'rgba(200,146,10,0.25)' : 'rgba(13,92,70,0.2)'}`,
+          }}>
+            {hire.pending_count > 0 ? `${hire.pending_count} pending` : 'All done'}
+          </span>
+        </div>
+        <div style={{ fontSize: '12px', color: '#888780', marginBottom: '12px' }}>
+          {hire.total_count - hire.pending_count} of {hire.total_count} task{hire.total_count !== 1 ? 's' : ''} confirmed
+        </div>
+      </div>
+      <div style={{ borderTop: '1px solid rgba(0,0,0,0.06)', padding: '0.75rem 1.25rem' }}>
+        <button
+          onClick={onView}
+          style={{
+            width: '100%', padding: '8px 16px', borderRadius: '8px',
+            background: hire.pending_count > 0 ? '#1B3A6B' : 'rgba(0,0,0,0.04)',
+            color: hire.pending_count > 0 ? '#fff' : '#888780',
+            border: 'none', cursor: 'pointer',
+            fontSize: '13px', fontWeight: 600, fontFamily: 'inherit',
+          }}
+        >
+          {hire.pending_count > 0 ? 'View tasks →' : 'View details →'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export default function StakeholderDashboard() {
   const router = useRouter()
   const [hires, setHires]           = useState<HireGroup[]>([])
@@ -38,11 +91,16 @@ export default function StakeholderDashboard() {
   }, [])
 
   useEffect(() => {
-    fetch('/api/stakeholder/tasks')
-      .then(r => r.ok ? r.json() : { hires: [] })
-      .then(data => setHires(data.hires ?? []))
+    // Archive old completed hires first (idempotent), then fetch the visible ones
+    fetch('/api/stakeholder/tasks/archive', { method: 'POST' })
       .catch(() => {})
-      .finally(() => setLoading(false))
+      .finally(() => {
+        fetch('/api/stakeholder/tasks')
+          .then(r => r.ok ? r.json() : { hires: [] })
+          .then(data => setHires(data.hires ?? []))
+          .catch(() => {})
+          .finally(() => setLoading(false))
+      })
   }, [])
 
   async function handleSignOut() {
@@ -51,8 +109,10 @@ export default function StakeholderDashboard() {
     router.push('/login')
   }
 
-  const totalPending = hires.reduce((sum, h) => sum + h.pending_count, 0)
-  const totalTasks   = hires.reduce((sum, h) => sum + h.total_count,   0)
+  const needsAction       = hires.filter(h => h.pending_count > 0)
+  const recentlyCompleted = hires.filter(h => h.pending_count === 0)
+  const totalPending      = needsAction.reduce((sum, h) => sum + h.pending_count, 0)
+  const totalTasks        = hires.reduce((sum, h) => sum + h.total_count, 0)
 
   return (
     <div style={{ minHeight: '100vh', background: '#F5F4F1', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
@@ -134,8 +194,8 @@ export default function StakeholderDashboard() {
           <p style={{ fontSize: '14px', color: 'rgba(255,255,255,0.55)', margin: 0 }}>
             {loading ? 'Loading tasks…'
               : totalTasks === 0 ? 'No tasks have been assigned to you yet.'
-              : totalPending === 0 ? `All ${totalTasks} task${totalTasks !== 1 ? 's' : ''} confirmed. Nothing outstanding.`
-              : `${totalPending} task${totalPending !== 1 ? 's' : ''} pending across ${hires.filter(h => h.pending_count > 0).length} new hire${hires.filter(h => h.pending_count > 0).length !== 1 ? 's' : ''}`
+              : totalPending === 0 ? `All confirmed. Nothing outstanding.`
+              : `${totalPending} task${totalPending !== 1 ? 's' : ''} pending across ${needsAction.length} new hire${needsAction.length !== 1 ? 's' : ''}`
             }
           </p>
         </div>
@@ -163,61 +223,35 @@ export default function StakeholderDashboard() {
             </div>
           </div>
         ) : (
-          <div style={{ display: 'grid', gap: '16px', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))' }}>
-            {hires.map(hire => (
-              <div key={hire.hire_id} style={{
-                background: '#fff', borderRadius: '14px',
-                border: `1px solid ${hire.pending_count > 0 ? 'rgba(200,146,10,0.25)' : 'rgba(0,0,0,0.07)'}`,
-                boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
-                overflow: 'hidden',
-              }}>
-                <div style={{ padding: '1.25rem 1.25rem 1rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px', marginBottom: '10px' }}>
-                    <div>
-                      <div style={{ fontWeight: 700, fontSize: '15px', color: '#1A1916', marginBottom: '2px' }}>
-                        {hire.hire_name}
-                      </div>
-                      {hire.hire_role && (
-                        <div style={{ fontSize: '12px', color: '#888780' }}>{hire.hire_role}</div>
-                      )}
-                      {hire.hire_start_date && (
-                        <div style={{ fontSize: '11px', color: '#B0ABA4', marginTop: '2px' }}>
-                          Start: {new Date(hire.hire_start_date).toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric' })}
-                        </div>
-                      )}
-                    </div>
-                    <span style={{
-                      fontSize: '11px', fontWeight: 700, padding: '3px 9px', borderRadius: '100px', whiteSpace: 'nowrap', flexShrink: 0,
-                      color:      hire.pending_count > 0 ? '#C8920A' : '#0D5C46',
-                      background: hire.pending_count > 0 ? 'rgba(200,146,10,0.1)' : 'rgba(13,92,70,0.1)',
-                      border:     `1px solid ${hire.pending_count > 0 ? 'rgba(200,146,10,0.25)' : 'rgba(13,92,70,0.2)'}`,
-                    }}>
-                      {hire.pending_count > 0 ? `${hire.pending_count} pending` : 'All done'}
-                    </span>
-                  </div>
-
-                  <div style={{ fontSize: '12px', color: '#888780', marginBottom: '12px' }}>
-                    {hire.total_count - hire.pending_count} of {hire.total_count} task{hire.total_count !== 1 ? 's' : ''} confirmed
-                  </div>
+          <>
+            {/* ── Needs Action ── */}
+            {needsAction.length > 0 && (
+              <div style={{ marginBottom: '2rem' }}>
+                <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: '#888780', marginBottom: '12px' }}>
+                  Needs Action
                 </div>
-
-                <div style={{ borderTop: '1px solid rgba(0,0,0,0.06)', padding: '0.75rem 1.25rem' }}>
-                  <button
-                    onClick={() => router.push(`/stakeholder/newhire/${hire.hire_id}`)}
-                    style={{
-                      width: '100%', padding: '8px 16px', borderRadius: '8px',
-                      background: hire.pending_count > 0 ? '#1B3A6B' : 'rgba(0,0,0,0.04)',
-                      color: hire.pending_count > 0 ? '#fff' : '#888780',
-                      border: 'none', cursor: 'pointer',
-                      fontSize: '13px', fontWeight: 600, fontFamily: 'inherit',
-                    }}
-                  >
-                    {hire.pending_count > 0 ? 'View tasks →' : 'View details →'}
-                  </button>
+                <div style={{ display: 'grid', gap: '16px', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))' }}>
+                  {needsAction.map(hire => (
+                    <HireCard key={hire.hire_id} hire={hire} onView={() => router.push(`/stakeholder/newhire/${hire.hire_id}`)} />
+                  ))}
                 </div>
               </div>
-            ))}
-          </div>
+            )}
+
+            {/* ── Recently Completed ── */}
+            {recentlyCompleted.length > 0 && (
+              <div>
+                <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: '#888780', marginBottom: '12px' }}>
+                  Recently Completed
+                </div>
+                <div style={{ display: 'grid', gap: '16px', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))' }}>
+                  {recentlyCompleted.map(hire => (
+                    <HireCard key={hire.hire_id} hire={hire} onView={() => router.push(`/stakeholder/newhire/${hire.hire_id}`)} />
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

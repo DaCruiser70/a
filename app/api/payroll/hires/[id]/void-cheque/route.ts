@@ -10,9 +10,13 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const admin = createServiceClient()
 
   const { data: callerProfile } = await admin.from('profiles').select('role').eq('id', user.id).single()
-  if (callerProfile?.role !== 'hr') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (callerProfile?.role !== 'payroll') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { id } = await params
+
+  // Enforce the same hard boundary as the rest of the payroll portal
+  const { data: hire } = await admin.from('profiles').select('status').eq('id', id).single()
+  if (!hire || hire.status !== 'approved') return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   const url = await getVoidChequeSignedUrl(admin, id)
   if (!url) return NextResponse.json({ error: 'No void cheque on file' }, { status: 404 })
@@ -20,7 +24,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   await admin.from('audit_log').insert({
     user_id:      id,
     action_type:  'amber',
-    message:      '<strong>HR</strong> viewed the void cheque',
+    message:      '<strong>Payroll</strong> viewed the void cheque',
     performed_by: user.id,
   })
 

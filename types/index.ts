@@ -6,26 +6,29 @@ export type FormStatus = 'pending' | 'review' | 'approved' | 'flagged'
 export type DocStatus  = 'pending' | 'review' | 'approved' | 'rejected'
 
 export type Profile = {
-  id:                      string
-  full_name:               string
-  aem_email:               string
-  role:                    UserRole
-  position:                string | null
-  start_date:              string | null
-  status:                  HireStatus
-  progress:                number
-  preferred_name:          string | null
-  personal_email:          string | null
-  office_location:         string | null
-  reporting_manager_name:  string | null
-  reporting_manager_email: string | null
-  form_deadline:           string | null
-  probation_period:        string | null
-  probation_end_date:      string | null
-  probation_status:        string | null
-  reminder_sent:           boolean | null
-  created_at:              string
-  updated_at:              string
+  id:                       string
+  full_name:                string
+  aem_email:                string
+  role:                     UserRole
+  position:                 string | null
+  start_date:               string | null
+  status:                   HireStatus
+  progress:                 number
+  preferred_name:           string | null
+  personal_email:           string | null
+  office_location:          string | null
+  reporting_manager_name:   string | null
+  reporting_manager_email:  string | null
+  form_deadline:            string | null
+  probation_period:         string | null
+  probation_end_date:       string | null
+  probation_status:         string | null
+  reminder_sent:            boolean | null
+  employee_id:              string | null
+  payroll_completed_at:     string | null
+  entered_payroll_queue_at: string | null
+  created_at:               string
+  updated_at:               string
 }
 
 export type PersonalInfo = {
@@ -105,15 +108,17 @@ export type NewhireDocument = {
 }
 
 export type StakeholderTask = {
-  id:           string
-  newhire_id:   string
-  assigned_to:  string
-  task_key:     string
-  task_name:    string
-  task_details: string | null
-  status:       'pending' | 'confirmed'
-  confirmed_at: string | null
-  created_at:   string
+  id:                      string
+  newhire_id:              string
+  assigned_to:             string
+  task_key:                string
+  task_name:               string
+  task_details:            string | null
+  status:                  'pending' | 'confirmed'
+  confirmed_at:            string | null
+  completion_note_enc:     string | null
+  hidden_from_stakeholder: boolean
+  created_at:              string
 }
 
 export type EquipmentProvisioning = {
@@ -164,26 +169,26 @@ export type Database = {
       }
       personal_info: {
         Row:           PersonalInfo
-        Insert:        Omit<PersonalInfo, 'id' | 'submitted_at' | 'updated_at'>
-        Update:        Partial<Omit<PersonalInfo, 'id' | 'submitted_at'>>
+        Insert:        Omit<PersonalInfo, 'id' | 'updated_at'> & { submitted_at?: string }
+        Update:        Partial<Omit<PersonalInfo, 'id'>>
         Relationships: []
       }
       banking_info: {
         Row:           BankingInfo
-        Insert:        Omit<BankingInfo, 'id' | 'submitted_at' | 'updated_at'>
-        Update:        Partial<Omit<BankingInfo, 'id' | 'submitted_at'>>
+        Insert:        Omit<BankingInfo, 'id' | 'updated_at'> & { submitted_at?: string }
+        Update:        Partial<Omit<BankingInfo, 'id'>>
         Relationships: []
       }
       sin_info: {
         Row:           SinInfo
-        Insert:        Omit<SinInfo, 'id' | 'submitted_at' | 'updated_at'>
-        Update:        Partial<Omit<SinInfo, 'id' | 'submitted_at'>>
+        Insert:        Omit<SinInfo, 'id' | 'updated_at'> & { submitted_at?: string }
+        Update:        Partial<Omit<SinInfo, 'id'>>
         Relationships: []
       }
       policy_acknowledgements: {
         Row:           PolicyAcknowledgement
-        Insert:        Omit<PolicyAcknowledgement, 'id' | 'submitted_at' | 'updated_at'>
-        Update:        Partial<Omit<PolicyAcknowledgement, 'id' | 'submitted_at'>>
+        Insert:        Omit<PolicyAcknowledgement, 'id' | 'updated_at'> & { submitted_at?: string }
+        Update:        Partial<Omit<PolicyAcknowledgement, 'id'>>
         Relationships: []
       }
       equipment_provisioning: {
@@ -217,9 +222,12 @@ export type Database = {
         Relationships: []
       }
       stakeholder_tasks: {
-        Row:           StakeholderTask
-        Insert:        Omit<StakeholderTask, 'id' | 'created_at'>
-        Update:        Partial<Pick<StakeholderTask, 'status' | 'confirmed_at'>>
+        Row:    StakeholderTask
+        Insert: Omit<StakeholderTask, 'id' | 'created_at' | 'completion_note_enc' | 'hidden_from_stakeholder'> & {
+          completion_note_enc?:     string | null
+          hidden_from_stakeholder?: boolean
+        }
+        Update: Partial<Pick<StakeholderTask, 'status' | 'confirmed_at' | 'completion_note_enc' | 'hidden_from_stakeholder'>>
         Relationships: []
       }
     }
@@ -241,15 +249,16 @@ export type Database = {
 // ── API / UI helper types ─────────────────────────────────────────────────────
 
 export type NewHireRow = {
-  id:               string
-  name:             string
-  email:            string
-  role:             string
-  status:           HireStatus
-  progress:         number
-  submitted:        string
-  days:             number
-  office_location?: string | null
+  id:                  string
+  name:                string
+  email:               string
+  role:                string
+  status:              HireStatus
+  progress:            number
+  submitted:           string
+  days:                number
+  last_submitted_at:   string | null
+  office_location?:    string | null
 }
 
 export type NewHireDetail = NewHireRow & {
@@ -262,7 +271,7 @@ export type NewHireDetail = NewHireRow & {
   account_type:             string
   form_statuses:            Record<string, FormStatus>
   flag_reasons:             Record<string, string | null>
-  void_cheque_path:         string | null
+  has_void_cheque:          boolean
   equipment_items:          Record<string, boolean>
   notes:                    HrNote[]
   audit_log:                AuditEntry[]
@@ -274,4 +283,7 @@ export type NewHireDetail = NewHireRow & {
   probation_period?:        string | null
   probation_end_date?:      string | null
   probation_status?:        string | null
+  employee_id?:             string | null
+  payroll_completed_at?:    string | null
+  form_submitted_at?:       Record<string, string | null>
 }

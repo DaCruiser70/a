@@ -54,6 +54,7 @@ export async function middleware(request: NextRequest) {
   if (user && pathname === '/login') {
     const role = await getRole(user.id)
     const dest = role === 'hr'          ? '/hr/dashboard'
+               : role === 'payroll'     ? '/payroll/dashboard'
                : role === 'stakeholder' ? '/stakeholder/dashboard'
                : '/newhire/welcome'
     return NextResponse.redirect(new URL(dest, request.url))
@@ -62,14 +63,15 @@ export async function middleware(request: NextRequest) {
   // HR routes: must be authenticated AND have completed OTP
   if (pathname.startsWith('/hr')) {
     if (!user) {
-      console.log('[middleware] /hr — no user, redirecting to login')
       return NextResponse.redirect(new URL('/login', request.url))
     }
 
     const role = await getRole(user.id)
     const otpVerified = request.cookies.get('otp_verified')?.value
-    console.log('[middleware] /hr —', { userId: user.id, role, otpVerified: otpVerified ?? null })
 
+    if (role === 'payroll') {
+      return NextResponse.redirect(new URL('/payroll/dashboard', request.url))
+    }
     if (role !== 'hr') {
       const dest = role === 'stakeholder' ? '/stakeholder/dashboard' : '/newhire/welcome'
       return NextResponse.redirect(new URL(dest, request.url))
@@ -77,7 +79,6 @@ export async function middleware(request: NextRequest) {
 
     // OTP gate: HR must have verified OTP this session
     if (!otpVerified) {
-      console.log('[middleware] /hr — otp_verified missing, redirecting to login')
       const redirectUrl = new URL('/login', request.url)
       redirectUrl.searchParams.set('otp_required', '1')
       return NextResponse.redirect(redirectUrl)
@@ -91,12 +92,9 @@ export async function middleware(request: NextRequest) {
     }
 
     const role = await getRole(user.id)
-    if (role === 'hr') {
-      return NextResponse.redirect(new URL('/hr/dashboard', request.url))
-    }
-    if (role === 'stakeholder') {
-      return NextResponse.redirect(new URL('/stakeholder/dashboard', request.url))
-    }
+    if (role === 'hr')          return NextResponse.redirect(new URL('/hr/dashboard', request.url))
+    if (role === 'payroll')     return NextResponse.redirect(new URL('/payroll/dashboard', request.url))
+    if (role === 'stakeholder') return NextResponse.redirect(new URL('/stakeholder/dashboard', request.url))
   }
 
   // Stakeholder routes: must be authenticated as stakeholder
@@ -106,7 +104,23 @@ export async function middleware(request: NextRequest) {
     }
     const role = await getRole(user.id)
     if (role !== 'stakeholder') {
-      const dest = role === 'hr' ? '/hr/dashboard' : '/newhire/welcome'
+      const dest = role === 'hr'      ? '/hr/dashboard'
+                 : role === 'payroll' ? '/payroll/dashboard'
+                 : '/newhire/welcome'
+      return NextResponse.redirect(new URL(dest, request.url))
+    }
+  }
+
+  // Payroll routes: must be authenticated as payroll (no OTP required)
+  if (pathname.startsWith('/payroll')) {
+    if (!user) {
+      return NextResponse.redirect(new URL('/login', request.url))
+    }
+    const role = await getRole(user.id)
+    if (role !== 'payroll') {
+      const dest = role === 'hr'          ? '/hr/dashboard'
+                 : role === 'stakeholder' ? '/stakeholder/dashboard'
+                 : '/newhire/welcome'
       return NextResponse.redirect(new URL(dest, request.url))
     }
   }

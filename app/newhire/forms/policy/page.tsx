@@ -10,7 +10,7 @@ function getInitials(name: string) {
   return name.split(' ').filter(Boolean).map(n => n[0]).join('').toUpperCase().slice(0, 2)
 }
 
-const FlaggedBanner = ({ reason }: { reason?: string | null }) => (
+const FlaggedBanner = ({ reason, source }: { reason?: string | null; source?: string | null }) => (
   <div style={{
     background: 'rgba(231,76,60,0.08)', border: '1.5px solid rgba(231,76,60,0.3)',
     borderRadius: '14px', padding: '16px 18px', display: 'flex',
@@ -21,7 +21,12 @@ const FlaggedBanner = ({ reason }: { reason?: string | null }) => (
       <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
     </svg>
     <div>
-      <div style={{ fontWeight: 700, color: '#C0392B', fontSize: '14px', marginBottom: '6px' }}>Action Required</div>
+      <div style={{ fontWeight: 700, color: '#C0392B', fontSize: '14px', marginBottom: source ? '2px' : '6px' }}>Action Required</div>
+      {source && (
+        <div style={{ fontSize: '11px', fontWeight: 600, color: '#C0392B', opacity: 0.75, marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          Flagged by {source}
+        </div>
+      )}
       {reason && (
         <div style={{ color: '#7A1B12', fontSize: '13px', marginBottom: '6px', lineHeight: 1.5 }}>{reason}</div>
       )}
@@ -36,6 +41,7 @@ export default function PolicyForm() {
   const [signature, setSignature]   = useState('')
   const [formStatus, setFormStatus] = useState('')
   const [flagReason, setFlagReason] = useState<string | null>(null)
+  const [flagSource, setFlagSource] = useState<string | null>(null)
   const [saving, setSaving]         = useState(false)
   const [saveError, setSaveError]   = useState('')
   const [userName, setUserName]     = useState('')
@@ -46,15 +52,17 @@ export default function PolicyForm() {
     const supabase = createClient()
     supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (!user) return
-      const [{ data }, { data: profile }] = await Promise.all([
+      const [{ data }, { data: profile }, sourcesRes] = await Promise.all([
         supabase
           .from('policy_acknowledgements')
           .select('signature,form_status,flag_reason')
           .eq('user_id', user.id)
           .maybeSingle(),
         supabase.from('profiles').select('full_name').eq('id', user.id).single(),
+        fetch('/api/newhire/flag-sources').then(r => r.ok ? r.json() : null).catch(() => null),
       ])
       if (profile?.full_name) setUserName(profile.full_name)
+      if (sourcesRes?.sources?.policy) setFlagSource(sourcesRes.sources.policy)
       if (!data) return
       setSignature(data.signature ?? '')
       setAgreed(true)
@@ -121,7 +129,7 @@ export default function PolicyForm() {
 
       <form className="form-page-body" onSubmit={handleSubmit}>
 
-        {formStatus === 'flagged' && <FlaggedBanner reason={flagReason} />}
+        {formStatus === 'flagged' && <FlaggedBanner reason={flagReason} source={flagSource} />}
 
         <div className="form-section-card">
           <div className="form-section-header">

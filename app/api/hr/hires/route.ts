@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { randomBytes } from 'node:crypto'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
+import { computeHireStatus } from '@/lib/hire-status'
 import type { NewHireRow } from '@/types'
 
 function generateTempPassword(): string {
@@ -35,25 +36,53 @@ export async function GET() {
 
   const { data: profiles, error } = await admin
     .from('profiles')
-    .select('id, full_name, aem_email, position, status, progress, start_date, created_at, office_location, probation_period, probation_end_date, probation_status')
+    .select('id, full_name, aem_email, position, start_date, created_at, office_location')
     .eq('role', 'newhire')
     .order('created_at', { ascending: false })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
+  const hireIds = (profiles ?? []).map(p => p.id)
+
+  const [piRows, biRows, siRows, poRows] = hireIds.length
+    ? await Promise.all([
+        admin.from('personal_info').select('user_id, form_status, submitted_at').in('user_id', hireIds),
+        admin.from('banking_info').select('user_id, form_status, submitted_at').in('user_id', hireIds),
+        admin.from('sin_info').select('user_id, form_status, submitted_at').in('user_id', hireIds),
+        admin.from('policy_acknowledgements').select('user_id, form_status, submitted_at').in('user_id', hireIds),
+      ])
+    : [{ data: [] }, { data: [] }, { data: [] }, { data: [] }]
+
+  const piMap = Object.fromEntries((piRows.data ?? []).map(r => [r.user_id, r]))
+  const biMap = Object.fromEntries((biRows.data ?? []).map(r => [r.user_id, r]))
+  const siMap = Object.fromEntries((siRows.data ?? []).map(r => [r.user_id, r]))
+  const poMap = Object.fromEntries((poRows.data ?? []).map(r => [r.user_id, r]))
+
   const hires: NewHireRow[] = (profiles ?? []).map(p => {
     const submittedDate = p.start_date ?? p.created_at.slice(0, 10)
     const days = Math.floor((Date.now() - new Date(submittedDate).getTime()) / 86_400_000)
+    const computed = computeHireStatus([
+      piMap[p.id]?.form_status, biMap[p.id]?.form_status,
+      siMap[p.id]?.form_status, poMap[p.id]?.form_status,
+    ])
+    const timestamps = [
+      piMap[p.id]?.submitted_at, biMap[p.id]?.submitted_at,
+      siMap[p.id]?.submitted_at, poMap[p.id]?.submitted_at,
+    ].filter((t): t is string => !!t)
+    const last_submitted_at = timestamps.length > 0
+      ? timestamps.reduce((a, b) => (a > b ? a : b))
+      : null
     return {
-      id:              p.id,
-      name:            p.full_name,
-      email:           p.aem_email,
-      role:            p.position ?? '—',
-      status:          p.status,
-      progress:        p.progress,
-      submitted:       submittedDate,
-      days:            Math.max(0, days),
-      office_location: p.office_location ?? null,
+      id:                p.id,
+      name:              p.full_name,
+      email:             p.aem_email,
+      role:              p.position ?? '—',
+      status:            computed.status,
+      progress:          computed.progressPct,
+      submitted:         submittedDate,
+      days:              Math.max(0, days),
+      last_submitted_at,
+      office_location:   p.office_location ?? null,
     }
   })
 

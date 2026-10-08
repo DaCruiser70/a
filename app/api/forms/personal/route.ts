@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
+import { recomputeProfileStatus } from '@/lib/hire-status'
 
 export async function POST(request: Request) {
   const ssr   = await createClient()
@@ -33,15 +34,12 @@ export async function POST(request: Request) {
       emergency_phone:        emergencyPhone,
       form_status:            'review',
       flag_reason:            null,
+      submitted_at:           new Date().toISOString(),
     }, { onConflict: 'user_id' })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  await admin
-    .from('profiles')
-    .update({ progress: 25, status: 'in-progress', updated_at: new Date().toISOString() })
-    .eq('id', user.id)
-    .lt('progress', 25)
+  await recomputeProfileStatus(admin, user.id)
 
   await admin.from('audit_log').insert({
     user_id:      user.id,

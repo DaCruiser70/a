@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import '../../../styles/pages/hr-dashboard.css'
+import { timeAgo } from '@/lib/time-ago'
 import type { NewHireRow } from '@/types'
 
 type ActivityItem = { type: string; msg: string; time: string }
@@ -121,11 +122,11 @@ function HireTable({
               </td>
               <td><span className={`hr-status ${hire.status}`}>{STATUS_LABELS[hire.status]}</span></td>
               <td>
-                <span className={`hr-days-badge ${hire.days > 5 ? 'urgent' : ''}`}>
+                <span className={`hr-days-badge ${hire.last_submitted_at ? 'urgent' : ''}`}>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ width:'11px', height:'11px' }}>
                     <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
                   </svg>
-                  {hire.days === 0 ? 'Today' : `${hire.days}d ago`}
+                  {timeAgo(hire.last_submitted_at, 'No submissions yet')}
                 </span>
               </td>
               <td onClick={e => e.stopPropagation()}>

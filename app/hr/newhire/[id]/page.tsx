@@ -3,6 +3,8 @@
 import { useRouter, useParams } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import '../../../../styles/pages/hr-newhire.css'
+import { timeAgo } from '@/lib/time-ago'
+import { groupStakeholderTasks } from '@/lib/stakeholder-groups'
 import type { NewHireDetail, FormStatus, HrNote, AuditEntry, NewhireDocument, StakeholderTask } from '@/types'
 
 type HireDetail = NewHireDetail & {
@@ -74,26 +76,25 @@ const EQUIPMENT_LIST = [
   { category: 'Office & Tech', items: [
     { id:'laptop',   label:'Laptop / Computer',    note:'Check with IT' },
     { id:'phone',    label:'Mobile Phone',          note:'Company plan' },
-    { id:'email',    label:'Email Account Setup',   note:'IT will configure' },
     { id:'software', label:'Software Licenses',     note:'Role-dependent' },
   ]},
   { category: 'Access & Security', items: [
     { id:'access',   label:'Access Card / Key Fob', note:'Facilities' },
-    { id:'parking',  label:'Parking Pass',           note:'If applicable' },
-    { id:'vpn',      label:'VPN Access',             note:'IT setup' },
   ]},
   { category: 'Field & Vehicle', items: [
     { id:'gascard',  label:'Gas Card',               note:'Fleet dept' },
     { id:'vehicle',  label:'Company Vehicle',         note:'If role requires' },
-    { id:'tools',    label:'Tools & Equipment',       note:'Dept-specific' },
   ]},
   { category: 'Safety', items: [
-    { id:'ppe',      label:'PPE Equipment',           note:'Hard hat, vest, boots' },
     { id:'training', label:'Safety Training',         note:'Mandatory first week' },
   ]},
   { category: 'Software — Jonas', items: [
     { id:'jonas_regular', label:'Jonas Access — Regular', note:'Marley Element' },
     { id:'jonas_emobile', label:'Jonas Access — e-Mobile', note:'Marley Element' },
+  ]},
+  { category: 'HR & Admin', items: [
+    { id:'benefits',  label:'Benefits Setup',   note:'HR to complete' },
+    { id:'timesheet', label:'Timesheet Access', note:'HR to complete' },
   ]},
 ]
 
@@ -101,14 +102,6 @@ const FORM_STATUS_LABELS: Record<string,string> = {
   pending:'Not Submitted', review:'Needs Review', approved:'Approved', flagged:'Flagged',
 }
 
-// Auto-compute overall status from individual form statuses
-function computeStatus(statuses: Record<string, string>): string {
-  const vals = Object.values(statuses)
-  if (vals.some(s => s === 'flagged'))    return 'flagged'
-  if (vals.every(s => s === 'approved'))  return 'approved'
-  if (vals.every(s => s === 'pending'))   return 'not-started'
-  return 'needs-review'
-}
 
 const STATUS_DISPLAY: Record<string, { label: string; color: string; bg: string; border: string }> = {
   'flagged':      { label: 'Flagged',       color: '#E74C3C', bg: 'rgba(231,76,60,0.12)',  border: 'rgba(231,76,60,0.3)'  },
@@ -145,7 +138,10 @@ export default function HRNewHirePage() {
   const [hireDocuments, setHireDocuments]     = useState<NewhireDocument[]>([])
   const [rejectDocModal, setRejectDocModal]   = useState<RejectDocModal>(null)
   const [rejectDocReason, setRejectDocReason] = useState('')
-  const [stakeholderTasks, setStakeholderTasks] = useState<(StakeholderTask & { stakeholder_name: string | null })[]>([])
+  const [stakeholderTasks, setStakeholderTasks] = useState<(StakeholderTask & { stakeholder_name: string | null; has_note: boolean })[]>([])
+  const [revealedNotes, setRevealedNotes]       = useState<Record<string, string>>({})
+  const [fetchingNote, setFetchingNote]         = useState<string | null>(null)
+  const [expandedGroups, setExpandedGroups]     = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     fetch(`/api/hr/hires/${hireId}`)
@@ -201,7 +197,7 @@ export default function HRNewHirePage() {
     )
   }
 
-  const status = computeStatus(formStatuses)
+  const status = hire.status
   const sd     = STATUS_DISPLAY[status] || STATUS_DISPLAY['needs-review']
 
   function showToast(msg: string) {
@@ -288,11 +284,13 @@ export default function HRNewHirePage() {
   }
 
   async function handleSaveEquipment() {
-    // Only notify for items that are newly checked AND have no existing stakeholder task at all.
-    // Items with a pending task must not create a duplicate; confirmed items must never reset.
+    // A checked item should notify only when no stakeholder_tasks row exists yet for this
+    // newhire + task_key. We compare against the DB-sourced existingTaskKeys, not local
+    // savedItems state — savedItems can drift out of sync with the database.
     const existingTaskKeys = new Set(stakeholderTasks.map(t => t.task_key))
+
     const newlyChecked = Object.entries(checkedItems)
-      .filter(([key, val]) => val && !savedItems[key] && !existingTaskKeys.has(key))
+      .filter(([key, val]) => val && !existingTaskKeys.has(key))
       .map(([key]) => key)
 
     setSavedItems({ ...checkedItems })
@@ -340,17 +338,57 @@ export default function HRNewHirePage() {
     showToast('Note saved')
   }
 
-  const allEquipItems  = EQUIPMENT_LIST.flatMap(c => c.items)
+  async function handleViewNote(taskId: string) {
+    setFetchingNote(taskId)
+    try {
+      const res = await fetch(`/api/hr/hires/${hireId}/stakeholder-tasks/${taskId}/note`)
+      if (!res.ok) { showToast('Could not load note'); return }
+      const { note } = await res.json()
+      setRevealedNotes(prev => ({ ...prev, [taskId]: note as string }))
+    } catch {
+      showToast('Could not load note')
+    } finally {
+      setFetchingNote(null)
+    }
+  }
+
+  function handleHideNote(taskId: string) {
+    setRevealedNotes(prev => {
+      const next = { ...prev }
+      delete next[taskId]
+      return next
+    })
+  }
+
+  const allEquipItems = EQUIPMENT_LIST.flatMap(c => c.items)
 
   // Index stakeholder tasks by task_key so the render can look up state per item
-  type EnrichedTask = StakeholderTask & { stakeholder_name: string | null }
+  type EnrichedTask = StakeholderTask & { stakeholder_name: string | null; has_note: boolean }
   const tasksByKey: Record<string, EnrichedTask[]> = {}
   for (const t of stakeholderTasks) {
     if (!tasksByKey[t.task_key]) tasksByKey[t.task_key] = []
     tasksByKey[t.task_key].push(t)
   }
 
-  const checkedCount   = allEquipItems.filter(i => checkedItems[i.id]).length
+  // Items whose task_key maps to more than one stakeholder (e.g. Company Vehicle)
+  const multiTaskKeys = new Set(
+    Object.entries(tasksByKey)
+      .filter(([, tasks]) => tasks.length > 1)
+      .map(([key]) => key)
+  )
+
+  const groupedTasks = groupStakeholderTasks(stakeholderTasks)
+
+  // Progress bar: for items with stakeholder tasks, "done" = all tasks confirmed.
+  // For HR-only items (no tasks), "done" = HR's checkbox.
+  const checkedCount = allEquipItems.filter(item => {
+    const tasks = tasksByKey[item.id] ?? []
+    if (tasks.length > 0) return tasks.every(t => t.status === 'confirmed')
+    return checkedItems[item.id] ?? false
+  }).length
+
+  // Used only for the "unsaved changes" label (compares HR's current vs saved checkbox state).
+  const localCheckedCount = allEquipItems.filter(i => checkedItems[i.id]).length
   const equipPct       = Math.round((checkedCount / allEquipItems.length) * 100)
   const approvedForms  = Object.values(formStatuses).filter(s => s === 'approved').length
   const displayedAudit = showAllAudit ? auditLog : auditLog.slice(0, 6)
@@ -507,7 +545,7 @@ export default function HRNewHirePage() {
               {FORMS.map(form => {
                 const fStatus = formStatuses[form.id] || 'pending'
                 const isOpen  = expandedForms[form.id]
-                const notSubmitted = hire.progress === 0 || (form.id !== 'personal' && fStatus === 'pending' && hire.progress < form.step * 25)
+                const notSubmitted = fStatus === 'pending'
 
                 return (
                   <div key={form.id} className="hrd-form-item">
@@ -522,7 +560,9 @@ export default function HRNewHirePage() {
                       <div className="hrd-form-info">
                         <div className="hrd-form-name">{form.name}</div>
                         <div className="hrd-form-date">
-                          {notSubmitted ? 'Not yet submitted' : `Submitted ${hire.days === 0 ? 'today' : `${hire.days}d ago`}`}
+                          {notSubmitted
+                            ? 'Not yet submitted'
+                            : `Submitted ${timeAgo(hire.form_submitted_at?.[form.id] ?? null)}`}
                           {form.sensitive && !notSubmitted ? ' · Encrypted fields' : ''}
                         </div>
                       </div>
@@ -570,7 +610,7 @@ export default function HRNewHirePage() {
                               </div>
                             </div>
                           )}
-                          {hire.void_cheque_path && (
+                          {hire.has_void_cheque && (
                             <div className="hrd-sensitive-row hrd-data-full">
                               <div className="hrd-sensitive-label">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
@@ -668,11 +708,16 @@ export default function HRNewHirePage() {
                     <div className="hrd-equip-category-label">{cat.category}</div>
                     <div className="hrd-equip-items">
                       {cat.items.map(item => {
-                        const itemTasks   = tasksByKey[item.id] ?? []
-                        const isConfirmed = itemTasks.length > 0 && itemTasks.every(t => t.status === 'confirmed')
-                        const isPending   = !isConfirmed && itemTasks.some(t => t.status === 'pending')
-                        const isChecked   = isConfirmed || (checkedItems[item.id] ?? false)
-                        const stakeholderName = itemTasks[0]?.stakeholder_name ?? null
+                        const itemTasks      = tasksByKey[item.id] ?? []
+                        const confirmedTasks = itemTasks.filter(t => t.status === 'confirmed')
+                        const pendingTasks   = itemTasks.filter(t => t.status === 'pending')
+                        const isConfirmed    = itemTasks.length > 0 && pendingTasks.length === 0
+                        const isPending      = !isConfirmed && pendingTasks.length > 0
+                        const isChecked      = isConfirmed || (checkedItems[item.id] ?? false)
+
+                        const allNames       = itemTasks.map(t => t.stakeholder_name).filter(Boolean).join(', ')
+                        const confirmedNames = confirmedTasks.map(t => t.stakeholder_name).filter(Boolean).join(', ')
+                        const pendingNames   = pendingTasks.map(t => t.stakeholder_name).filter(Boolean).join(', ')
 
                         return (
                           <div
@@ -700,11 +745,19 @@ export default function HRNewHirePage() {
                             <div className="hrd-equip-item-note">
                               {isConfirmed ? (
                                 <span style={{ color: '#0D5C46', fontWeight: 600 }}>
-                                  ✓ Confirmed{stakeholderName ? ` by ${stakeholderName}` : ''}
+                                  ✓ Confirmed{allNames ? ` by ${allNames}` : ''}
+                                </span>
+                              ) : itemTasks.length > 1 && (confirmedTasks.length > 0 || isPending) ? (
+                                <span style={{ color: '#C8920A' }}>
+                                  {confirmedTasks.length}/{itemTasks.length} confirmed — waiting on {pendingNames || allNames}
+                                </span>
+                              ) : confirmedTasks.length > 0 ? (
+                                <span style={{ color: '#C8920A' }}>
+                                  Confirmed by {confirmedNames} — awaiting {pendingNames}
                                 </span>
                               ) : isPending ? (
                                 <span style={{ color: '#C8920A' }}>
-                                  Awaiting confirmation{stakeholderName ? ` from ${stakeholderName}` : ''}
+                                  Awaiting confirmation{allNames ? ` from ${allNames}` : ''}
                                 </span>
                               ) : item.note}
                             </div>
@@ -716,8 +769,8 @@ export default function HRNewHirePage() {
                 ))}
                 <div className="hrd-equip-save">
                   <div className="hrd-equip-save-note">
-                    {checkedCount !== Object.values(savedItems).filter(Boolean).length
-                      ? `${checkedCount - Object.values(savedItems).filter(Boolean).length > 0 ? '+' : ''}${checkedCount - Object.values(savedItems).filter(Boolean).length} unsaved changes`
+                    {localCheckedCount !== Object.values(savedItems).filter(Boolean).length
+                      ? `${localCheckedCount - Object.values(savedItems).filter(Boolean).length > 0 ? '+' : ''}${localCheckedCount - Object.values(savedItems).filter(Boolean).length} unsaved changes`
                       : 'All changes saved'}
                   </div>
                   <button className="hrd-equip-save-btn" onClick={handleSaveEquipment}>
@@ -828,39 +881,199 @@ export default function HRNewHirePage() {
                   <div className="hrd-card-sub">Third-party confirmations for equipment and access items</div>
                 </div>
                 <div className="hrd-card-header-right" style={{ color: '#0D5C46' }}>
-                  {stakeholderTasks.filter(t => t.status === 'confirmed').length}/{stakeholderTasks.length} confirmed
+                  {groupedTasks.filter(g => g.isComplete).length}/{groupedTasks.length} confirmed
                 </div>
               </div>
 
-              {stakeholderTasks.length === 0 ? (
+              {groupedTasks.length === 0 ? (
                 <div style={{ padding: '2rem 1.75rem', textAlign: 'center', color: '#B0ABA4', fontSize: '13px' }}>
                   No stakeholder tasks created yet. They are generated when equipment items are saved.
                 </div>
               ) : (
                 <div style={{ padding: '0.5rem 0' }}>
-                  {stakeholderTasks.map(task => (
-                    <div key={task.id} style={{ padding: '0.875rem 1.75rem', borderTop: '1px solid rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontWeight: 600, fontSize: '13px', color: '#1a2e25', marginBottom: '2px' }}>
-                          {task.task_name}
-                        </div>
-                        <div style={{ fontSize: '11px', color: '#888780' }}>
-                          {task.stakeholder_name ?? '—'}
-                          {task.confirmed_at && (
-                            <> · Confirmed {new Date(task.confirmed_at).toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric' })}</>
+                  {groupedTasks.map(group => {
+                    const isMulti      = group.assignees.length > 1
+                    const isExpanded   = expandedGroups[group.task_key] ?? false
+                    const confirmedNames = group.assignees.filter(a => a.status === 'confirmed').map(a => a.name).join(', ')
+                    const waitingNames   = group.assignees.filter(a => a.status !== 'confirmed').map(a => a.name).join(', ')
+                    const singleAssignee = group.assignees[0]
+
+                    return (
+                      <div key={group.task_key}>
+                        {/* Group row */}
+                        <div style={{ padding: '0.875rem 1.75rem', borderTop: '1px solid rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontWeight: 600, fontSize: '13px', color: '#1a2e25', marginBottom: '2px' }}>
+                              {group.task_name}
+                            </div>
+                            <div style={{ fontSize: '11px', color: '#888780' }}>
+                              {isMulti ? (
+                                <>
+                                  {confirmedNames && <span>Confirmed: {confirmedNames}</span>}
+                                  {confirmedNames && waitingNames && ' · '}
+                                  {waitingNames && <span>Waiting on: {waitingNames}</span>}
+                                </>
+                              ) : (
+                                <>
+                                  {singleAssignee?.name}
+                                  {singleAssignee?.confirmed_at && (
+                                    <> · Confirmed {new Date(singleAssignee.confirmed_at).toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric' })}</>
+                                  )}
+                                  {!singleAssignee?.confirmed_at && singleAssignee?.status === 'pending' && (
+                                    <> · Awaiting confirmation</>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Status badge */}
+                          <span style={{
+                            fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '100px', whiteSpace: 'nowrap', flexShrink: 0,
+                            color:      group.isComplete ? '#0D5C46' : '#C8920A',
+                            background: group.isComplete ? 'rgba(13,92,70,0.1)' : 'rgba(200,146,10,0.1)',
+                            border:     `1px solid ${group.isComplete ? 'rgba(13,92,70,0.2)' : 'rgba(200,146,10,0.25)'}`,
+                          }}>
+                            {isMulti && !group.isComplete
+                              ? `${group.confirmedCount}/${group.totalCount} confirmed`
+                              : group.isComplete ? 'Confirmed' : 'Pending'
+                            }
+                          </span>
+
+                          {/* Single-assignee: View note button */}
+                          {!isMulti && singleAssignee?.status === 'confirmed' && singleAssignee.has_note && (() => {
+                            const noteRevealed = Object.prototype.hasOwnProperty.call(revealedNotes, singleAssignee.task_id)
+                            const isFetching   = fetchingNote === singleAssignee.task_id
+                            return (
+                              <button
+                                onClick={() => noteRevealed ? handleHideNote(singleAssignee.task_id) : handleViewNote(singleAssignee.task_id)}
+                                disabled={isFetching}
+                                style={{
+                                  padding: '3px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 600,
+                                  border: '1px solid rgba(27,58,107,0.2)', background: noteRevealed ? 'rgba(27,58,107,0.08)' : 'transparent',
+                                  color: '#1B3A6B', cursor: isFetching ? 'not-allowed' : 'pointer',
+                                  fontFamily: 'inherit', whiteSpace: 'nowrap', flexShrink: 0,
+                                }}
+                              >
+                                {isFetching ? 'Loading…' : noteRevealed ? 'Hide' : 'View note'}
+                              </button>
+                            )
+                          })()}
+
+                          {/* Multi-assignee: expand/collapse chevron */}
+                          {isMulti && (
+                            <button
+                              onClick={() => setExpandedGroups(prev => ({ ...prev, [group.task_key]: !isExpanded }))}
+                              style={{
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                width: '26px', height: '26px', borderRadius: '6px', border: '1px solid rgba(0,0,0,0.1)',
+                                background: 'transparent', cursor: 'pointer', flexShrink: 0, padding: 0,
+                                color: '#888780',
+                              }}
+                              aria-label={isExpanded ? 'Collapse' : 'Expand'}
+                            >
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ width: '12px', height: '12px', transition: 'transform 0.15s', transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)' }}>
+                                <polyline points="6 9 12 15 18 9"/>
+                              </svg>
+                            </button>
                           )}
                         </div>
+
+                        {/* Single-assignee note reveal */}
+                        {!isMulti && singleAssignee && Object.prototype.hasOwnProperty.call(revealedNotes, singleAssignee.task_id) && (
+                          <div style={{ margin: '0 1.75rem 1rem', padding: '12px 14px', background: 'rgba(27,58,107,0.04)', border: '1px solid rgba(27,58,107,0.12)', borderRadius: '8px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                              <span style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: '#888780' }}>
+                                Completion Note
+                              </span>
+                              <button
+                                onClick={() => navigator.clipboard.writeText(revealedNotes[singleAssignee.task_id])}
+                                style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '5px', fontSize: '11px', border: '1px solid rgba(0,0,0,0.12)', background: '#fff', color: '#4A4640', cursor: 'pointer', fontFamily: 'inherit' }}
+                              >
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ width: '11px', height: '11px' }}>
+                                  <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                                </svg>
+                                Copy
+                              </button>
+                            </div>
+                            <div style={{ fontSize: '13px', color: '#1A1916', lineHeight: 1.6, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                              {revealedNotes[singleAssignee.task_id]}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Multi-assignee expanded per-assignee rows */}
+                        {isMulti && isExpanded && (
+                          <div style={{ paddingBottom: '0.5rem' }}>
+                            {group.assignees.map(assignee => {
+                              const noteRevealed = Object.prototype.hasOwnProperty.call(revealedNotes, assignee.task_id)
+                              const isFetching   = fetchingNote === assignee.task_id
+                              return (
+                                <div key={assignee.task_id}>
+                                  <div style={{ padding: '0.5rem 1.75rem 0.5rem 2.75rem', display: 'flex', alignItems: 'center', gap: '8px', borderTop: '1px solid rgba(0,0,0,0.04)' }}>
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                      <span style={{ fontSize: '12px', color: '#1a2e25', fontWeight: 500 }}>{assignee.name}</span>
+                                      {assignee.confirmed_at && (
+                                        <span style={{ fontSize: '11px', color: '#888780', marginLeft: '6px' }}>
+                                          · Confirmed {new Date(assignee.confirmed_at).toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                        </span>
+                                      )}
+                                      {!assignee.confirmed_at && (
+                                        <span style={{ fontSize: '11px', color: '#B0ABA4', marginLeft: '6px' }}>· Awaiting</span>
+                                      )}
+                                    </div>
+                                    <span style={{
+                                      fontSize: '10px', fontWeight: 700, padding: '2px 7px', borderRadius: '100px', whiteSpace: 'nowrap', flexShrink: 0,
+                                      color:      assignee.status === 'confirmed' ? '#0D5C46' : '#C8920A',
+                                      background: assignee.status === 'confirmed' ? 'rgba(13,92,70,0.1)' : 'rgba(200,146,10,0.1)',
+                                      border:     `1px solid ${assignee.status === 'confirmed' ? 'rgba(13,92,70,0.2)' : 'rgba(200,146,10,0.25)'}`,
+                                    }}>
+                                      {assignee.status === 'confirmed' ? 'Confirmed' : 'Pending'}
+                                    </span>
+                                    {assignee.status === 'confirmed' && assignee.has_note && (
+                                      <button
+                                        onClick={() => noteRevealed ? handleHideNote(assignee.task_id) : handleViewNote(assignee.task_id)}
+                                        disabled={isFetching}
+                                        style={{
+                                          padding: '3px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 600,
+                                          border: '1px solid rgba(27,58,107,0.2)', background: noteRevealed ? 'rgba(27,58,107,0.08)' : 'transparent',
+                                          color: '#1B3A6B', cursor: isFetching ? 'not-allowed' : 'pointer',
+                                          fontFamily: 'inherit', whiteSpace: 'nowrap', flexShrink: 0,
+                                        }}
+                                      >
+                                        {isFetching ? 'Loading…' : noteRevealed ? 'Hide' : 'View note'}
+                                      </button>
+                                    )}
+                                  </div>
+                                  {noteRevealed && (
+                                    <div style={{ margin: '0 1.75rem 0.75rem 2.75rem', padding: '12px 14px', background: 'rgba(27,58,107,0.04)', border: '1px solid rgba(27,58,107,0.12)', borderRadius: '8px' }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                                        <span style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: '#888780' }}>
+                                          Completion Note
+                                        </span>
+                                        <button
+                                          onClick={() => navigator.clipboard.writeText(revealedNotes[assignee.task_id])}
+                                          style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '5px', fontSize: '11px', border: '1px solid rgba(0,0,0,0.12)', background: '#fff', color: '#4A4640', cursor: 'pointer', fontFamily: 'inherit' }}
+                                        >
+                                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ width: '11px', height: '11px' }}>
+                                            <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                                          </svg>
+                                          Copy
+                                        </button>
+                                      </div>
+                                      <div style={{ fontSize: '13px', color: '#1A1916', lineHeight: 1.6, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                                        {revealedNotes[assignee.task_id]}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )}
                       </div>
-                      <span style={{
-                        fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '100px', whiteSpace: 'nowrap',
-                        color:      task.status === 'confirmed' ? '#0D5C46' : '#C8920A',
-                        background: task.status === 'confirmed' ? 'rgba(13,92,70,0.1)' : 'rgba(200,146,10,0.1)',
-                        border:     `1px solid ${task.status === 'confirmed' ? 'rgba(13,92,70,0.2)' : 'rgba(200,146,10,0.25)'}`,
-                      }}>
-                        {task.status === 'confirmed' ? 'Confirmed' : 'Pending'}
-                      </span>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
             </div>
@@ -1049,6 +1262,26 @@ export default function HRNewHirePage() {
                     <div className="hrd-info-value">{hire.emergency_contact} · {hire.emergency_phone}</div>
                   </div>
                 </div>
+
+                {/* Employee ID (set by Payroll) */}
+                {hire.employee_id && (
+                  <div className="hrd-info-row">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="#0F4C4A" strokeWidth="2" strokeLinecap="round">
+                      <rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 3H8l-2 4h12z"/>
+                    </svg>
+                    <div>
+                      <div className="hrd-info-label">Employee ID</div>
+                      <div className="hrd-info-value" style={{ fontFamily: 'monospace', fontWeight: 700, color: '#0F4C4A' }}>
+                        {hire.employee_id}
+                        {hire.payroll_completed_at && (
+                          <span style={{ fontFamily: 'system-ui', fontWeight: 400, color: '#888780', marginLeft: '8px', fontSize: '12px' }}>
+                            Payroll completed {new Date(hire.payroll_completed_at).toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric' })}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
 
               </div>
             </div>

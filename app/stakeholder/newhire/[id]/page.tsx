@@ -33,6 +33,7 @@ export default function StakeholderHireDetail() {
   const [loading, setLoading]             = useState(true)
   const [confirmModal, setConfirmModal]   = useState<Task | null>(null)
   const [confirming, setConfirming]       = useState(false)
+  const [noteText, setNoteText]           = useState('')
   const [toast, setToast]                 = useState<string | null>(null)
 
   useEffect(() => {
@@ -56,10 +57,13 @@ export default function StakeholderHireDetail() {
     if (!confirmModal) return
     setConfirming(true)
     try {
-      const res = await fetch(`/api/stakeholder/tasks/${confirmModal.id}`, { method: 'PATCH' })
+      const trimmedNote = noteText.trim()
+      const res = await fetch(`/api/stakeholder/tasks/${confirmModal.id}`, {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ note: trimmedNote || null }),
+      })
       if (!res.ok) { showToast('Failed to confirm. Please try again.'); return }
-
-      console.log(`[stakeholder] Task confirmed: ${confirmModal.task_name} for hire ${hireId}`)
 
       setHireGroup(prev => {
         if (!prev) return prev
@@ -72,6 +76,7 @@ export default function StakeholderHireDetail() {
         return { ...prev, tasks, pending_count }
       })
       showToast(`"${confirmModal.task_name}" confirmed`)
+      setNoteText('')
       setConfirmModal(null)
     } finally {
       setConfirming(false)
@@ -259,9 +264,9 @@ export default function StakeholderHireDetail() {
       {confirmModal && (
         <div
           style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}
-          onClick={e => { if (e.target === e.currentTarget && !confirming) setConfirmModal(null) }}
+          onClick={e => { if (e.target === e.currentTarget && !confirming) { setConfirmModal(null); setNoteText('') } }}
         >
-          <div style={{ background: '#fff', borderRadius: '16px', padding: '28px 28px 24px', maxWidth: '420px', width: '100%', boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
+          <div style={{ background: '#fff', borderRadius: '16px', padding: '28px 28px 24px', maxWidth: '440px', width: '100%', boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
             <div style={{ marginBottom: '20px' }}>
               <div style={{ fontWeight: 700, fontSize: '17px', color: '#1A1916', marginBottom: '8px' }}>
                 Confirm task complete?
@@ -280,10 +285,44 @@ export default function StakeholderHireDetail() {
                 for {hireGroup?.hire_name}{hireGroup?.hire_role ? ` (${hireGroup.hire_role})` : ''}.
                 This action cannot be undone.
               </div>
+
+              {/* Optional completion note */}
+              <div style={{ marginTop: '16px' }}>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#4A4640', marginBottom: '6px' }}>
+                  Notes for HR <span style={{ fontWeight: 400, color: '#888780' }}>(optional)</span>
+                </label>
+                <textarea
+                  rows={3}
+                  maxLength={1000}
+                  placeholder="e.g. login details, or where the card was left for the new hire"
+                  value={noteText}
+                  onChange={e => setNoteText(e.target.value)}
+                  disabled={confirming}
+                  style={{
+                    width: '100%', boxSizing: 'border-box', resize: 'vertical',
+                    padding: '10px 12px', border: '1.5px solid rgba(0,0,0,0.15)',
+                    borderRadius: '8px', fontFamily: 'inherit', fontSize: '13px',
+                    lineHeight: 1.5, outline: 'none', color: '#1A1916',
+                    background: confirming ? '#F9F8F7' : '#fff',
+                  }}
+                />
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '5px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: '#888780' }}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ width: '11px', height: '11px', flexShrink: 0 }}>
+                      <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                    </svg>
+                    Encrypted — only HR can read this
+                  </div>
+                  <span style={{ fontSize: '11px', color: noteText.length > 900 ? '#C8920A' : '#B0ABA4' }}>
+                    {noteText.length}/1000
+                  </span>
+                </div>
+              </div>
             </div>
+
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
               <button
-                onClick={() => setConfirmModal(null)}
+                onClick={() => { setConfirmModal(null); setNoteText('') }}
                 disabled={confirming}
                 style={{ padding: '8px 18px', borderRadius: '8px', border: '1.5px solid rgba(0,0,0,0.12)', background: '#fff', cursor: confirming ? 'not-allowed' : 'pointer', fontFamily: 'inherit', fontSize: '13px', color: '#4A4640' }}
               >

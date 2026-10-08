@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { decrypt } from '@/lib/encrypt'
+import { computeHireStatus } from '@/lib/hire-status'
 import type { NewHireDetail, FormStatus } from '@/types'
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -29,7 +30,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     admin.from('profiles').select('*').eq('id', id).single(),
     admin.from('personal_info').select('*').eq('user_id', id).maybeSingle(),
     admin.from('banking_info').select('*').eq('user_id', id).maybeSingle(),
-    admin.from('sin_info').select('form_status, sin_enc, flag_reason').eq('user_id', id).maybeSingle(),
+    admin.from('sin_info').select('form_status, sin_enc, flag_reason, submitted_at').eq('user_id', id).maybeSingle(),
     admin.from('policy_acknowledgements').select('*').eq('user_id', id).maybeSingle(),
     admin.from('equipment_provisioning').select('*').eq('user_id', id).maybeSingle(),
     admin.from('hr_notes').select('*').eq('user_id', id).order('created_at', { ascending: false }),
@@ -41,12 +42,25 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const submittedDate = profile.start_date ?? profile.created_at.slice(0, 10)
   const days = Math.max(0, Math.floor((Date.now() - new Date(submittedDate).getTime()) / 86_400_000))
 
+  const formSubmittedAt: Record<string, string | null> = {
+    personal: personal?.submitted_at ?? null,
+    banking:  banking?.submitted_at  ?? null,
+    sin:      sin?.submitted_at      ?? null,
+    policy:   policy?.submitted_at   ?? null,
+  }
+  const submittedTimestamps = Object.values(formSubmittedAt).filter((t): t is string => !!t)
+  const last_submitted_at = submittedTimestamps.length > 0
+    ? submittedTimestamps.reduce((a, b) => (a > b ? a : b))
+    : null
+
   const formStatuses: Record<string, FormStatus> = {
     personal: (personal?.form_status ?? 'pending') as FormStatus,
     banking:  (banking?.form_status  ?? 'pending') as FormStatus,
     sin:      (sin?.form_status      ?? 'pending') as FormStatus,
     policy:   (policy?.form_status   ?? 'pending') as FormStatus,
   }
+
+  const computed = computeHireStatus(Object.values(formStatuses))
 
   const flagReasons: Record<string, string | null> = {
     personal: personal?.flag_reason ?? null,
@@ -77,8 +91,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     name:                    profile.full_name,
     email:                   profile.aem_email,
     role:                    profile.position ?? '—',
-    status:                  profile.status,
-    progress:                profile.progress,
+    status:                  computed.status,
+    progress:                computed.progressPct,
     submitted:               submittedDate,
     days,
     office_location:         profile.office_location          ?? null,
@@ -94,7 +108,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     policy_signature:        policy?.signature,
     form_statuses:           formStatuses,
     flag_reasons:            flagReasons,
-    void_cheque_path:        banking?.void_cheque_path        ?? null,
+    form_submitted_at:       formSubmittedAt,
+    last_submitted_at,
+    has_void_cheque:         !!(banking?.void_cheque_path),
     equipment_items:         (equipment?.items as Record<string, boolean>) ?? {},
     notes:                   notes                            ?? [],
     audit_log:               auditLog                         ?? [],
@@ -106,6 +122,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     probation_period:        profile.probation_period         ?? null,
     probation_end_date:      profile.probation_end_date       ?? null,
     probation_status:        profile.probation_status         ?? null,
+    employee_id:             profile.employee_id              ?? null,
+    payroll_completed_at:    profile.payroll_completed_at     ?? null,
   }
 
   return NextResponse.json({ detail })

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { encrypt, decrypt } from '@/lib/encrypt'
+import { recomputeProfileStatus } from '@/lib/hire-status'
 
 export async function POST(request: Request) {
   const ssr   = await createClient()
@@ -35,15 +36,12 @@ export async function POST(request: Request) {
       void_cheque_path:       finalVoidChequePath,
       form_status:            'review',
       flag_reason:            null,
+      submitted_at:           new Date().toISOString(),
     }, { onConflict: 'user_id' })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  await admin
-    .from('profiles')
-    .update({ progress: 50, status: 'in-progress', updated_at: new Date().toISOString() })
-    .eq('id', user.id)
-    .lt('progress', 50)
+  await recomputeProfileStatus(admin, user.id)
 
   await admin.from('audit_log').insert({
     user_id:      user.id,

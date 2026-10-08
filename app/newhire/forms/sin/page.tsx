@@ -10,7 +10,7 @@ function getInitials(name: string) {
   return name.split(' ').filter(Boolean).map(n => n[0]).join('').toUpperCase().slice(0, 2)
 }
 
-const FlaggedBanner = ({ reason }: { reason?: string | null }) => (
+const FlaggedBanner = ({ reason, source }: { reason?: string | null; source?: string | null }) => (
   <div style={{
     background: 'rgba(231,76,60,0.08)', border: '1.5px solid rgba(231,76,60,0.3)',
     borderRadius: '14px', padding: '16px 18px', display: 'flex',
@@ -21,7 +21,12 @@ const FlaggedBanner = ({ reason }: { reason?: string | null }) => (
       <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
     </svg>
     <div>
-      <div style={{ fontWeight: 700, color: '#C0392B', fontSize: '14px', marginBottom: '6px' }}>Action Required</div>
+      <div style={{ fontWeight: 700, color: '#C0392B', fontSize: '14px', marginBottom: source ? '2px' : '6px' }}>Action Required</div>
+      {source && (
+        <div style={{ fontSize: '11px', fontWeight: 600, color: '#C0392B', opacity: 0.75, marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          Flagged by {source}
+        </div>
+      )}
       {reason && (
         <div style={{ color: '#7A1B12', fontSize: '13px', marginBottom: '6px', lineHeight: 1.5 }}>{reason}</div>
       )}
@@ -38,6 +43,7 @@ export default function SINForm() {
   const [showConfirm, setShowConfirm] = useState(false)
   const [formStatus, setFormStatus]   = useState('')
   const [flagReason, setFlagReason]   = useState<string | null>(null)
+  const [flagSource, setFlagSource]   = useState<string | null>(null)
   const [saving, setSaving]           = useState(false)
   const [saveError, setSaveError]     = useState('')
   const [userName, setUserName]       = useState('')
@@ -59,15 +65,18 @@ export default function SINForm() {
   }
 
   useEffect(() => {
-    fetch('/api/forms/sin')
-      .then(r => r.ok ? r.json() : null)
-      .then(data => {
-        if (!data?.existing) return
-        const formatted = formatSIN(data.existing.sin ?? '')
-        setSin(formatted)
-        setSinConfirm(formatted)
-        setFormStatus(data.existing.formStatus ?? '')
-        setFlagReason(data.existing.flagReason ?? null)
+    Promise.all([
+      fetch('/api/forms/sin').then(r => r.ok ? r.json() : null),
+      fetch('/api/newhire/flag-sources').then(r => r.ok ? r.json() : null).catch(() => null),
+    ]).then(([data, sourcesData]) => {
+        if (data?.existing) {
+          const formatted = formatSIN(data.existing.sin ?? '')
+          setSin(formatted)
+          setSinConfirm(formatted)
+          setFormStatus(data.existing.formStatus ?? '')
+          setFlagReason(data.existing.flagReason ?? null)
+        }
+        if (sourcesData?.sources?.sin) setFlagSource(sourcesData.sources.sin)
       })
       .catch(() => {})
   }, [])
@@ -133,7 +142,7 @@ export default function SINForm() {
 
       <form className="form-page-body" onSubmit={handleSubmit}>
 
-        {formStatus === 'flagged' && <FlaggedBanner reason={flagReason} />}
+        {formStatus === 'flagged' && <FlaggedBanner reason={flagReason} source={flagSource} />}
 
         <div className="form-section-card">
           <div className="form-section-header">
