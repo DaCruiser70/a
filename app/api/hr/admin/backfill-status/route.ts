@@ -1,15 +1,13 @@
 import { NextResponse } from 'next/server'
-import { createClient, createServiceClient } from '@/lib/supabase/server'
+import { createServiceClient } from '@/lib/supabase/server'
+import { requireRole } from '@/lib/roles'
 import { recomputeProfileStatus } from '@/lib/hire-status'
 
 export async function GET() {
-  const ssr = await createClient()
-  const { data: { user } } = await ssr.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const auth = await requireRole('hr')
+  if (auth instanceof NextResponse) return auth
 
   const admin = createServiceClient()
-  const { data: caller } = await admin.from('profiles').select('role').eq('id', user.id).single()
-  if (caller?.role !== 'hr') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { data: profiles, error } = await admin
     .from('profiles')

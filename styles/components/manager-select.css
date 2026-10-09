@@ -1,0 +1,66 @@
+/* ── Manager directory combobox (Add New Hire modal) ── */
+.manager-select { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; font-family: sans-serif; }
+
+.manager-select-label { font-size: 12px; font-weight: 600; color: #4A4640; }
+.manager-select-req   { color: #E74C3C; }
+
+.manager-select-control { position: relative; }
+
+.manager-select-input {
+  width: 100%; box-sizing: border-box; padding: 8px 30px 8px 10px;
+  border: 1.5px solid rgba(0,0,0,0.12); border-radius: 8px;
+  font-family: sans-serif; font-size: 13px; color: #1A1916; background: #fff;
+  outline: none; transition: border-color 0.15s, box-shadow 0.15s;
+}
+.manager-select-input:focus-visible { border-color: #1B3A6B; box-shadow: 0 0 0 3px rgba(27,58,107,0.15); }
+.manager-select-input.invalid       { border-color: #E74C3C; }
+.manager-select-input:disabled      { background: #F5F3EF; color: #888780; cursor: not-allowed; }
+
+.manager-select-chevron {
+  position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+  width: 12px; height: 12px; color: #888780; pointer-events: none;
+}
+
+.manager-select-list {
+  position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 20;
+  max-height: 220px; overflow-y: auto; margin: 0; padding: 4px; list-style: none;
+  background: #fff; border: 1px solid rgba(0,0,0,0.1); border-radius: 10px;
+  box-shadow: 0 10px 28px rgba(0,0,0,0.14);
+}
+
+.manager-select-option {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 8px 10px; border-radius: 7px; cursor: pointer;
+  font-size: 13px; color: #1A1916;
+}
+.manager-select-option.active   { background: rgba(27,58,107,0.08); outline: 2px solid rgba(27,58,107,0.35); outline-offset: -2px; }
+.manager-select-option.selected { color: #1B3A6B; font-weight: 600; }
+
+.manager-select-check {
+  font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 100px;
+  color: #C8920A; background: rgba(200,146,10,0.1); border: 1px solid rgba(200,146,10,0.25);
+}
+
+.manager-select-empty { padding: 10px; font-size: 12px; color: #888780; text-align: center; }
+
+.manager-select-hint       { font-size: 11px; color: #888780; margin-top: 2px; }
+.manager-select-hint.error { font-size: 12px; color: #E74C3C; }
+
+.manager-select-skeleton {
+  height: 35px; border-radius: 8px;
+  background: linear-gradient(90deg, #F0EEEA 25%, #E6E3DD 50%, #F0EEEA 75%);
+  background-size: 200% 100%; animation: managerSelectShimmer 1.2s ease-in-out infinite;
+}
+@keyframes managerSelectShimmer { from { background-position: 200% 0 } to { background-position: -200% 0 } }
+@media (prefers-reduced-motion: reduce) { .manager-select-skeleton { animation: none; } }
+
+.manager-select-message.error {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+  padding: 9px 12px; border-radius: 8px; font-size: 12px; color: #C0392B;
+  background: rgba(231,76,60,0.08); border: 1px solid rgba(231,76,60,0.25);
+}
+.manager-select-retry {
+  padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(192,57,43,0.35);
+  background: #fff; color: #C0392B; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit;
+}
+.manager-select-retry:focus-visible { outline: 2px solid #C8920A; outline-offset: 2px; }

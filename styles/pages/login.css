@@ -329,6 +329,18 @@
   text-align: center;
 }
 
+.login-notice {
+  margin-top: 16px;
+  padding: 10px 14px;
+  background: rgba(200,146,10,0.08);
+  border: 1px solid rgba(200,146,10,0.3);
+  border-radius: 8px;
+  font-size: 12px;
+  color: #E8B84B;
+  font-weight: 500;
+  text-align: center;
+}
+
 .login-btn:disabled {
   opacity: 0.7;
   cursor: not-allowed;

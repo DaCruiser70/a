@@ -1,12 +1,13 @@
 import { NextResponse } from 'next/server'
-import { createClient, createServiceClient } from '@/lib/supabase/server'
+import { createServiceClient } from '@/lib/supabase/server'
+import { requireRole } from '@/lib/roles'
 
 // Returns which actor ('HR' | 'Payroll') most recently flagged each form for this new hire.
 // Used by individual form pages to show "Flagged by HR / Payroll" in the Action Required banner.
 export async function GET() {
-  const ssr = await createClient()
-  const { data: { user } } = await ssr.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const auth = await requireRole('newhire')
+  if (auth instanceof NextResponse) return auth
+  const { user } = auth
 
   const admin = createServiceClient()
 

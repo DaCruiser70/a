@@ -1,24 +1,21 @@
 import { createServerClient } from '@supabase/ssr'
-import { createClient } from '@supabase/supabase-js'
 import { NextResponse, type NextRequest } from 'next/server'
+import { verifyOtpSession, OTP_SESSION_COOKIE } from '@/lib/otp-session'
+import {
+  parseRoles, isNewhireOnly, landingRole, portalForPath, portalForRole,
+} from '@/lib/portals'
 
-// Service-role client for role lookups — bypasses RLS so the middleware never
-// gets a null profile due to missing SELECT policies on the profiles table.
-function makeAdmin() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { auth: { persistSession: false, autoRefreshToken: false } }
-  )
+// APIs that require a completed one-time-code sign-in. Every API route also
+// calls requireRole(), which applies the same rule plus the role check.
+const OTP_API_PREFIXES = ['/api/hr', '/api/stakeholder', '/api/payroll', '/api/manager', '/api/project-mgmt']
+
+function matchesPrefix(pathname: string, prefixes: string[]) {
+  return prefixes.some(p => pathname === p || pathname.startsWith(`${p}/`))
 }
 
-async function getRole(userId: string): Promise<string | null> {
-  const { data } = await makeAdmin()
-    .from('profiles')
-    .select('role')
-    .eq('id', userId)
-    .single()
-  return data?.role ?? null
+function noStore<T extends NextResponse>(response: T): T {
+  response.headers.set('Cache-Control', 'no-store')
+  return response
 }
 
 export async function middleware(request: NextRequest) {
@@ -42,90 +39,74 @@ export async function middleware(request: NextRequest) {
     }
   )
 
+  // getUser() validates the session with the auth server, so app_metadata is current.
+  // Roles live in app_metadata (mirrored from profiles by a trigger), which users cannot write.
   const { data: { user } } = await supabase.auth.getUser()
   const { pathname } = request.nextUrl
+  const isApi = pathname.startsWith('/api')
 
-  // Not logged in → redirect to login (except for login itself and api routes)
-  if (!user && !pathname.startsWith('/login') && !pathname.startsWith('/api')) {
+  const roles       = user ? parseRoles(user.app_metadata?.roles) : []
+  const landing     = landingRole(user?.app_metadata?.role, roles)
+  const landingHref = landing ? portalForRole(landing).href : '/login'
+  const otpRequired = !isNewhireOnly(roles)
+  const otpValid    = user && otpRequired
+    ? await verifyOtpSession(request.cookies.get(OTP_SESSION_COOKIE)?.value, user.id)
+    : false
+  const otpOk       = !otpRequired || otpValid
+
+  // Signed in but holding no valid role: end the session
+  if (user && roles.length === 0) {
+    if (isApi && !pathname.startsWith('/api/auth')) {
+      return noStore(NextResponse.json({ error: 'Unauthorized' }, { status: 401 }))
+    }
+    if (!pathname.startsWith('/api/auth')) {
+      await supabase.auth.signOut()
+      const redirect = noStore(NextResponse.redirect(new URL('/login', request.url)))
+      supabaseResponse.cookies.getAll().forEach(c => redirect.cookies.set(c))
+      redirect.cookies.set(OTP_SESSION_COOKIE, '', { path: '/', maxAge: 0 })
+      return redirect
+    }
+  }
+
+  // OTP-gated APIs: signed-in user with a valid otp_session bound to them
+  if (matchesPrefix(pathname, OTP_API_PREFIXES)) {
+    if (!user || !otpValid) {
+      return noStore(NextResponse.json({ error: 'Unauthorized' }, { status: 401 }))
+    }
+    return noStore(supabaseResponse)
+  }
+
+  if (isApi) return supabaseResponse
+
+  // Not logged in → redirect to login (except for login itself)
+  if (!user) {
+    if (pathname.startsWith('/login')) return supabaseResponse
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  // Logged in user hitting /login → redirect to their portal
-  if (user && pathname === '/login') {
-    const role = await getRole(user.id)
-    const dest = role === 'hr'          ? '/hr/dashboard'
-               : role === 'payroll'     ? '/payroll/dashboard'
-               : role === 'stakeholder' ? '/stakeholder/dashboard'
-               : '/newhire/welcome'
-    return NextResponse.redirect(new URL(dest, request.url))
+  // Logged in user hitting /login → their landing portal, unless they still
+  // owe a one-time code (otherwise the OTP gate below would bounce them straight back)
+  if (pathname === '/login') {
+    if (otpOk) return NextResponse.redirect(new URL(landingHref, request.url))
+    return supabaseResponse
   }
 
-  // HR routes: must be authenticated AND have completed OTP
-  if (pathname.startsWith('/hr')) {
-    if (!user) {
-      return NextResponse.redirect(new URL('/login', request.url))
-    }
+  const portal = portalForPath(pathname)
+  if (!portal) return supabaseResponse
 
-    const role = await getRole(user.id)
-    const otpVerified = request.cookies.get('otp_verified')?.value
-
-    if (role === 'payroll') {
-      return NextResponse.redirect(new URL('/payroll/dashboard', request.url))
-    }
-    if (role !== 'hr') {
-      const dest = role === 'stakeholder' ? '/stakeholder/dashboard' : '/newhire/welcome'
-      return NextResponse.redirect(new URL(dest, request.url))
-    }
-
-    // OTP gate: HR must have verified OTP this session
-    if (!otpVerified) {
-      const redirectUrl = new URL('/login', request.url)
-      redirectUrl.searchParams.set('otp_required', '1')
-      return NextResponse.redirect(redirectUrl)
-    }
+  // Every account except a newhire-only one needs a completed one-time code
+  if (!otpOk) {
+    const redirectUrl = new URL('/login', request.url)
+    redirectUrl.searchParams.set('otp_required', '1')
+    return noStore(NextResponse.redirect(redirectUrl))
   }
 
-  // Newhire routes: must be authenticated as newhire
-  if (pathname.startsWith('/newhire')) {
-    if (!user) {
-      return NextResponse.redirect(new URL('/login', request.url))
-    }
-
-    const role = await getRole(user.id)
-    if (role === 'hr')          return NextResponse.redirect(new URL('/hr/dashboard', request.url))
-    if (role === 'payroll')     return NextResponse.redirect(new URL('/payroll/dashboard', request.url))
-    if (role === 'stakeholder') return NextResponse.redirect(new URL('/stakeholder/dashboard', request.url))
+  // A user may enter a portal if any of their roles allows it; otherwise send them to their landing portal
+  if (!roles.includes(portal.role)) {
+    return noStore(NextResponse.redirect(new URL(landingHref, request.url)))
   }
 
-  // Stakeholder routes: must be authenticated as stakeholder
-  if (pathname.startsWith('/stakeholder')) {
-    if (!user) {
-      return NextResponse.redirect(new URL('/login', request.url))
-    }
-    const role = await getRole(user.id)
-    if (role !== 'stakeholder') {
-      const dest = role === 'hr'      ? '/hr/dashboard'
-                 : role === 'payroll' ? '/payroll/dashboard'
-                 : '/newhire/welcome'
-      return NextResponse.redirect(new URL(dest, request.url))
-    }
-  }
-
-  // Payroll routes: must be authenticated as payroll (no OTP required)
-  if (pathname.startsWith('/payroll')) {
-    if (!user) {
-      return NextResponse.redirect(new URL('/login', request.url))
-    }
-    const role = await getRole(user.id)
-    if (role !== 'payroll') {
-      const dest = role === 'hr'          ? '/hr/dashboard'
-                 : role === 'stakeholder' ? '/stakeholder/dashboard'
-                 : '/newhire/welcome'
-      return NextResponse.redirect(new URL(dest, request.url))
-    }
-  }
-
-  return supabaseResponse
+  return noStore(supabaseResponse)
 }
 
 export const config = {

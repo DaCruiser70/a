@@ -4,6 +4,9 @@ import { useRouter } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import '../../../styles/pages/hr-dashboard.css'
 import { timeAgo } from '@/lib/time-ago'
+import { esc, SafeMessage } from '@/lib/safe-html'
+import PortalSwitcher from '@/components/ui/PortalSwitcher'
+import ManagerSelect from '@/components/ui/ManagerSelect'
 import type { NewHireRow } from '@/types'
 
 type ActivityItem = { type: string; msg: string; time: string }
@@ -172,7 +175,7 @@ function HireTable({
 
 const EMPTY_HIRE = {
   name: '', preferredName: '', personalEmail: '', aemEmail: '',
-  role: '', officeLocation: '', reportingManagerName: '', reportingManagerEmail: '',
+  role: '', officeLocation: '', reportingManagerId: '',
   startDate: '', formDeadline: '', probationPeriod: '',
 }
 
@@ -206,6 +209,7 @@ export default function HRDashboard() {
   const [showNotifs, setShowNotifs]     = useState(false)
   const [toast, setToast]               = useState<string|null>(null)
   const [newHire, setNewHire]           = useState(EMPTY_HIRE)
+  const [managerMissing, setManagerMissing] = useState(false)
 
   const today = new Date().toLocaleDateString('en-CA', { weekday:'long', month:'long', day:'numeric', year:'numeric' })
 
@@ -237,6 +241,7 @@ export default function HRDashboard() {
 
   function resetModal() {
     setNewHire(EMPTY_HIRE)
+    setManagerMissing(false)
     setAddError('')
     setSubmitting(false)
   }
@@ -264,7 +269,7 @@ export default function HRDashboard() {
       body: JSON.stringify({ status: 'approved' }),
     })
     setHires(prev => prev.map((h: NewHireRow) => h.id === id ? { ...h, status: 'approved' as const } : h))
-    setActivity(prev => [{ type:'green', msg:`<strong>${name}</strong> approved by HR`, time:'Just now' }, ...prev])
+    setActivity(prev => [{ type:'green', msg:`<strong>${esc(name)}</strong> approved by HR`, time:'Just now' }, ...prev])
     showToast(`${name} has been approved`)
   }
 
@@ -276,7 +281,7 @@ export default function HRDashboard() {
       body: JSON.stringify({ status: 'flagged' }),
     })
     setHires(prev => prev.map((h: NewHireRow) => h.id === id ? { ...h, status: 'flagged' as const } : h))
-    setActivity(prev => [{ type:'red', msg:`<strong>${name}</strong> flagged for review`, time:'Just now' }, ...prev])
+    setActivity(prev => [{ type:'red', msg:`<strong>${esc(name)}</strong> flagged for review`, time:'Just now' }, ...prev])
     showToast(`${name} has been flagged`)
   }
 
@@ -297,6 +302,7 @@ export default function HRDashboard() {
   async function handleAddHire(e: React.SyntheticEvent<HTMLFormElement>) {
     e.preventDefault()
     if (submitting || deadlineAfterStart) return
+    if (!newHire.reportingManagerId) { setManagerMissing(true); return }
     setSubmitting(true)
     setAddError('')
 
@@ -310,8 +316,7 @@ export default function HRDashboard() {
         aemEmail:             newHire.aemEmail,
         role:                 newHire.role,
         officeLocation:       newHire.officeLocation,
-        reportingManagerName: newHire.reportingManagerName,
-        reportingManagerEmail:newHire.reportingManagerEmail,
+        reportingManagerId:   newHire.reportingManagerId,
         startDate:            newHire.startDate,
         formDeadline:         newHire.formDeadline,
         probationPeriod:      newHire.probationPeriod,
@@ -330,7 +335,7 @@ export default function HRDashboard() {
     // Refresh the hires list with real data from the server
     await loadHires()
 
-    setActivity(prev => [{ type:'navy', msg:`<strong>${newHire.name}</strong> added as new hire`, time:'Just now' }, ...prev])
+    setActivity(prev => [{ type:'navy', msg:`<strong>${esc(newHire.name)}</strong> added as new hire`, time:'Just now' }, ...prev])
     setCreatedHire({ name: newHire.name, aemEmail: newHire.aemEmail, personalEmail: newHire.personalEmail, tempPassword })
     closeAddModal()
     setShowSuccessModal(true)
@@ -452,6 +457,7 @@ export default function HRDashboard() {
             <div className="hr-topbar-date">{today}</div>
           </div>
           <div className="hr-topbar-right">
+            <PortalSwitcher />
             <button className="hr-topbar-btn secondary" onClick={handleExport}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
@@ -480,7 +486,7 @@ export default function HRDashboard() {
                         <div className="hr-activity-dot-inner" style={{ width:'4px',height:'4px' }} />
                       </div>
                       <div>
-                        <div className="hr-notif-msg" dangerouslySetInnerHTML={{ __html: a.msg }} />
+                        <div className="hr-notif-msg"><SafeMessage message={a.msg} /></div>
                         <div className="hr-notif-time">{a.time}</div>
                       </div>
                     </div>
@@ -641,7 +647,7 @@ export default function HRDashboard() {
                         <div key={i} className="hr-activity-item">
                           <div className={`hr-activity-dot ${a.type}`}><div className="hr-activity-dot-inner" /></div>
                           <div className="hr-activity-text">
-                            <div className="hr-activity-msg" dangerouslySetInnerHTML={{ __html: a.msg }} />
+                            <div className="hr-activity-msg"><SafeMessage message={a.msg} /></div>
                             <div className="hr-activity-time">{a.time}</div>
                           </div>
                         </div>
@@ -791,26 +797,11 @@ export default function HRDashboard() {
                 </select>
               </div>
 
-              <div style={fieldStyle}>
-                <label style={labelStyle}>Reporting Manager Name</label>
-                <input
-                  style={inputStyle}
-                  placeholder="Manager name"
-                  value={newHire.reportingManagerName}
-                  onChange={e => setNewHire(p => ({ ...p, reportingManagerName: e.target.value }))}
-                />
-              </div>
-
-              <div style={fieldStyle}>
-                <label style={labelStyle}>Reporting Manager Email</label>
-                <input
-                  type="email"
-                  style={inputStyle}
-                  placeholder="manager@aemltd.com"
-                  value={newHire.reportingManagerEmail}
-                  onChange={e => setNewHire(p => ({ ...p, reportingManagerEmail: e.target.value }))}
-                />
-              </div>
+              <ManagerSelect
+                value={newHire.reportingManagerId}
+                invalid={managerMissing}
+                onChange={id => { setNewHire(p => ({ ...p, reportingManagerId: id })); if (id) setManagerMissing(false) }}
+              />
 
               {/* ── Dates & Deadlines ── */}
               <div style={dividerStyle}>

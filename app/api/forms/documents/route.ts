@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server'
-import { createClient, createServiceClient } from '@/lib/supabase/server'
+import { createServiceClient } from '@/lib/supabase/server'
+import { requireRole } from '@/lib/roles'
 
 export async function GET() {
-  const ssr = await createClient()
-  const { data: { user } } = await ssr.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const auth = await requireRole('newhire')
+  if (auth instanceof NextResponse) return auth
+  const { user } = auth
 
   const admin = createServiceClient()
   // file_path is deliberately excluded — storage paths never leave the server
@@ -18,9 +19,9 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const ssr = await createClient()
-  const { data: { user } } = await ssr.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const auth = await requireRole('newhire')
+  if (auth instanceof NextResponse) return auth
+  const { user } = auth
 
   const body = await request.json()
   const { document_type, document_label, file_path, file_name, file_size, expiry_date } = body

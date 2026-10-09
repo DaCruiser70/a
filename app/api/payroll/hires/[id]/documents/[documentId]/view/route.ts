@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
-import { createClient, createServiceClient } from '@/lib/supabase/server'
+import { createServiceClient } from '@/lib/supabase/server'
+import { requireRole } from '@/lib/roles'
 import { getDocumentSignedUrl } from '@/lib/document-view'
+import { esc } from '@/lib/safe-html'
 
 const PAYROLL_DOC_TYPES = new Set(['td1_federal', 'td1_provincial', 'direct_deposit'])
 
@@ -8,13 +10,11 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string; documentId: string }> }
 ) {
-  const ssr = await createClient()
-  const { data: { user } } = await ssr.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const auth = await requireRole('payroll')
+  if (auth instanceof NextResponse) return auth
+  const { user } = auth
 
   const admin = createServiceClient()
-  const { data: callerProfile } = await admin.from('profiles').select('role').eq('id', user.id).single()
-  if (callerProfile?.role !== 'payroll') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { id, documentId } = await params
 
@@ -33,7 +33,7 @@ export async function GET(
   await admin.from('audit_log').insert({
     user_id:      id,
     action_type:  'amber',
-    message:      `<strong>Payroll</strong> ${download ? 'downloaded' : 'viewed'} ${result.label}`,
+    message:      `<strong>Payroll</strong> ${download ? 'downloaded' : 'viewed'} ${esc(result.label)}`,
     performed_by: user.id,
   })
 

@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 import '../../../styles/pages/forms.css'
 import type { FormStatus } from '@/types'
-import { createClient } from '@/lib/supabase/client'
+import PortalSwitcher from '@/components/ui/PortalSwitcher'
 
 const FORMS = [
   {
@@ -93,9 +93,8 @@ export default function FormsPage() {
   }, [])
 
   async function handleSignOut() {
-    const supabase = createClient()
-    await supabase.auth.signOut()
-    router.push('/login')
+    await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {})
+    window.location.href = '/login'
   }
 
   const total = FORMS.length
@@ -138,6 +137,7 @@ export default function FormsPage() {
           <span className="forms-nav-label">Employee Onboarding Portal</span>
         </div>
         <div className="forms-nav-right">
+          <PortalSwitcher />
           <button
             className="forms-nav-back"
             onClick={() => router.push('/newhire/welcome')}

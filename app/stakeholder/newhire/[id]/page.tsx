@@ -2,7 +2,7 @@
 
 import { useRouter, useParams } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import PortalSwitcher from '@/components/ui/PortalSwitcher'
 
 type Task = {
   id: string
@@ -130,8 +130,10 @@ export default function StakeholderHireDetail() {
         <span style={{ fontSize: '13px', color: 'rgba(255,255,255,0.5)', fontWeight: 500 }}>
           Stakeholder Portal
         </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <PortalSwitcher tone="dark" />
         <button
-          onClick={async () => { const s = createClient(); await s.auth.signOut(); router.push('/login') }}
+          onClick={async () => { await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {}); window.location.href = '/login' }}
           style={{
             display: 'flex', alignItems: 'center', gap: '5px',
             padding: '5px 11px', borderRadius: '7px',
@@ -147,6 +149,7 @@ export default function StakeholderHireDetail() {
           </svg>
           Sign out
         </button>
+        </div>
       </nav>
 
       <div style={{ maxWidth: '680px', margin: '0 auto', padding: '2rem 1.5rem' }}>

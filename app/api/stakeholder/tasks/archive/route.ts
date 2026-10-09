@@ -1,21 +1,16 @@
 import { NextResponse } from 'next/server'
-import { createClient, createServiceClient } from '@/lib/supabase/server'
+import { createServiceClient } from '@/lib/supabase/server'
+import { requireRole } from '@/lib/roles'
 
 // Hides this stakeholder's confirmed tasks for newhires beyond the 5 most recently
 // completed (fully confirmed). Never deletes rows; only sets hidden_from_stakeholder = true.
 // Only operates on rows where assigned_to = current user.
 export async function POST() {
-  const ssr = await createClient()
-  const { data: { user } } = await ssr.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const auth = await requireRole('stakeholder')
+  if (auth instanceof NextResponse) return auth
+  const { user } = auth
 
   const admin = createServiceClient()
-  const { data: callerProfile } = await admin
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single()
-  if (callerProfile?.role !== 'stakeholder') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   // Fetch all tasks for this stakeholder (including already-hidden, to get the full picture)
   const { data: allTasks } = await admin

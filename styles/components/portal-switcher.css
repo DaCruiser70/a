@@ -1,0 +1,59 @@
+/* ── Portal switcher (shown only to accounts with more than one portal) ── */
+.portal-switcher { position: relative; display: inline-flex; }
+
+.portal-switcher-btn {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 11px; border-radius: 7px;
+  font-size: 12px; font-weight: 600; font-family: inherit;
+  cursor: pointer; white-space: nowrap;
+  transition: background 0.15s, border-color 0.15s;
+}
+.portal-switcher-btn svg { width: 13px; height: 13px; flex-shrink: 0; }
+.portal-switcher-btn .portal-switcher-chevron { width: 11px; height: 11px; transition: transform 0.15s; }
+.portal-switcher-btn[aria-expanded="true"] .portal-switcher-chevron { transform: rotate(180deg); }
+
+.portal-switcher-light .portal-switcher-btn {
+  border: 1px solid rgba(27,58,107,0.2); background: rgba(27,58,107,0.05); color: #1B3A6B;
+}
+.portal-switcher-light .portal-switcher-btn:hover { background: rgba(27,58,107,0.1); }
+
+.portal-switcher-dark .portal-switcher-btn {
+  border: 1px solid rgba(255,255,255,0.18); background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.8);
+}
+.portal-switcher-dark .portal-switcher-btn:hover { background: rgba(255,255,255,0.14); }
+
+.portal-switcher-btn:focus-visible,
+.portal-switcher-item:focus-visible {
+  outline: 2px solid #C8920A; outline-offset: 2px;
+}
+
+.portal-switcher-menu {
+  position: absolute; top: calc(100% + 8px); right: 0; z-index: 200;
+  width: 240px; max-width: calc(100vw - 32px);
+  background: #fff; border: 1px solid rgba(0,0,0,0.08); border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0,0,0,0.14);
+  padding: 6px; font-family: inherit;
+}
+.portal-switcher-menu ul { list-style: none; margin: 0; padding: 0; }
+.portal-switcher-menu-title {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+  color: #888780; padding: 8px 10px 6px;
+}
+
+.portal-switcher-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 9px 10px; border-radius: 8px;
+  font-size: 13px; font-weight: 500; color: #1A1916; text-decoration: none;
+}
+.portal-switcher-item:hover { background: rgba(27,58,107,0.06); }
+.portal-switcher-item.current { color: #1B3A6B; font-weight: 600; background: rgba(27,58,107,0.05); }
+
+.portal-switcher-current {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.03em;
+  padding: 2px 7px; border-radius: 100px;
+  color: #C8920A; background: rgba(200,146,10,0.1); border: 1px solid rgba(200,146,10,0.25);
+}
+
+@media (max-width: 480px) {
+  .portal-switcher-btn-text { display: none; }
+}

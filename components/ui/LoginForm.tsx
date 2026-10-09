@@ -6,7 +6,12 @@ import { createClient } from '@/lib/supabase/client'
 
 const OTP_EXPIRY = 300
 
-export default function LoginForm() {
+// Error bodies are JSON from our routes, but a proxy or crash page may not be
+async function readJson(res: Response): Promise<{ error?: string; [key: string]: unknown }> {
+  try { return await res.json() } catch { return {} }
+}
+
+export default function LoginForm({ otpRequired = false }: { otpRequired?: boolean }) {
   const router = useRouter()
   const supabase = createClient()
 
@@ -43,12 +48,19 @@ export default function LoginForm() {
     setError('')
     setLoading(true)
 
-    const res = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    })
-    const data = await res.json()
+    let res: Response
+    try {
+      res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      })
+    } catch {
+      setError('Could not reach the server. Check your connection and try again.')
+      setLoading(false)
+      return
+    }
+    const data = await readJson(res)
 
     if (!res.ok) {
       setError(data.error || 'Sign in failed.')
@@ -58,16 +70,17 @@ export default function LoginForm() {
 
     if (data.role === 'newhire') {
       // Set the session in the Supabase client
+      const session = data.session as { access_token: string; refresh_token: string }
       await supabase.auth.setSession({
-        access_token:  data.session.access_token,
-        refresh_token: data.session.refresh_token,
+        access_token:  session.access_token,
+        refresh_token: session.refresh_token,
       })
       router.push('/newhire/welcome')
       return
     }
 
-    // HR: show OTP screen
-    setDevOtp(data.devCode ?? null)
+    // Everyone else: show OTP screen
+    setDevOtp(typeof data.devCode === 'string' ? data.devCode : null)
     setTimeLeft(OTP_EXPIRY)
     setCanResend(false)
     setOtp(['', '', '', '', '', ''])
@@ -105,12 +118,27 @@ export default function LoginForm() {
     if (code.length < 6) { setOtpError('Please enter the full 6-digit code.'); return }
     setOtpLoading(true)
 
-    const res = await fetch('/api/auth/otp', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code }),
-    })
-    const data = await res.json()
+    let res: Response
+    try {
+      res = await fetch('/api/auth/otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code }),
+      })
+    } catch {
+      setOtpError('Could not reach the server. Check your connection and try again.')
+      setOtpLoading(false)
+      return
+    }
+    const data = await readJson(res)
+
+    if (res.status === 401) {
+      // The pending sign-in is gone — start over from the password step
+      handleBackToLogin()
+      setError(data.error || 'Session expired. Please sign in again.')
+      setOtpLoading(false)
+      return
+    }
 
     if (!res.ok) {
       setOtpError(data.error || 'Verification failed.')
@@ -130,13 +158,23 @@ export default function LoginForm() {
     setOtpError('')
     setDevOtp(null)
 
-    const res = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    })
-    const data = await res.json()
-    if (res.ok && data.devCode) setDevOtp(data.devCode)
+    let res: Response
+    try {
+      res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      })
+    } catch {
+      setOtpError('Could not reach the server. Check your connection and try again.')
+      return
+    }
+    const data = await readJson(res)
+    if (!res.ok) {
+      setOtpError(data.error || 'Could not send a new code.')
+      return
+    }
+    if (typeof data.devCode === 'string') setDevOtp(data.devCode)
 
     setTimeLeft(OTP_EXPIRY)
     setCanResend(false)
@@ -171,8 +209,8 @@ export default function LoginForm() {
 
           <div className="login-card-title">Verify your identity</div>
           <div className="login-card-sub">
-            A 6-digit code was sent to<br />
-            <strong style={{ color: '#E8B84B' }}>{email}</strong>
+            A 6-digit code was sent to the email address<br />
+            registered to your account
           </div>
 
           <form onSubmit={handleOtpSubmit}>
@@ -193,7 +231,7 @@ export default function LoginForm() {
               ))}
             </div>
 
-            {otpError && <div className="login-error">{otpError}</div>}
+            {otpError && <div className="login-error" role="alert">{otpError}</div>}
 
             <div className="otp-timer">
               {canResend ? (
@@ -261,6 +299,10 @@ export default function LoginForm() {
         <div className="login-card-title">Welcome back</div>
         <div className="login-card-sub">Use the credentials sent to your email</div>
 
+        {otpRequired && !error && (
+          <div className="login-notice" role="status">Please sign in again to continue</div>
+        )}
+
         <form onSubmit={handleLogin}>
           <div className="login-field">
             <label htmlFor="username">Email</label>
@@ -289,7 +331,7 @@ export default function LoginForm() {
             </div>
           </div>
 
-          {error && <div className="login-error">{error}</div>}
+          {error && <div className="login-error" role="alert">{error}</div>}
 
           <button type="submit" className="login-btn" disabled={loading}>
             <span className="login-btn-text">{loading ? 'Signing in...' : 'Sign in to Portal'}</span>

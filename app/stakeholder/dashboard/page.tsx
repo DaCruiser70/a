@@ -3,7 +3,8 @@
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { useMe } from '@/lib/use-me'
+import PortalSwitcher from '@/components/ui/PortalSwitcher'
 
 type HireGroup = {
   hire_id: string
@@ -74,21 +75,9 @@ function HireCard({ hire, onView }: { hire: HireGroup; onView: () => void }) {
 export default function StakeholderDashboard() {
   const router = useRouter()
   const [hires, setHires]           = useState<HireGroup[]>([])
-  const [displayName, setDisplayName] = useState('')
+  const { me } = useMe()
+  const displayName = me?.name ?? ''
   const [loading, setLoading]       = useState(true)
-
-  useEffect(() => {
-    const supabase = createClient()
-    supabase.auth.getUser().then(async ({ data: { user } }) => {
-      if (!user) return
-      const { data } = await supabase
-        .from('profiles')
-        .select('full_name, preferred_name')
-        .eq('id', user.id)
-        .single()
-      if (data) setDisplayName(data.preferred_name ?? data.full_name ?? '')
-    }).catch(() => {})
-  }, [])
 
   useEffect(() => {
     // Archive old completed hires first (idempotent), then fetch the visible ones
@@ -104,9 +93,8 @@ export default function StakeholderDashboard() {
   }, [])
 
   async function handleSignOut() {
-    const supabase = createClient()
-    await supabase.auth.signOut()
-    router.push('/login')
+    await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {})
+    window.location.href = '/login'
   }
 
   const needsAction       = hires.filter(h => h.pending_count > 0)
@@ -132,6 +120,7 @@ export default function StakeholderDashboard() {
           </span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <PortalSwitcher tone="dark" />
           {displayName && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <div style={{

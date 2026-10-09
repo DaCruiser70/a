@@ -1,6 +1,6 @@
 // ── Database row types ────────────────────────────────────────────────────────
 
-export type UserRole   = 'hr' | 'newhire' | 'stakeholder' | 'payroll' | 'manager'
+export type UserRole   = 'hr' | 'newhire' | 'stakeholder' | 'payroll' | 'manager' | 'project_mgmt'
 export type HireStatus = 'not-started' | 'in-progress' | 'needs-review' | 'approved' | 'flagged'
 export type FormStatus = 'pending' | 'review' | 'approved' | 'flagged'
 export type DocStatus  = 'pending' | 'review' | 'approved' | 'rejected'
@@ -10,6 +10,7 @@ export type Profile = {
   full_name:                string
   aem_email:                string
   role:                     UserRole
+  roles:                    UserRole[]
   position:                 string | null
   start_date:               string | null
   status:                   HireStatus
@@ -19,6 +20,8 @@ export type Profile = {
   office_location:          string | null
   reporting_manager_name:   string | null
   reporting_manager_email:  string | null
+  reporting_manager_id:     string | null
+  region:                   'Ontario' | 'New Brunswick' | 'Nova Scotia' | null
   form_deadline:            string | null
   probation_period:         string | null
   probation_end_date:       string | null
@@ -29,6 +32,16 @@ export type Profile = {
   entered_payroll_queue_at: string | null
   created_at:               string
   updated_at:               string
+}
+
+export type Manager = {
+  id:         string
+  full_name:  string
+  email:      string
+  user_id:    string | null
+  active:     boolean
+  created_at: string
+  updated_at: string
 }
 
 export type PersonalInfo = {
@@ -155,7 +168,9 @@ export type AuditEntry = {
 export type OtpCode = {
   id:         string
   user_id:    string
-  code:       string
+  code:       string | null
+  code_hash:  string | null
+  attempts:   number
   expires_at: string
   used:       boolean
   created_at: string
@@ -170,6 +185,12 @@ export type Database = {
         Row:           Profile
         Insert:        Omit<Profile, 'created_at' | 'updated_at'>
         Update:        Partial<Omit<Profile, 'id' | 'created_at'>>
+        Relationships: []
+      }
+      managers: {
+        Row:           Manager
+        Insert:        Omit<Manager, 'id' | 'created_at' | 'updated_at' | 'active' | 'user_id'> & { active?: boolean; user_id?: string | null; updated_at?: string }
+        Update:        Partial<Omit<Manager, 'id' | 'created_at'>>
         Relationships: []
       }
       personal_info: {
@@ -219,7 +240,7 @@ export type Database = {
       }
       otp_codes: {
         Row:           OtpCode
-        Insert:        Omit<OtpCode, 'id' | 'created_at'>
+        Insert:        Omit<OtpCode, 'id' | 'created_at' | 'attempts'>
         Update:        Partial<Pick<OtpCode, 'used'>>
         Relationships: []
       }
@@ -241,13 +262,13 @@ export type Database = {
     }
     Views: {}
     Functions: {
-      get_profile_by_email: {
-        Args:    { p_email: string }
-        Returns: Array<{ id: string; role: string; full_name: string }>
+      rate_limit_hit: {
+        Args:    { p_key: string; p_window_seconds: number; p_max: number }
+        Returns: boolean
       }
-      get_pending_otp: {
-        Args:    { p_user_id: string }
-        Returns: Array<{ id: string; code: string; expires_at: string }>
+      verify_otp: {
+        Args:    { p_user_id: string; p_code_hash: string }
+        Returns: 'ok' | 'bad' | 'locked' | 'none'
       }
     }
     Enums: {}

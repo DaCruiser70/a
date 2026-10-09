@@ -5,6 +5,8 @@ import { useState, useEffect } from 'react'
 import '../../../../styles/pages/hr-newhire.css'
 import { timeAgo } from '@/lib/time-ago'
 import { groupStakeholderTasks } from '@/lib/stakeholder-groups'
+import { SafeMessage } from '@/lib/safe-html'
+import PortalSwitcher from '@/components/ui/PortalSwitcher'
 import type { NewHireDetail, FormStatus, HrNote, AuditEntry, NewhireDocument, StakeholderTask } from '@/types'
 
 type HireDetail = NewHireDetail & {
@@ -480,6 +482,7 @@ export default function HRNewHirePage() {
             </div>
           </div>
           <div className="hr-detail-topbar-right">
+            <PortalSwitcher />
             <button className="hr-detail-action-btn email" onClick={() => { window.location.href=`mailto:${hire.email}` }}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                 <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
@@ -1380,7 +1383,7 @@ export default function HRNewHirePage() {
                       <div className="hrd-audit-dot-inner" />
                     </div>
                     <div>
-                      <div className="hrd-audit-msg" dangerouslySetInnerHTML={{ __html: entry.message }} />
+                      <div className="hrd-audit-msg"><SafeMessage message={entry.message} /></div>
                       <div className="hrd-audit-time">{new Date(entry.created_at).toLocaleString('en-CA', { dateStyle:'medium', timeStyle:'short' })}</div>
                     </div>
                   </div>

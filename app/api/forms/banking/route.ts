@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { createClient, createServiceClient } from '@/lib/supabase/server'
+import { createServiceClient } from '@/lib/supabase/server'
+import { requireRole } from '@/lib/roles'
 import { encrypt, decrypt } from '@/lib/encrypt'
 import { recomputeProfileStatus } from '@/lib/hire-status'
 import { extFromPath } from '@/lib/download-name'
@@ -20,9 +21,9 @@ function cleanFileName(value: unknown, fallback: string): string {
 }
 
 export async function POST(request: Request) {
-  const ssr   = await createClient()
-  const { data: { user } } = await ssr.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const auth = await requireRole('newhire')
+  if (auth instanceof NextResponse) return auth
+  const { user } = auth
 
   const body = await request.json()
   const { bankName, accountType, institutionNumber, transitNumber, accountNumber } = body
@@ -131,9 +132,9 @@ export async function POST(request: Request) {
 }
 
 export async function GET() {
-  const ssr   = await createClient()
-  const { data: { user } } = await ssr.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const auth = await requireRole('newhire')
+  if (auth instanceof NextResponse) return auth
+  const { user } = auth
 
   const admin = createServiceClient()
   const { data } = await admin

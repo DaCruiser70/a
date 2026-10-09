@@ -3,7 +3,8 @@
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { useMe } from '@/lib/use-me'
+import PortalSwitcher from '@/components/ui/PortalSwitcher'
 
 const TEAL = '#0F4C4A'
 const TEAL_LIGHT = 'rgba(15,76,74,0.08)'
@@ -41,21 +42,9 @@ function fmtDate(iso: string | null): string {
 export default function PayrollDashboard() {
   const router = useRouter()
   const [hires, setHires]           = useState<PayrollHire[]>([])
-  const [displayName, setDisplayName] = useState('')
+  const { me } = useMe()
+  const displayName = me?.name ?? ''
   const [loading, setLoading]       = useState(true)
-
-  useEffect(() => {
-    const supabase = createClient()
-    supabase.auth.getUser().then(async ({ data: { user } }) => {
-      if (!user) return
-      const { data } = await supabase
-        .from('profiles')
-        .select('full_name, preferred_name')
-        .eq('id', user.id)
-        .single()
-      if (data) setDisplayName(data.preferred_name ?? data.full_name ?? '')
-    }).catch(() => {})
-  }, [])
 
   useEffect(() => {
     fetch('/api/payroll/hires')
@@ -66,9 +55,8 @@ export default function PayrollDashboard() {
   }, [])
 
   async function handleSignOut() {
-    const supabase = createClient()
-    await supabase.auth.signOut()
-    router.push('/login')
+    await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {})
+    window.location.href = '/login'
   }
 
   const awaiting   = hires.filter(h => !h.employee_id)
@@ -100,6 +88,7 @@ export default function PayrollDashboard() {
           </span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <PortalSwitcher tone="dark" />
           {displayName && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <div style={{

@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { FormStatus, HireStatus, Database } from '@/types'
 import { computeHireStatus } from './hire-status'
+import { esc } from './safe-html'
 
 const FORM_TABLES: Record<string, string> = {
   personal: 'personal_info',
@@ -66,11 +67,11 @@ export async function applyFormStatus(
   }
 
   const actionType = newStatus === 'approved' ? 'green' : newStatus === 'flagged' ? 'red' : 'amber'
-  const reasonNote = newStatus === 'flagged' && reason ? ` — <em>${reason}</em>` : ''
+  const reasonNote = newStatus === 'flagged' && reason ? ` — ${esc(reason)}` : ''
   await admin.from('audit_log').insert({
     user_id:      hireId,
     action_type:  actionType,
-    message:      `<strong>${actorLabel}</strong> marked ${formId} form as <strong>${newStatus}</strong>${reasonNote}`,
+    message:      `<strong>${esc(actorLabel)}</strong> marked ${esc(formId)} form as <strong>${esc(newStatus)}</strong>${reasonNote}`,
     performed_by: performedBy,
   })
 

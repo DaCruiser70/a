@@ -1,17 +1,15 @@
 import { NextResponse } from 'next/server'
-import { createClient, createServiceClient } from '@/lib/supabase/server'
+import { createServiceClient } from '@/lib/supabase/server'
+import { requireRole } from '@/lib/roles'
 import { applyFormStatus } from '@/lib/form-status'
 import type { HireStatus } from '@/types'
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const ssr = await createClient()
-  const { data: { user } } = await ssr.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const auth = await requireRole('hr')
+  if (auth instanceof NextResponse) return auth
+  const { user } = auth
 
   const admin = createServiceClient()
-
-  const { data: callerProfile } = await admin.from('profiles').select('role').eq('id', user.id).single()
-  if (callerProfile?.role !== 'hr') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { id } = await params
   const { formId, status, reason } = await request.json()

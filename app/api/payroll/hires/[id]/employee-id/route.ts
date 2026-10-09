@@ -1,17 +1,17 @@
 import { NextResponse } from 'next/server'
-import { createClient, createServiceClient } from '@/lib/supabase/server'
+import { createServiceClient } from '@/lib/supabase/server'
+import { requireRole } from '@/lib/roles'
+import { esc } from '@/lib/safe-html'
 
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const ssr = await createClient()
-  const { data: { user } } = await ssr.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const auth = await requireRole('payroll')
+  if (auth instanceof NextResponse) return auth
+  const { user } = auth
 
   const admin = createServiceClient()
-  const { data: callerProfile } = await admin.from('profiles').select('role, full_name').eq('id', user.id).single()
-  if (callerProfile?.role !== 'payroll') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { id } = await params
 
@@ -41,7 +41,7 @@ export async function POST(
   await admin.from('audit_log').insert({
     user_id:      id,
     action_type:  'green',
-    message:      `<strong>Payroll</strong> assigned employee ID <strong>${trimmed}</strong> — payroll processing complete`,
+    message:      `<strong>Payroll</strong> assigned employee ID <strong>${esc(trimmed)}</strong> — payroll processing complete`,
     performed_by: user.id,
   })
 

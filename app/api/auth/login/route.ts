@@ -1,10 +1,53 @@
 import { NextResponse } from 'next/server'
+import { randomInt } from 'node:crypto'
+import { z } from 'zod'
 import { createClient } from '@supabase/supabase-js'
 import { createServiceClient } from '@/lib/supabase/server'
 import { cookies } from 'next/headers'
+import { encrypt } from '@/lib/encrypt'
+import { hmacHex } from '@/lib/auth-secrets'
+import { rateLimit, rateLimitKey, getClientIp } from '@/lib/rate-limit'
+import { getOtpRecipients } from '@/lib/otp-recipients'
+import { PENDING_SESSION_COOKIE, PENDING_SESSION_PATH } from '@/lib/otp-session'
+
+const OTP_TTL_SECONDS = 300
+const WINDOW_SECONDS  = 15 * 60
+
+const BodySchema = z.strictObject({
+  email:    z.string().trim().toLowerCase().max(254).pipe(z.email()),
+  password: z.string().min(1).max(256),
+})
+
+const INVALID_CREDENTIALS = 'Invalid email or password.'
+
+function invalid() {
+  return NextResponse.json({ error: INVALID_CREDENTIALS }, { status: 401 })
+}
+
+function tooMany(retryAfterSeconds: number) {
+  return NextResponse.json(
+    { error: 'Too many sign-in attempts. Please wait a few minutes and try again.' },
+    { status: 429, headers: { 'Retry-After': String(retryAfterSeconds) } },
+  )
+}
 
 export async function POST(request: Request) {
-  const { email, password } = await request.json()
+  let raw: unknown
+  try { raw = await request.json() } catch { raw = null }
+  const parsed = BodySchema.safeParse(raw)
+  if (!parsed.success) return NextResponse.json({ error: 'Invalid request.' }, { status: 400 })
+  const { email, password } = parsed.data
+
+  const [ipLimit, emailLimit] = await Promise.all([
+    rateLimit(await rateLimitKey('login:ip', getClientIp(request)), 20, WINDOW_SECONDS),
+    rateLimit(await rateLimitKey('login:email', email), 5, WINDOW_SECONDS),
+  ])
+  if (!ipLimit.allowed || !emailLimit.allowed) {
+    return tooMany(Math.max(
+      ipLimit.allowed    ? 0 : ipLimit.retryAfterSeconds,
+      emailLimit.allowed ? 0 : emailLimit.retryAfterSeconds,
+    ))
+  }
 
   // Dedicated sign-in client — anon key, no session persistence.
   // signInWithPassword sets the user JWT as the active session on whichever
@@ -16,81 +59,85 @@ export async function POST(request: Request) {
   )
 
   const { data: authData, error: authError } = await authClient.auth.signInWithPassword({ email, password })
-  if (authError || !authData.user) {
-    return NextResponse.json({ error: 'Invalid email or password.' }, { status: 401 })
-  }
+  if (authError || !authData.user || !authData.session) return invalid()
 
-  // Fresh service-role client — never had signInWithPassword called on it,
-  // so it uses the service-role key for every request and bypasses RLS fully.
-  const admin = createServiceClient()
-  console.log('[login] service key prefix:', process.env.SUPABASE_SERVICE_ROLE_KEY?.slice(0, 20))
+  const userId = authData.user.id
+  const admin  = createServiceClient()
 
-  const { data: rows, error: profileError } = await admin
-    .rpc('get_profile_by_email', { p_email: email })
+  const { data: profile, error: profileError } = await admin
+    .from('profiles')
+    .select('id, role, roles')
+    .eq('id', userId)
+    .maybeSingle()
 
-  if (profileError) {
-    console.error('[login] get_profile_by_email error:', profileError.message, profileError.code)
-  }
+  if (profileError) console.error(`[login] profile lookup failed (code ${profileError.code})`)
+  if (!profile) return invalid()
 
-  const profile = rows?.[0] ?? null
+  const roles = Array.isArray(profile.roles) ? profile.roles : []
+  if (roles.length === 0) return invalid()
 
-  if (!profile) {
-    return NextResponse.json({ error: 'Account not found. Contact HR.' }, { status: 403 })
-  }
-
-  if (profile.role === 'newhire') {
+  if (roles.length === 1 && roles[0] === 'newhire') {
     // Newhire: session is ready, no OTP needed
     return NextResponse.json({ role: 'newhire', session: authData.session })
   }
 
-  // HR: generate 6-digit OTP, store in DB, return requiresOtp flag
-  const code = Math.floor(100000 + Math.random() * 900000).toString()
-  const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString() // 5 min
+  // Everyone else: one-time code. Only its HMAC is stored.
+  const code      = randomInt(0, 1_000_000).toString().padStart(6, '0')
+  const codeHash  = await hmacHex('otp-code', `${userId}:${code}`)
+  const expiresAt = new Date(Date.now() + OTP_TTL_SECONDS * 1000).toISOString()
 
-  console.log('[login] inserting OTP for user_id:', authData.user.id)
+  const { error: deleteError } = await admin
+    .from('otp_codes')
+    .delete()
+    .eq('user_id', userId)
+    .or(`used.eq.true,expires_at.lt.${new Date().toISOString()}`)
+  if (deleteError) console.error(`[login] stale code cleanup failed (code ${deleteError.code})`)
 
-  // Invalidate previous unused codes for this user
   const { error: invalidateError } = await admin
     .from('otp_codes')
     .update({ used: true })
-    .eq('user_id', authData.user.id)
+    .eq('user_id', userId)
     .eq('used', false)
   if (invalidateError) {
-    console.error('[login] invalidate old OTPs error:', invalidateError.message, invalidateError.code)
+    console.error(`[login] code invalidation failed (code ${invalidateError.code})`)
+    return NextResponse.json({ error: 'Sign in failed. Please try again.' }, { status: 500 })
   }
 
-  // Delete stale rows (used or expired) for this user before inserting a fresh code
-  await admin
-    .from('otp_codes')
-    .delete()
-    .eq('user_id', authData.user.id)
-    .or(`used.eq.true,expires_at.lt.${new Date().toISOString()}`)
-
   const { error: insertError } = await admin.from('otp_codes').insert({
-    user_id:    authData.user.id,
-    code,
+    user_id:    userId,
+    code:       null,
+    code_hash:  codeHash,
     expires_at: expiresAt,
     used:       false,
   })
-  console.log('[login] OTP insert error:', insertError?.message ?? null, '| code:', insertError?.code ?? null)
+  if (insertError) {
+    console.error(`[login] code insert failed (code ${insertError.code})`)
+    return NextResponse.json({ error: 'Sign in failed. Please try again.' }, { status: 500 })
+  }
 
-  // In production, send email here (e.g. via Resend or Supabase Edge Function).
-  // For dev, the code is logged to the server console.
-  console.log(`[DEV] OTP for ${email}: ${code}`)
+  // Delivery is not wired up yet; recipients are resolved here and never revealed.
+  await getOtpRecipients(userId)
 
-  // Store session temporarily in a short-lived cookie so we can set it after OTP
+  const devOtp = process.env.ALLOW_DEV_OTP === 'true' && process.env.NODE_ENV !== 'production'
+  if (devOtp) console.log(`[DEV] login code: ${code}`)
+
+  // Tokens are held encrypted in a short-lived cookie until the code is verified
   const cookieStore = await cookies()
-  cookieStore.set('pending_session', JSON.stringify({
-    access_token:  authData.session!.access_token,
-    refresh_token: authData.session!.refresh_token,
-    user_id:       authData.user.id,
-  }), {
+  cookieStore.set(PENDING_SESSION_COOKIE, encrypt(JSON.stringify({
+    access_token:  authData.session.access_token,
+    refresh_token: authData.session.refresh_token,
+    user_id:       userId,
+  })), {
     httpOnly: true,
     secure:   process.env.NODE_ENV === 'production',
     sameSite: 'lax',
-    maxAge:   300, // 5 min
-    path:     '/',
+    path:     PENDING_SESSION_PATH,
+    maxAge:   OTP_TTL_SECONDS,
   })
 
-  return NextResponse.json({ role: 'hr', requiresOtp: true, devCode: process.env.NODE_ENV !== 'production' ? code : undefined })
+  return NextResponse.json({
+    role:        profile.role,
+    requiresOtp: true,
+    ...(devOtp ? { devCode: code } : {}),
+  })
 }

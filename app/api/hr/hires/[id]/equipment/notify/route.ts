@@ -1,66 +1,43 @@
 import { NextResponse } from 'next/server'
-import { createClient, createServiceClient } from '@/lib/supabase/server'
+import { createServiceClient } from '@/lib/supabase/server'
+import { requireRole } from '@/lib/roles'
 import { STAKEHOLDER_MAP, EQUIPMENT_LABELS } from '@/lib/stakeholder-mapping'
 
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const ssr = await createClient()
-  const { data: { user } } = await ssr.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const auth = await requireRole('hr')
+  if (auth instanceof NextResponse) return auth
 
   const admin = createServiceClient()
-  const { data: callerProfile } = await admin.from('profiles').select('role').eq('id', user.id).single()
-  if (callerProfile?.role !== 'hr') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { id: hireId } = await params
-  const body = await request.json()
-  const { newlyCheckedItems } = body
-
-  console.log('[notify] hireId:', hireId)
-  console.log('[notify] request body:', JSON.stringify(body))
-  console.log('[notify] newlyCheckedItems:', newlyCheckedItems)
+  const { newlyCheckedItems } = await request.json()
 
   if (!Array.isArray(newlyCheckedItems) || newlyCheckedItems.length === 0) {
-    console.log('[notify] newlyCheckedItems is empty or not an array — returning early')
     return NextResponse.json({ ok: true, tasksCreated: 0 })
   }
 
   // Verify hire exists
-  const { data: hire, error: hireError } = await admin.from('profiles').select('id').eq('id', hireId).maybeSingle()
-  console.log('[notify] hire lookup:', { found: !!hire, error: hireError?.message ?? null })
+  const { data: hire } = await admin.from('profiles').select('id').eq('id', hireId).maybeSingle()
   if (!hire) return NextResponse.json({ error: 'Hire not found' }, { status: 404 })
 
   let tasksCreated = 0
 
   for (const key of newlyCheckedItems as string[]) {
     const emails = STAKEHOLDER_MAP[key]
-    console.log(`[notify] key="${key}" → STAKEHOLDER_MAP lookup:`, emails ?? 'NO MATCH')
-
-    if (!emails || emails.length === 0) {
-      console.log(`[notify] key="${key}" skipped — no stakeholder mapped`)
-      continue
-    }
+    if (!emails || emails.length === 0) continue
 
     for (const email of emails) {
-      const { data: stakeholder, error: profileError } = await admin
+      const { data: stakeholder } = await admin
         .from('profiles')
         .select('id')
         .eq('aem_email', email)
-        .eq('role', 'stakeholder')
+        .contains('roles', ['stakeholder'])
         .maybeSingle()
 
-      console.log(`[notify] profile lookup for email="${email}":`, {
-        found: !!stakeholder,
-        id: stakeholder?.id ?? null,
-        error: profileError?.message ?? null,
-      })
-
-      if (!stakeholder) {
-        console.log(`[notify] no stakeholder profile found for email="${email}" — skipping`)
-        continue
-      }
+      if (!stakeholder) continue
 
       const payload = {
         newhire_id:   hireId,
@@ -72,7 +49,7 @@ export async function POST(
         confirmed_at: null,
       }
       // Explicit existence check — do not rely on a unique constraint
-      const { data: existing, error: existingError } = await admin
+      const { data: existing } = await admin
         .from('stakeholder_tasks')
         .select('id, status')
         .eq('newhire_id', hireId)
@@ -80,30 +57,16 @@ export async function POST(
         .eq('task_key', key)
         .maybeSingle()
 
-      console.log(`[notify] existence check (newhire_id=${hireId}, assigned_to=${stakeholder.id}, task_key="${key}"):`, {
-        found: !!existing,
-        status: existing?.status ?? null,
-        error: existingError?.message ?? null,
-      })
+      if (existing) continue
 
-      if (existing) {
-        console.log(`[notify] task already exists with status="${existing.status}" — skipping insert`)
-        continue
-      }
-
-      console.log('[notify] insert payload:', JSON.stringify(payload))
-
-      const { error: insertError, data: insertData } = await admin
+      const { error: insertError } = await admin
         .from('stakeholder_tasks')
         .insert(payload)
 
-      console.log('[notify] insert result:', { data: insertData, error: insertError?.message ?? null, code: insertError?.code ?? null })
-
       if (!insertError) tasksCreated++
-      else console.log('[notify] insert FAILED:', JSON.stringify(insertError))
+      else console.error(`[notify] stakeholder task insert failed (code ${insertError.code})`)
     }
   }
 
-  console.log('[notify] done. tasksCreated:', tasksCreated)
   return NextResponse.json({ ok: true, tasksCreated })
 }

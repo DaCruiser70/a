@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server'
-import { createClient, createServiceClient } from '@/lib/supabase/server'
+import { createServiceClient } from '@/lib/supabase/server'
+import { requireRole } from '@/lib/roles'
 import { recomputeProfileStatus } from '@/lib/hire-status'
 
 export async function POST(request: Request) {
-  const ssr   = await createClient()
-  const { data: { user } } = await ssr.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const auth = await requireRole('newhire')
+  if (auth instanceof NextResponse) return auth
+  const { user } = auth
 
   const { signature } = await request.json()
   if (!signature?.trim()) {
@@ -40,9 +41,9 @@ export async function POST(request: Request) {
 }
 
 export async function GET() {
-  const ssr   = await createClient()
-  const { data: { user } } = await ssr.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const auth = await requireRole('newhire')
+  if (auth instanceof NextResponse) return auth
+  const { user } = auth
 
   const admin = createServiceClient()
   const { data } = await admin

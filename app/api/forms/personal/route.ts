@@ -1,14 +1,16 @@
 import { NextResponse } from 'next/server'
-import { createClient, createServiceClient } from '@/lib/supabase/server'
+import { createServiceClient } from '@/lib/supabase/server'
+import { requireRole } from '@/lib/roles'
 import { recomputeProfileStatus } from '@/lib/hire-status'
 import { encryptFields, decryptFields } from '@/lib/encrypt'
+import { esc } from '@/lib/safe-html'
 
 const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
 
 export async function POST(request: Request) {
-  const ssr   = await createClient()
-  const { data: { user } } = await ssr.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const auth = await requireRole('newhire')
+  if (auth instanceof NextResponse) return auth
+  const { user } = auth
 
   const body = await request.json()
   const fields = {
@@ -53,7 +55,7 @@ export async function POST(request: Request) {
   await admin.from('audit_log').insert({
     user_id:      user.id,
     action_type:  'navy',
-    message:      `<strong>${fields.first_name} ${fields.last_name}</strong> submitted personal information`,
+    message:      `<strong>${esc(fields.first_name)} ${esc(fields.last_name)}</strong> submitted personal information`,
     performed_by: user.id,
   })
 
@@ -62,9 +64,9 @@ export async function POST(request: Request) {
 
 // Returns the signed-in user's own row, decrypted, for pre-filling the form
 export async function GET() {
-  const ssr   = await createClient()
-  const { data: { user } } = await ssr.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const auth = await requireRole('newhire')
+  if (auth instanceof NextResponse) return auth
+  const { user } = auth
 
   const admin = createServiceClient()
   const { data: row } = await admin

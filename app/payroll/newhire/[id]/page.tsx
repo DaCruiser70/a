@@ -3,7 +3,8 @@
 import Image from 'next/image'
 import { useRouter, notFound } from 'next/navigation'
 import { useEffect, useState, use } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { useMe } from '@/lib/use-me'
+import PortalSwitcher from '@/components/ui/PortalSwitcher'
 import { timeAgo } from '@/lib/time-ago'
 
 const TEAL = '#0F4C4A'
@@ -219,23 +220,15 @@ export default function PayrollNewHireDetail({ params }: { params: Promise<{ id:
   const [employeeIdInput, setEmployeeIdInput] = useState('')
   const [assigningSaving, setAssigningSaving] = useState(false)
   const [assignError, setAssignError]         = useState('')
-  const [displayName, setDisplayName]         = useState('')
   const [toast, setToast]                     = useState('')
   const [downloading, setDownloading]         = useState<string | null>(null)
+  const { me } = useMe()
+  const displayName = me?.name ?? ''
 
   function showToast(msg: string) {
     setToast(msg)
     setTimeout(() => setToast(''), 3500)
   }
-
-  useEffect(() => {
-    const supabase = createClient()
-    supabase.auth.getUser().then(async ({ data: { user } }) => {
-      if (!user) return
-      const { data } = await supabase.from('profiles').select('full_name, preferred_name').eq('id', user.id).single()
-      if (data) setDisplayName(data.preferred_name ?? data.full_name ?? '')
-    }).catch(() => {})
-  }, [])
 
   useEffect(() => {
     fetch(`/api/payroll/hires/${id}`)
@@ -249,9 +242,8 @@ export default function PayrollNewHireDetail({ params }: { params: Promise<{ id:
   }, [id])
 
   async function handleSignOut() {
-    const supabase = createClient()
-    await supabase.auth.signOut()
-    router.push('/login')
+    await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {})
+    window.location.href = '/login'
   }
 
   async function approveForm(formId: string) {
@@ -432,6 +424,7 @@ export default function PayrollNewHireDetail({ params }: { params: Promise<{ id:
           >
             ← Dashboard
           </button>
+          <PortalSwitcher tone="dark" />
           {displayName && (
             <span style={{ fontSize: '13px', color: 'rgba(255,255,255,0.75)', fontWeight: 500 }}>{displayName}</span>
           )}

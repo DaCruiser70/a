@@ -3,7 +3,14 @@ import StarField from '../../../components/ui/StarField'
 import LoginForm from '../../../components/ui/LoginForm'
 import '../../../styles/pages/login.css'
 
-export default function LoginPage() {
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ otp_required?: string | string[] }>
+}) {
+  const { otp_required } = await searchParams
+  const otpRequired = otp_required === '1'
+
   return (
     <main className="login-page">
 
@@ -118,7 +125,7 @@ export default function LoginPage() {
               <div className="login-bar-url">aem-onboarding.portal</div>
               <div className="login-bar-lock">🔒</div>
             </div>
-            <LoginForm />
+            <LoginForm otpRequired={otpRequired} />
           </div>
         </div>
 

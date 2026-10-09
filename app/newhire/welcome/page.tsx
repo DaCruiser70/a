@@ -4,7 +4,8 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { useState, useEffect, useRef } from 'react'
 import '../../../styles/pages/welcome.css'
-import { createClient } from '@/lib/supabase/client'
+import { useMe } from '@/lib/use-me'
+import PortalSwitcher from '@/components/ui/PortalSwitcher'
 import { FORMS_HOME } from '@/lib/routes'
 
 function getInitials(name: string) {
@@ -98,27 +99,13 @@ function WelcomeVideo() {
 }
 
 export default function WelcomePage() {
-  const [displayName, setDisplayName] = useState('')
-
-  useEffect(() => {
-    const supabase = createClient()
-    supabase.auth.getUser().then(async ({ data: { user } }) => {
-      if (!user) return
-      const { data } = await supabase
-        .from('profiles')
-        .select('full_name, preferred_name')
-        .eq('id', user.id)
-        .single()
-      if (!data) return
-      setDisplayName(data.preferred_name ?? data.full_name ?? '')
-    }).catch(() => {})
-  }, [])
+  const { me } = useMe()
+  const displayName = me?.name ?? ''
 
   const initials  = displayName ? getInitials(displayName) : '…'
 
   async function handleSignOut() {
-    const supabase = createClient()
-    await supabase.auth.signOut()
+    await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {})
     window.location.href = '/login'
   }
   // Split name for hero: everything up to last word / last word
@@ -137,6 +124,7 @@ export default function WelcomePage() {
           <span className="welcome-nav-label">Employee Onboarding Portal</span>
         </div>
         <div className="welcome-nav-right">
+          <PortalSwitcher />
           <div className="welcome-nav-user">
             <div className="welcome-nav-avatar">{initials}</div>
             {displayName && <span className="welcome-nav-name">{displayName}</span>}
