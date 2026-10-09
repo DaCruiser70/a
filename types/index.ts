@@ -61,11 +61,16 @@ export type BankingInfo = {
   transit_number_enc:     string
   account_number_enc:     string
   void_cheque_path:       string | null
+  void_cheque_name:       string | null
+  void_cheque_size:       number | null
+  void_cheque_uploaded_at: string | null
   form_status:            FormStatus
   flag_reason:            string | null
   submitted_at:           string
   updated_at:             string
 }
+
+export type VoidChequeColumn = 'void_cheque_path' | 'void_cheque_name' | 'void_cheque_size' | 'void_cheque_uploaded_at'
 
 export type SinInfo = {
   id:           string
@@ -175,7 +180,10 @@ export type Database = {
       }
       banking_info: {
         Row:           BankingInfo
-        Insert:        Omit<BankingInfo, 'id' | 'updated_at'> & { submitted_at?: string }
+        // Void cheque columns are optional so an upsert that omits them leaves them untouched
+        Insert:        Omit<BankingInfo, 'id' | 'updated_at' | VoidChequeColumn>
+                         & Partial<Pick<BankingInfo, VoidChequeColumn>>
+                         & { submitted_at?: string }
         Update:        Partial<Omit<BankingInfo, 'id'>>
         Relationships: []
       }

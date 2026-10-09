@@ -2,12 +2,99 @@
 
 import Link from 'next/link'
 import Image from 'next/image'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import '../../../styles/pages/welcome.css'
 import { createClient } from '@/lib/supabase/client'
+import { FORMS_HOME } from '@/lib/routes'
 
 function getInitials(name: string) {
   return name.split(' ').filter(Boolean).map(n => n[0]).join('').toUpperCase().slice(0, 2)
+}
+
+// Signed URL is fetched fresh and held only in component state — never persisted
+async function fetchWelcomeVideoUrl(): Promise<string | null> {
+  try {
+    const res = await fetch('/api/newhire/welcome-video', { cache: 'no-store' })
+    if (!res.ok) return null
+    const data = await res.json()
+    return typeof data.url === 'string' ? data.url : null
+  } catch {
+    return null
+  }
+}
+
+type VideoState = 'loading' | 'ready' | 'unavailable'
+
+function WelcomeVideo() {
+  const [state, setState] = useState<VideoState>('loading')
+  const [url, setUrl]     = useState<string | null>(null)
+  const videoRef   = useRef<HTMLVideoElement>(null)
+  const retried    = useRef(false)          // only one refresh per page load
+  const resumeAt   = useRef<number | null>(null)
+  const wasPlaying = useRef(false)
+
+  useEffect(() => {
+    let cancelled = false
+    fetchWelcomeVideoUrl().then(u => {
+      if (cancelled) return
+      setUrl(u)
+      setState(u ? 'ready' : 'unavailable')
+    })
+    return () => { cancelled = true }
+  }, [])
+
+  // The signed URL may expire mid-session: fetch a fresh one once and resume where the viewer was
+  async function handleError() {
+    if (retried.current) { setState('unavailable'); return }
+    retried.current  = true
+    resumeAt.current = videoRef.current?.currentTime ?? 0
+    const fresh = await fetchWelcomeVideoUrl()
+    if (!fresh) { setState('unavailable'); return }
+    setUrl(fresh)
+  }
+
+  function handleLoadedMetadata() {
+    const video = videoRef.current
+    if (!video || resumeAt.current === null) return
+    video.currentTime = resumeAt.current
+    resumeAt.current = null
+    if (wasPlaying.current) video.play().catch(() => {})
+  }
+
+  if (state === 'loading') {
+    return <div className="welcome-video-frame welcome-video-skeleton" aria-busy="true" aria-label="Loading video" />
+  }
+
+  if (state === 'unavailable' || !url) {
+    return (
+      <div className="welcome-video-frame">
+        <Image src="/logo.png" alt="AEM" width={220} height={88} className="welcome-video-logo" />
+        <div className="welcome-video-play-btn" style={{ cursor: 'default' }}>
+          <svg viewBox="0 0 24 24" fill="currentColor">
+            <polygon points="5 3 19 12 5 21 5 3"/>
+          </svg>
+        </div>
+        <div className="welcome-video-coming-soon">Welcome video coming soon</div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="welcome-video-frame welcome-video-player">
+      <video
+        ref={videoRef}
+        src={url}
+        controls
+        preload="metadata"
+        playsInline
+        aria-label="Welcome message from the President"
+        onError={handleError}
+        onLoadedMetadata={handleLoadedMetadata}
+        onPlay={() => { wasPlaying.current = true }}
+        onPause={() => { wasPlaying.current = false }}
+      />
+    </div>
+  )
 }
 
 export default function WelcomePage() {
@@ -135,21 +222,12 @@ export default function WelcomePage() {
             <div className="welcome-section-line" />
           </div>
           <div className="welcome-video-wrap">
-            <div className="welcome-video-frame">
-              <Image src="/logo.png" alt="AEM" width={220} height={88} className="welcome-video-logo" />
-              <div className="welcome-video-play-btn">
-                <svg viewBox="0 0 24 24" fill="currentColor">
-                  <polygon points="5 3 19 12 5 21 5 3"/>
-                </svg>
-              </div>
-              <div className="welcome-video-coming-soon">Video coming soon</div>
-            </div>
+            <WelcomeVideo />
             <div className="welcome-video-footer">
               <div>
                 <div className="welcome-video-title">Welcome to Advanced Energy Management</div>
                 <div className="welcome-video-meta">A message from our leadership team · ~5 min</div>
               </div>
-              <div className="welcome-video-badge">Coming soon</div>
             </div>
           </div>
         </section>
@@ -216,7 +294,7 @@ export default function WelcomePage() {
                 and everything is saved automatically as you go.
               </p>
             </div>
-            <Link href="/newhire/forms" className="welcome-next-btn">
+            <Link href={FORMS_HOME} className="welcome-next-btn">
               Go to my forms
               <span className="welcome-next-btn-arrow">→</span>
             </Link>

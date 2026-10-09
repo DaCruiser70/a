@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
-import { decrypt } from '@/lib/encrypt'
+import { decrypt, decryptFields } from '@/lib/encrypt'
 import { computeHireStatus } from '@/lib/hire-status'
 import type { NewHireDetail, FormStatus } from '@/types'
 
@@ -19,7 +19,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   // Fetch all data in parallel
   const [
     { data: profile },
-    { data: personal },
+    { data: personalRaw },
     { data: banking },
     { data: sin },
     { data: policy },
@@ -28,7 +28,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     { data: auditLog },
   ] = await Promise.all([
     admin.from('profiles').select('*').eq('id', id).single(),
-    admin.from('personal_info').select('*').eq('user_id', id).maybeSingle(),
+    admin.from('personal_info')
+      .select('phone, street, city, province, emergency_name, emergency_phone, form_status, flag_reason, submitted_at')
+      .eq('user_id', id).maybeSingle(),
     admin.from('banking_info').select('*').eq('user_id', id).maybeSingle(),
     admin.from('sin_info').select('form_status, sin_enc, flag_reason, submitted_at').eq('user_id', id).maybeSingle(),
     admin.from('policy_acknowledgements').select('*').eq('user_id', id).maybeSingle(),
@@ -38,6 +40,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   ])
 
   if (!profile) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  const personal = personalRaw ? decryptFields(personalRaw) : null
 
   const submittedDate = profile.start_date ?? profile.created_at.slice(0, 10)
   const days = Math.max(0, Math.floor((Date.now() - new Date(submittedDate).getTime()) / 86_400_000))
@@ -98,7 +102,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     office_location:         profile.office_location          ?? null,
     phone:                   personal?.phone                  ?? '—',
     start_date:              profile.start_date               ?? '—',
-    address:                 personal ? `${personal.street}, ${personal.city} ${personal.province}` : '—',
+    address:                 personal
+      ? [personal.street, [personal.city, personal.province].filter(Boolean).join(' ')].filter(Boolean).join(', ') || '—'
+      : '—',
     emergency_contact:       personal?.emergency_name         ?? '—',
     emergency_phone:         personal?.emergency_phone        ?? '—',
     bank_name:               banking?.bank_name               ?? '—',

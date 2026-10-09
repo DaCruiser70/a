@@ -13,11 +13,12 @@ const TEAL_BORDER = 'rgba(15,76,74,0.2)'
 type FormStatus = 'pending' | 'review' | 'approved' | 'flagged'
 type DocStatus  = 'pending' | 'review' | 'approved' | 'rejected'
 
+// Encrypted-at-rest fields are null when server-side decryption fails
 type PersonalData = {
-  first_name: string; last_name: string; date_of_birth: string
-  phone: string; personal_email: string
-  street: string; city: string; province: string; postal_code: string
-  emergency_name: string; emergency_relationship: string; emergency_phone: string
+  first_name: string; last_name: string; date_of_birth: string | null
+  phone: string | null; personal_email: string
+  street: string | null; city: string | null; province: string; postal_code: string | null
+  emergency_name: string | null; emergency_relationship: string; emergency_phone: string | null
   form_status: FormStatus; flag_reason: string | null; submitted_at: string | null
 }
 
@@ -220,6 +221,7 @@ export default function PayrollNewHireDetail({ params }: { params: Promise<{ id:
   const [assignError, setAssignError]         = useState('')
   const [displayName, setDisplayName]         = useState('')
   const [toast, setToast]                     = useState('')
+  const [downloading, setDownloading]         = useState<string | null>(null)
 
   function showToast(msg: string) {
     setToast(msg)
@@ -321,6 +323,21 @@ export default function PayrollNewHireDetail({ params }: { params: Promise<{ id:
       showToast('Could not load document')
     } finally {
       setViewingDoc(null)
+    }
+  }
+
+  // Fetches a 60-second attachment URL and starts the save in this tab
+  async function handleDownload(key: string, endpoint: string) {
+    setDownloading(key)
+    try {
+      const res = await fetch(endpoint)
+      if (!res.ok) { showToast('Download failed'); return }
+      const { url } = await res.json()
+      window.location.href = url
+    } catch {
+      showToast('Download failed')
+    } finally {
+      setDownloading(null)
     }
   }
 
@@ -503,7 +520,7 @@ export default function PayrollNewHireDetail({ params }: { params: Promise<{ id:
                   <Field label="Personal Email" value={hire.personal.personal_email} />
                 </div>
                 <div style={{ borderTop: '1px solid rgba(0,0,0,0.06)', marginTop: '10px', paddingTop: '10px' }}>
-                  <Field label="Address" value={`${hire.personal.street}, ${hire.personal.city} ${hire.personal.province} ${hire.personal.postal_code}`} />
+                  <Field label="Address" value={[hire.personal.street, [hire.personal.city, hire.personal.province, hire.personal.postal_code].filter(Boolean).join(' ')].filter(Boolean).join(', ')} />
                 </div>
                 <div style={{ borderTop: '1px solid rgba(0,0,0,0.06)', marginTop: '10px', paddingTop: '10px' }}>
                   <div style={{ fontSize: '12px', fontWeight: 600, color: '#888780', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Emergency Contact</div>
@@ -566,21 +583,36 @@ export default function PayrollNewHireDetail({ params }: { params: Promise<{ id:
                       </span>
                     </div>
                     {hire.banking.has_void_cheque && (
-                      <button
-                        onClick={async () => {
-                          const r = await fetch(`/api/payroll/hires/${id}/void-cheque`)
-                          if (r.ok) { const { url } = await r.json(); window.open(url, '_blank') }
-                          else showToast('Could not load void cheque')
-                        }}
-                        style={{
-                          padding: '5px 12px', borderRadius: '7px',
-                          border: `1px solid ${TEAL_BORDER}`, background: TEAL_LIGHT,
-                          color: TEAL, cursor: 'pointer',
-                          fontSize: '12px', fontWeight: 600, fontFamily: 'inherit',
-                        }}
-                      >
-                        View Void Cheque
-                      </button>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button
+                          onClick={async () => {
+                            const r = await fetch(`/api/payroll/hires/${id}/void-cheque`)
+                            if (r.ok) { const { url } = await r.json(); window.open(url, '_blank') }
+                            else showToast('Could not load void cheque')
+                          }}
+                          style={{
+                            padding: '5px 12px', borderRadius: '7px',
+                            border: `1px solid ${TEAL_BORDER}`, background: TEAL_LIGHT,
+                            color: TEAL, cursor: 'pointer',
+                            fontSize: '12px', fontWeight: 600, fontFamily: 'inherit',
+                          }}
+                        >
+                          View Void Cheque
+                        </button>
+                        <button
+                          onClick={() => handleDownload('void-cheque', `/api/payroll/hires/${id}/void-cheque?download=1`)}
+                          disabled={downloading === 'void-cheque'}
+                          style={{
+                            padding: '5px 12px', borderRadius: '7px',
+                            border: `1px solid ${TEAL_BORDER}`, background: TEAL_LIGHT,
+                            color: TEAL, cursor: downloading === 'void-cheque' ? 'default' : 'pointer',
+                            fontSize: '12px', fontWeight: 600, fontFamily: 'inherit',
+                            opacity: downloading === 'void-cheque' ? 0.6 : 1,
+                          }}
+                        >
+                          {downloading === 'void-cheque' ? 'Downloading…' : 'Download'}
+                        </button>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -655,6 +687,19 @@ export default function PayrollNewHireDetail({ params }: { params: Promise<{ id:
                         }}
                       >
                         {viewingDoc === doc.id ? 'Loading…' : 'View'}
+                      </button>
+                      <button
+                        onClick={() => handleDownload(doc.id, `/api/payroll/hires/${id}/documents/${doc.id}/view?download=1`)}
+                        disabled={downloading === doc.id}
+                        style={{
+                          padding: '5px 12px', borderRadius: '7px',
+                          border: `1px solid ${TEAL_BORDER}`, background: TEAL_LIGHT,
+                          color: TEAL, cursor: downloading === doc.id ? 'default' : 'pointer',
+                          fontSize: '12px', fontWeight: 600, fontFamily: 'inherit',
+                          opacity: downloading === doc.id ? 0.6 : 1,
+                        }}
+                      >
+                        {downloading === doc.id ? 'Downloading…' : 'Download'}
                       </button>
                       {doc.form_status !== 'approved' && (
                         <button

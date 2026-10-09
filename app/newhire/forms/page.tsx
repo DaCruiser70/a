@@ -78,8 +78,8 @@ export default function FormsPage() {
 
   useEffect(() => {
     Promise.all([
-      fetch('/api/newhire/status').then(r => r.ok ? r.json() : Promise.reject()),
-      fetch('/api/forms/documents').then(r => r.ok ? r.json() : { documents: [] }),
+      fetch('/api/newhire/status', { cache: 'no-store' }).then(r => r.ok ? r.json() : Promise.reject()),
+      fetch('/api/forms/documents', { cache: 'no-store' }).then(r => r.ok ? r.json() : { documents: [] }),
     ])
       .then(([statusData, docsData]) => {
         setFormStatuses({

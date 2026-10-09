@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useState, useRef, useEffect } from 'react'
 import '../../../../styles/pages/form-pages.css'
 import { createClient } from '@/lib/supabase/client'
+import { FORMS_HOME } from '@/lib/routes'
 
 function ChequePreviewImage({ src }: { src: string }) {
   return <img src={src} alt="Void cheque preview" className="banking-cheque-preview-img" /> // eslint-disable-line @next/next/no-img-element
@@ -39,6 +40,21 @@ function getInitials(name: string) {
   return name.split(' ').filter(Boolean).map(n => n[0]).join('').toUpperCase().slice(0, 2)
 }
 
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+type VoidChequeOnFile = { name: string; size: number | null; uploadedAt: string | null }
+
+// Accepted types and the extension each is stored under (the server only accepts png, jpg, jpeg, pdf)
+const CHEQUE_EXT_BY_TYPE: Record<string, string> = {
+  'image/jpeg':      'jpg',
+  'image/png':       'png',
+  'application/pdf': 'pdf',
+}
+
 export default function BankingForm() {
   const router = useRouter()
   const [form, setForm] = useState({
@@ -55,6 +71,10 @@ export default function BankingForm() {
   const [chequeFile, setChequeFile]   = useState<File | null>(null)
   const [chequePreview, setChequePreview] = useState<string | null>(null)
   const [isDragging, setIsDragging]   = useState(false)
+  const [chequeError, setChequeError] = useState('')
+  const [voidCheque, setVoidCheque]   = useState<VoidChequeOnFile | null>(null)
+  const [removeOnFile, setRemoveOnFile]   = useState(false)
+  const [viewingCheque, setViewingCheque] = useState(false)
   const fileInputRef                  = useRef<HTMLInputElement>(null)
   const [saving, setSaving]           = useState(false)
   const [saveError, setSaveError]     = useState('')
@@ -85,6 +105,7 @@ export default function BankingForm() {
           })
           setFormStatus(e.formStatus ?? '')
           setFlagReason(e.flagReason ?? null)
+          setVoidCheque(e.voidCheque ?? null)
         }
         if (sourcesData?.sources?.banking) setFlagSource(sourcesData.sources.banking)
       })
@@ -96,8 +117,15 @@ export default function BankingForm() {
   }
 
   function handleFile(file: File) {
-    const allowed = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
-    if (!allowed.includes(file.type)) return
+    if (!CHEQUE_EXT_BY_TYPE[file.type]) {
+      setChequeError('Unsupported file type. Please upload a JPG, PNG or PDF.')
+      return
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setChequeError('File is too large. Maximum size is 10 MB.')
+      return
+    }
+    setChequeError('')
     setChequeFile(file)
     if (file.type !== 'application/pdf') {
       const reader = new FileReader()
@@ -133,6 +161,27 @@ export default function BankingForm() {
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
+  // Only hides the on-file card; nothing is deleted until the form is resubmitted
+  function removeOnFileCheque() {
+    setRemoveOnFile(true)
+    setChequeError('')
+  }
+
+  async function viewOnFileCheque() {
+    setViewingCheque(true)
+    setChequeError('')
+    try {
+      const res = await fetch('/api/forms/banking/void-cheque')
+      if (!res.ok) { setChequeError('Could not open your void cheque. Please try again.'); return }
+      const { url } = await res.json()
+      window.open(url, '_blank')
+    } catch {
+      setChequeError('Could not open your void cheque. Please try again.')
+    } finally {
+      setViewingCheque(false)
+    }
+  }
+
   async function handleSubmit(e: React.SyntheticEvent<HTMLFormElement>) {
     e.preventDefault()
     setSaving(true)
@@ -144,7 +193,7 @@ export default function BankingForm() {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
-        const ext = chequeFile.name.split('.').pop() ?? 'jpg'
+        const ext = CHEQUE_EXT_BY_TYPE[chequeFile.type] ?? 'jpg'
         const path = `${user.id}/void-cheque.${ext}`
         const { data: uploadData, error: uploadError } = await supabase.storage
           .from('void-cheques')
@@ -168,15 +217,18 @@ export default function BankingForm() {
         transitNumber:     form.transitNumber,
         accountNumber:     form.accountNumber,
         voidChequePath,
+        voidChequeName:    chequeFile && voidChequePath ? chequeFile.name : undefined,
+        removeVoidCheque:  !voidChequePath && removeOnFile && !!voidCheque,
       }),
     })
     if (!res.ok) {
-      const data = await res.json()
+      const data = await res.json().catch(() => ({}))
       setSaveError(data.error ?? 'Failed to save. Please try again.')
       setSaving(false)
       return
     }
-    router.push(formStatus === 'flagged' ? '/newhire/forms' : '/newhire/forms/sin')
+    // replace, so the browser Back button doesn't return to the submitted form
+    router.replace(FORMS_HOME)
   }
 
   return (
@@ -199,11 +251,11 @@ export default function BankingForm() {
       <div className="form-page-header">
         <div className="form-page-header-orb" />
         <div className="form-page-header-inner">
-          <button className="form-page-back" onClick={() => router.push('/newhire/forms/personal')}>
+          <button className="form-page-back" onClick={() => router.push(FORMS_HOME)}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
               <polyline points="15 18 9 12 15 6"/>
             </svg>
-            Back to Personal Information
+            Back to checklist
           </button>
           <div className="form-page-step-tag">Step 2 of 4</div>
           <h1 className="form-page-title">Banking &amp; Direct Deposit</h1>
@@ -351,7 +403,47 @@ export default function BankingForm() {
               </div>
             </div>
 
-            {!chequeFile ? (
+            {!chequeFile && voidCheque && !removeOnFile ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 16px', background: '#F5F3EF', border: '1.5px solid #E2DED8', borderRadius: '12px' }}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="#1B3A6B" strokeWidth="1.8" strokeLinecap="round" style={{ width: 18, height: 18, flexShrink: 0 }}>
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+                </svg>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, fontSize: '13px', color: '#1a2e25', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{voidCheque.name}</div>
+                  {(voidCheque.size !== null || voidCheque.uploadedAt) && (
+                    <div style={{ fontSize: '11px', color: '#888780', marginTop: '2px' }}>
+                      {[
+                        voidCheque.size !== null ? formatBytes(voidCheque.size) : null,
+                        voidCheque.uploadedAt ? `Uploaded ${new Date(voidCheque.uploadedAt).toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric' })}` : null,
+                      ].filter(Boolean).join(' · ')}
+                    </div>
+                  )}
+                </div>
+                <span style={{ fontSize: '11px', fontWeight: 700, padding: '3px 9px', borderRadius: '100px', background: 'rgba(13,92,70,0.1)', color: '#0D5C46', border: '1px solid rgba(13,92,70,0.2)', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ width: 10, height: 10 }}><polyline points="20 6 9 17 4 12"/></svg>
+                  On file
+                </span>
+                <button
+                  type="button"
+                  onClick={viewOnFileCheque}
+                  disabled={viewingCheque}
+                  style={{ fontSize: '12px', fontWeight: 600, color: '#1B3A6B', background: 'rgba(27,58,107,0.07)', border: '1px solid rgba(27,58,107,0.15)', borderRadius: '6px', padding: '4px 10px', cursor: viewingCheque ? 'default' : 'pointer', opacity: viewingCheque ? 0.6 : 1, fontFamily: 'var(--font-sans)', whiteSpace: 'nowrap', flexShrink: 0 }}
+                >
+                  {viewingCheque ? 'Opening…' : 'View'}
+                </button>
+                <button
+                  type="button"
+                  onClick={removeOnFileCheque}
+                  aria-label="Remove void cheque"
+                  title="Remove"
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '26px', height: '26px', padding: 0, color: '#C0392B', background: 'none', border: 'none', borderRadius: '6px', cursor: 'pointer', flexShrink: 0 }}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" style={{ width: 14, height: 14 }}>
+                    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                  </svg>
+                </button>
+              </div>
+            ) : !chequeFile ? (
               <div
                 className={`banking-upload-zone${isDragging ? ' dragging' : ''}`}
                 onClick={() => fileInputRef.current?.click()}
@@ -368,7 +460,7 @@ export default function BankingForm() {
                 </div>
                 <div className="banking-upload-title">Drop your void cheque here, or <span>browse files</span></div>
                 <div className="banking-upload-sub">JPG, PNG, PDF up to 10MB · Your file is stored securely</div>
-                <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={handleFileInput} style={{ display: 'none' }} />
+                <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,application/pdf" onChange={handleFileInput} style={{ display: 'none' }} />
               </div>
             ) : (
               <div className="banking-upload-preview">
@@ -395,6 +487,21 @@ export default function BankingForm() {
                 </div>
               </div>
             )}
+
+            {removeOnFile && voidCheque && !chequeFile && (
+              <div style={{ fontSize: '12px', color: '#888780' }}>
+                Your current file stays on record until you resubmit.
+              </div>
+            )}
+
+            {chequeError && (
+              <div style={{ fontSize: '12px', color: '#C0392B', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ width: 12, height: 12, flexShrink: 0 }}>
+                  <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+                {chequeError}
+              </div>
+            )}
           </div>
 
           <div className="form-actions">
@@ -408,11 +515,11 @@ export default function BankingForm() {
             </div>
             <div className="form-action-btns">
               {saveError && <div className="login-error" style={{ marginBottom: 0 }}>{saveError}</div>}
-              <button type="button" className="form-btn-secondary" onClick={() => router.push('/newhire/forms/personal')}>
+              <button type="button" className="form-btn-secondary" onClick={() => router.push(FORMS_HOME)}>
                 ← Back
               </button>
               <button type="submit" className="form-btn-primary" disabled={saving}>
-                {saving ? 'Saving…' : formStatus === 'flagged' ? 'Resubmit for review →' : 'Save & continue →'}
+                {saving ? 'Saving…' : formStatus === 'flagged' ? 'Resubmit for review →' : 'Save & return to checklist →'}
               </button>
             </div>
           </div>

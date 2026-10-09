@@ -5,7 +5,7 @@ import { getDocumentSignedUrl } from '@/lib/document-view'
 const PAYROLL_DOC_TYPES = new Set(['td1_federal', 'td1_provincial', 'direct_deposit'])
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string; documentId: string }> }
 ) {
   const ssr = await createClient()
@@ -21,7 +21,9 @@ export async function GET(
   const { data: hire } = await admin.from('profiles').select('status').eq('id', id).single()
   if (!hire || hire.status !== 'approved') return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  const result = await getDocumentSignedUrl(admin, id, documentId)
+  const download = new URL(request.url).searchParams.get('download') === '1'
+
+  const result = await getDocumentSignedUrl(admin, id, documentId, { download })
   // Treat non-payroll document types identically to not-found so payroll
   // cannot enumerate which other document types exist for a hire.
   if (!result || !PAYROLL_DOC_TYPES.has(result.document_type)) {
@@ -31,7 +33,7 @@ export async function GET(
   await admin.from('audit_log').insert({
     user_id:      id,
     action_type:  'amber',
-    message:      `<strong>Payroll</strong> viewed ${result.label}`,
+    message:      `<strong>Payroll</strong> ${download ? 'downloaded' : 'viewed'} ${result.label}`,
     performed_by: user.id,
   })
 

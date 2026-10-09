@@ -142,6 +142,7 @@ export default function HRNewHirePage() {
   const [revealedNotes, setRevealedNotes]       = useState<Record<string, string>>({})
   const [fetchingNote, setFetchingNote]         = useState<string | null>(null)
   const [expandedGroups, setExpandedGroups]     = useState<Record<string, boolean>>({})
+  const [downloading, setDownloading]           = useState<string | null>(null)
 
   useEffect(() => {
     fetch(`/api/hr/hires/${hireId}`)
@@ -281,6 +282,21 @@ export default function HRNewHirePage() {
     if (!res.ok) { showToast('Could not load document'); return }
     const { url } = await res.json()
     window.open(url, '_blank')
+  }
+
+  // Fetches a 60-second attachment URL and starts the save in this tab
+  async function handleDownload(key: string, endpoint: string) {
+    setDownloading(key)
+    try {
+      const res = await fetch(endpoint)
+      if (!res.ok) { showToast('Download failed'); return }
+      const { url } = await res.json()
+      window.location.href = url
+    } catch {
+      showToast('Download failed')
+    } finally {
+      setDownloading(null)
+    }
   }
 
   async function handleSaveEquipment() {
@@ -616,13 +632,23 @@ export default function HRNewHirePage() {
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                                 Void cheque on file
                               </div>
-                              <button className="hrd-sensitive-btn" onClick={async () => {
-                                const r = await fetch(`/api/hr/hires/${hireId}/void-cheque`)
-                                if (r.ok) { const { url } = await r.json(); window.open(url, '_blank') }
-                                else showToast('Could not load void cheque')
-                              }}>
-                                View Void Cheque
-                              </button>
+                              <div style={{ display: 'flex', gap: '6px' }}>
+                                <button className="hrd-sensitive-btn" onClick={async () => {
+                                  const r = await fetch(`/api/hr/hires/${hireId}/void-cheque`)
+                                  if (r.ok) { const { url } = await r.json(); window.open(url, '_blank') }
+                                  else showToast('Could not load void cheque')
+                                }}>
+                                  View Void Cheque
+                                </button>
+                                <button
+                                  className="hrd-sensitive-btn"
+                                  disabled={downloading === 'void-cheque'}
+                                  style={downloading === 'void-cheque' ? { opacity: 0.6, cursor: 'default' } : undefined}
+                                  onClick={() => handleDownload('void-cheque', `/api/hr/hires/${hireId}/void-cheque?download=1`)}
+                                >
+                                  {downloading === 'void-cheque' ? 'Downloading…' : 'Download'}
+                                </button>
+                              </div>
                             </div>
                           )}
                         </>)}
@@ -840,16 +866,34 @@ export default function HRNewHirePage() {
                               </div>
                               <div style={{ display: 'flex', gap: '6px', flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                                 {(doc.form_status === 'approved' || doc.form_status === 'rejected') && (
-                                  <button
-                                    className="hrd-inline-btn expand"
-                                    onClick={() => handleDocumentView(doc.id)}
-                                  >
-                                    View
-                                  </button>
+                                  <>
+                                    <button
+                                      className="hrd-inline-btn expand"
+                                      onClick={() => handleDocumentView(doc.id)}
+                                    >
+                                      View
+                                    </button>
+                                    <button
+                                      className="hrd-inline-btn expand"
+                                      disabled={downloading === doc.id}
+                                      style={downloading === doc.id ? { opacity: 0.6, cursor: 'default' } : undefined}
+                                      onClick={() => handleDownload(doc.id, `/api/hr/hires/${hireId}/documents/${doc.id}/view?download=1`)}
+                                    >
+                                      {downloading === doc.id ? 'Downloading…' : 'Download'}
+                                    </button>
+                                  </>
                                 )}
                                 {doc.form_status === 'review' && (
                                   <>
                                     <button className="hrd-inline-btn expand" onClick={() => handleDocumentView(doc.id)}>View</button>
+                                    <button
+                                      className="hrd-inline-btn expand"
+                                      disabled={downloading === doc.id}
+                                      style={downloading === doc.id ? { opacity: 0.6, cursor: 'default' } : undefined}
+                                      onClick={() => handleDownload(doc.id, `/api/hr/hires/${hireId}/documents/${doc.id}/view?download=1`)}
+                                    >
+                                      {downloading === doc.id ? 'Downloading…' : 'Download'}
+                                    </button>
                                     <button className="hrd-inline-btn approve" onClick={() => handleDocumentApprove(doc.id)}>✓ Approve</button>
                                     <button className="hrd-inline-btn flag" onClick={() => { setRejectDocModal({ documentId: doc.id }); setRejectDocReason('') }}>Reject</button>
                                   </>

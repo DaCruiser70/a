@@ -14,9 +14,10 @@ export async function GET(
   if (callerProfile?.role !== 'hr') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { id } = await params
+  // file_path is deliberately excluded — storage paths never leave the server
   const { data: documents } = await admin
     .from('newhire_documents')
-    .select('*')
+    .select('id, user_id, document_type, document_label, file_name, file_size, expiry_date, form_status, flag_reason, uploaded_at, updated_at, reviewed_at, reviewed_by, sharepoint_filed, sharepoint_filed_at')
     .eq('user_id', id)
     .order('uploaded_at', { ascending: true })
 

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
-import { decrypt } from '@/lib/encrypt'
+import { decrypt, decryptFields } from '@/lib/encrypt'
 
 // Only these document types are visible in the payroll portal
 const PAYROLL_DOC_TYPES = new Set(['td1_federal', 'td1_provincial', 'direct_deposit'])
@@ -30,7 +30,7 @@ export async function GET(
   if (profile.status !== 'approved') return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   const [
-    { data: personal },
+    { data: personalRaw },
     { data: banking },
     { data: sin },
     { data: policy },
@@ -45,6 +45,8 @@ export async function GET(
       .eq('user_id', id)
       .order('uploaded_at', { ascending: true }),
   ])
+
+  const personal = personalRaw ? decryptFields(personalRaw) : null
 
   // Decrypt banking fields server-side — never logged or returned raw
   let bankingDecrypted: Record<string, string> = {}

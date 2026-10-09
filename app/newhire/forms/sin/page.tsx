@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import '../../../../styles/pages/form-pages.css'
 import { createClient } from '@/lib/supabase/client'
+import { FORMS_HOME } from '@/lib/routes'
 
 function getInitials(name: string) {
   return name.split(' ').filter(Boolean).map(n => n[0]).join('').toUpperCase().slice(0, 2)
@@ -102,7 +103,8 @@ export default function SINForm() {
       setSaving(false)
       return
     }
-    router.push(formStatus === 'flagged' ? '/newhire/forms' : '/newhire/forms/policy')
+    // replace, so the browser Back button doesn't return to the submitted form
+    router.replace(FORMS_HOME)
   }
 
   return (
@@ -125,11 +127,11 @@ export default function SINForm() {
       <div className="form-page-header">
         <div className="form-page-header-orb" />
         <div className="form-page-header-inner">
-          <button className="form-page-back" onClick={() => router.push('/newhire/forms/banking')}>
+          <button className="form-page-back" onClick={() => router.push(FORMS_HOME)}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
               <polyline points="15 18 9 12 15 6"/>
             </svg>
-            Back to Banking
+            Back to checklist
           </button>
           <div className="form-page-step-tag">Step 3 of 4</div>
           <h1 className="form-page-title">Social Insurance Number</h1>
@@ -244,7 +246,7 @@ export default function SINForm() {
               Encrypted before saving
             </div>
             <div className="form-action-btns">
-              <button type="button" className="form-btn-secondary" onClick={() => router.push('/newhire/forms/banking')}>
+              <button type="button" className="form-btn-secondary" onClick={() => router.push(FORMS_HOME)}>
                 ← Back
               </button>
               {saveError && <div className="login-error" style={{ marginBottom: 0 }}>{saveError}</div>}
@@ -254,7 +256,7 @@ export default function SINForm() {
                 disabled={!sinMatch || saving}
                 style={{ opacity: sinMatch && !saving ? 1 : 0.5, cursor: sinMatch && !saving ? 'pointer' : 'not-allowed' }}
               >
-                {saving ? 'Saving…' : formStatus === 'flagged' ? 'Resubmit for review →' : 'Save & continue →'}
+                {saving ? 'Saving…' : formStatus === 'flagged' ? 'Resubmit for review →' : 'Save & return to checklist →'}
               </button>
             </div>
           </div>

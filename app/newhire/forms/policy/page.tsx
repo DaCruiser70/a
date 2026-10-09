@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import '../../../../styles/pages/form-pages.css'
 import { createClient } from '@/lib/supabase/client'
+import { FORMS_HOME } from '@/lib/routes'
 
 function getInitials(name: string) {
   return name.split(' ').filter(Boolean).map(n => n[0]).join('').toUpperCase().slice(0, 2)
@@ -89,7 +90,8 @@ export default function PolicyForm() {
       setSaving(false)
       return
     }
-    router.push(formStatus === 'flagged' ? '/newhire/forms' : '/newhire/complete')
+    // replace, so the browser Back button doesn't return to the submitted form
+    router.replace(FORMS_HOME)
   }
 
   return (
@@ -112,11 +114,11 @@ export default function PolicyForm() {
       <div className="form-page-header">
         <div className="form-page-header-orb" />
         <div className="form-page-header-inner">
-          <button className="form-page-back" onClick={() => router.push('/newhire/forms/sin')}>
+          <button className="form-page-back" onClick={() => router.push(FORMS_HOME)}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
               <polyline points="15 18 9 12 15 6"/>
             </svg>
-            Back to SIN
+            Back to checklist
           </button>
           <div className="form-page-step-tag">Step 4 of 4</div>
           <h1 className="form-page-title">Policy Acknowledgement</h1>
@@ -218,7 +220,7 @@ export default function PolicyForm() {
               Timestamped on submission
             </div>
             <div className="form-action-btns">
-              <button type="button" className="form-btn-secondary" onClick={() => router.push('/newhire/forms/sin')}>
+              <button type="button" className="form-btn-secondary" onClick={() => router.push(FORMS_HOME)}>
                 ← Back
               </button>
               {saveError && <div className="login-error" style={{ marginBottom: 0 }}>{saveError}</div>}

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import '../../../../styles/pages/form-pages.css'
 import { createClient } from '@/lib/supabase/client'
+import { FORMS_HOME } from '@/lib/routes'
 
 const FlaggedBanner = ({ reason, source }: { reason?: string | null; source?: string | null }) => (
   <div style={{
@@ -54,34 +55,32 @@ export default function PersonalInfoForm() {
     const supabase = createClient()
     supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (!user) return
-      const [{ data }, { data: profile }, sourcesRes] = await Promise.all([
-        supabase
-          .from('personal_info')
-          .select('first_name,last_name,date_of_birth,phone,personal_email,street,city,province,postal_code,emergency_name,emergency_relationship,emergency_phone,form_status,flag_reason')
-          .eq('user_id', user.id)
-          .maybeSingle(),
+      // personal_info is encrypted at rest — read it through the API, never directly from the browser
+      const [personalRes, { data: profile }, sourcesRes] = await Promise.all([
+        fetch('/api/forms/personal').then(r => r.ok ? r.json() : null).catch(() => null),
         supabase.from('profiles').select('full_name').eq('id', user.id).single(),
         fetch('/api/newhire/flag-sources').then(r => r.ok ? r.json() : null).catch(() => null),
       ])
       if (profile?.full_name) setUserName(profile.full_name)
       if (sourcesRes?.sources?.personal) setFlagSource(sourcesRes.sources.personal)
+      const data = personalRes?.existing
       if (!data) return
       setForm({
-        firstName:             data.first_name             ?? '',
-        lastName:              data.last_name              ?? '',
-        dateOfBirth:           data.date_of_birth          ?? '',
-        phone:                 data.phone                  ?? '',
-        email:                 data.personal_email         ?? '',
-        street:                data.street                 ?? '',
-        city:                  data.city                   ?? '',
-        province:              data.province               ?? '',
-        postalCode:            data.postal_code            ?? '',
-        emergencyName:         data.emergency_name         ?? '',
-        emergencyRelationship: data.emergency_relationship ?? '',
-        emergencyPhone:        data.emergency_phone        ?? '',
+        firstName:             data.firstName             ?? '',
+        lastName:              data.lastName              ?? '',
+        dateOfBirth:           data.dateOfBirth           ?? '',
+        phone:                 data.phone                 ?? '',
+        email:                 data.email                 ?? '',
+        street:                data.street                ?? '',
+        city:                  data.city                  ?? '',
+        province:              data.province              ?? '',
+        postalCode:            data.postalCode            ?? '',
+        emergencyName:         data.emergencyName         ?? '',
+        emergencyRelationship: data.emergencyRelationship ?? '',
+        emergencyPhone:        data.emergencyPhone        ?? '',
       })
-      setFormStatus(data.form_status ?? '')
-      setFlagReason(data.flag_reason ?? null)
+      setFormStatus(data.formStatus ?? '')
+      setFlagReason(data.flagReason ?? null)
     }).catch(() => {})
   }, [])
 
@@ -104,7 +103,8 @@ export default function PersonalInfoForm() {
       setSaving(false)
       return
     }
-    router.push(formStatus === 'flagged' ? '/newhire/forms' : '/newhire/forms/banking')
+    // replace, so the browser Back button doesn't return to the submitted form
+    router.replace(FORMS_HOME)
   }
 
   return (
@@ -127,7 +127,7 @@ export default function PersonalInfoForm() {
       <div className="form-page-header">
         <div className="form-page-header-orb" />
         <div className="form-page-header-inner">
-          <button className="form-page-back" onClick={() => router.push('/newhire/forms')}>
+          <button className="form-page-back" onClick={() => router.push(FORMS_HOME)}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
               <polyline points="15 18 9 12 15 6"/>
             </svg>
@@ -274,11 +274,11 @@ export default function PersonalInfoForm() {
             </div>
             <div className="form-action-btns">
               {saveError && <div className="login-error" style={{ marginBottom: 0 }}>{saveError}</div>}
-              <button type="button" className="form-btn-secondary" onClick={() => router.push('/newhire/forms')}>
+              <button type="button" className="form-btn-secondary" onClick={() => router.push(FORMS_HOME)}>
                 ← Back
               </button>
               <button type="submit" className="form-btn-primary" disabled={saving}>
-                {saving ? 'Saving…' : formStatus === 'flagged' ? 'Resubmit for review →' : 'Save & continue →'}
+                {saving ? 'Saving…' : formStatus === 'flagged' ? 'Resubmit for review →' : 'Save & return to checklist →'}
               </button>
             </div>
           </div>

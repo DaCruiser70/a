@@ -6,6 +6,7 @@ import { useRef, useState, useEffect, useCallback } from 'react'
 import '../../../../styles/pages/form-pages.css'
 import { createClient } from '@/lib/supabase/client'
 import type { NewhireDocument } from '@/types'
+import { FORMS_HOME } from '@/lib/routes'
 
 function getInitials(name: string) {
   return name.split(' ').filter(Boolean).map(n => n[0]).join('').toUpperCase().slice(0, 2)
@@ -471,7 +472,7 @@ export default function DocumentsPage() {
       <div className="form-page-header">
         <div className="form-page-header-orb" />
         <div className="form-page-header-inner">
-          <button className="form-page-back" onClick={() => router.push('/newhire/forms')}>
+          <button className="form-page-back" onClick={() => router.push(FORMS_HOME)}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="15 18 9 12 15 6"/></svg>
             Back to checklist
           </button>
@@ -843,7 +844,7 @@ export default function DocumentsPage() {
               ? 'All required documents have been approved by HR.'
               : 'HR will review your documents and notify you if anything needs to be corrected. You can still upload optional documents at any time.'}
             <div style={{ marginTop: '0.75rem' }}>
-              <button className="form-btn-secondary" onClick={() => router.push('/newhire/forms')}>
+              <button className="form-btn-secondary" onClick={() => router.push(FORMS_HOME)}>
                 ← Back to checklist
               </button>
             </div>

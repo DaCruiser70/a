@@ -1,4 +1,5 @@
 import { createCipheriv, createDecipheriv, randomBytes } from 'crypto'
+import { ENCRYPTED_PERSONAL_FIELDS, type EncryptedPersonalField } from './personal-fields'
 
 const ALGORITHM = 'aes-256-gcm'
 const KEY_HEX   = process.env.ENCRYPTION_KEY! // 64-char hex = 32 bytes
@@ -27,4 +28,43 @@ export function decrypt(ciphertext: string): string {
   const decipher = createDecipheriv(ALGORITHM, getKey(), iv)
   decipher.setAuthTag(tag)
   return decipher.update(enc).toString('utf8') + decipher.final('utf8')
+}
+
+// Matches the encrypt() output format: iv(24 hex):tag(32 hex):ciphertext(hex)
+const ENCRYPTED_FORMAT = /^[0-9a-f]{24}:[0-9a-f]{32}:(?:[0-9a-f]{2})+$/
+
+export function isEncrypted(value: unknown): value is string {
+  return typeof value === 'string' && ENCRYPTED_FORMAT.test(value)
+}
+
+export type DecryptedRow<T> = {
+  [K in keyof T]: K extends EncryptedPersonalField ? T[K] | null : T[K]
+}
+
+// Encrypts the ENCRYPTED_PERSONAL_FIELDS present on the row. Null, undefined and empty values are left alone.
+export function encryptFields<T extends Record<string, unknown>>(row: T): T {
+  const out: Record<string, unknown> = { ...row }
+  for (const field of ENCRYPTED_PERSONAL_FIELDS) {
+    const value = out[field]
+    if (typeof value === 'string' && value !== '') out[field] = encrypt(value)
+  }
+  return out as T
+}
+
+// Decrypts the ENCRYPTED_PERSONAL_FIELDS present on the row. Values not in the encrypted
+// format (rows not yet migrated) are returned unchanged. A field that fails to decrypt
+// becomes null; only the field name is logged, never the value.
+export function decryptFields<T extends Record<string, unknown>>(row: T): DecryptedRow<T> {
+  const out: Record<string, unknown> = { ...row }
+  for (const field of ENCRYPTED_PERSONAL_FIELDS) {
+    const value = out[field]
+    if (!isEncrypted(value)) continue
+    try {
+      out[field] = decrypt(value)
+    } catch {
+      console.error(`decryptFields: failed to decrypt field "${field}"`)
+      out[field] = null
+    }
+  }
+  return out as DecryptedRow<T>
 }

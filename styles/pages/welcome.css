@@ -352,6 +352,25 @@
   white-space: nowrap;
 }
 
+/* Loading skeleton — same frame, pulsing, no grid or content */
+.welcome-video-skeleton {
+  animation: welcomePulse 1.6s ease-in-out infinite;
+}
+.welcome-video-skeleton::before { display: none; }
+
+/* Real player fills the 16:9 frame; the card's rounded corners clip it */
+.welcome-video-player { background: #0f1e38; }
+.welcome-video-player::before { display: none; }
+.welcome-video-player video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  background: #0f1e38;
+  object-fit: contain;
+}
+
 .welcome-video-footer {
   padding: 1.25rem 1.75rem;
   display: flex;

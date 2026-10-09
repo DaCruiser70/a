@@ -3,7 +3,7 @@ import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { getDocumentSignedUrl } from '@/lib/document-view'
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string; documentId: string }> }
 ) {
   const ssr = await createClient()
@@ -16,13 +16,15 @@ export async function GET(
 
   const { id, documentId } = await params
 
-  const result = await getDocumentSignedUrl(admin, id, documentId)
+  const download = new URL(request.url).searchParams.get('download') === '1'
+
+  const result = await getDocumentSignedUrl(admin, id, documentId, { download })
   if (!result) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   await admin.from('audit_log').insert({
     user_id:      id,
     action_type:  'amber',
-    message:      `<strong>HR</strong> viewed ${result.label}`,
+    message:      `<strong>HR</strong> ${download ? 'downloaded' : 'viewed'} ${result.label}`,
     performed_by: user.id,
   })
 
