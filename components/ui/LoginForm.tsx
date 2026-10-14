@@ -75,7 +75,7 @@ export default function LoginForm({ otpRequired = false }: { otpRequired?: boole
         access_token:  session.access_token,
         refresh_token: session.refresh_token,
       })
-      router.push('/newhire/welcome')
+      router.push(typeof data.landing === 'string' ? data.landing : '/')
       return
     }
 
@@ -149,8 +149,9 @@ export default function LoginForm({ otpRequired = false }: { otpRequired?: boole
     }
 
     // Session was set server-side by the OTP route; give the browser 100ms to
-    // receive the Set-Cookie headers before navigating.
-    setTimeout(() => { window.location.href = '/hr/dashboard' }, 100)
+    // receive the Set-Cookie headers before navigating to the account's landing portal.
+    const landing = typeof data.landing === 'string' && data.landing.startsWith('/') ? data.landing : '/'
+    setTimeout(() => { window.location.href = landing }, 100)
   }
 
   async function handleResend() {

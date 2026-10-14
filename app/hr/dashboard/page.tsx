@@ -6,7 +6,10 @@ import '../../../styles/pages/hr-dashboard.css'
 import { timeAgo } from '@/lib/time-ago'
 import { esc, SafeMessage } from '@/lib/safe-html'
 import PortalSwitcher from '@/components/ui/PortalSwitcher'
+import { PortalIdentity } from '@/components/ui/PortalName'
 import ManagerSelect from '@/components/ui/ManagerSelect'
+import { PlanChipBadge } from '@/components/ui/PlanBadges'
+import Link from 'next/link'
 import type { NewHireRow } from '@/types'
 
 type ActivityItem = { type: string; msg: string; time: string }
@@ -42,7 +45,7 @@ function OfficeLocationBadge({ location }: { location?: string | null }) {
 
 function HireTable({
   paginated, filtered, currentPage, totalPages, search, filterStatus, activeNav, loading,
-  onSearch, onFilter, onPage, onView, onApprove, onFlag,
+  onSearch, onFilter, onPage, onView,
 }: {
   paginated: Hire[]
   filtered: Hire[]
@@ -56,8 +59,6 @@ function HireTable({
   onFilter: (v: string) => void
   onPage: (p: number) => void
   onView: (id: string) => void
-  onApprove: (id: string, name: string, e: React.MouseEvent) => void
-  onFlag: (id: string, name: string, e: React.MouseEvent) => void
 }) {
   return (
     <div className="hr-table-card">
@@ -123,7 +124,12 @@ function HireTable({
                   <div className="hr-table-progress-pct">{hire.progress}%</div>
                 </div>
               </td>
-              <td><span className={`hr-status ${hire.status}`}>{STATUS_LABELS[hire.status]}</span></td>
+              <td>
+                <div className="status-badge-row">
+                  <span className={`hr-status ${hire.status}`}>{STATUS_LABELS[hire.status]}</span>
+                  {hire.plan_chip && <PlanChipBadge chip={hire.plan_chip} />}
+                </div>
+              </td>
               <td>
                 <span className={`hr-days-badge ${hire.last_submitted_at ? 'urgent' : ''}`}>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ width:'11px', height:'11px' }}>
@@ -135,12 +141,6 @@ function HireTable({
               <td onClick={e => e.stopPropagation()}>
                 <div className="hr-table-actions">
                   <button className="hr-table-action-btn view" onClick={e => { e.stopPropagation(); onView(hire.id) }}>View</button>
-                  {hire.status === 'needs-review' && (
-                    <button className="hr-table-action-btn approve" onClick={e => onApprove(hire.id, hire.name, e)}>Approve</button>
-                  )}
-                  {hire.status !== 'flagged' && hire.status !== 'approved' && (
-                    <button className="hr-table-action-btn flag" onClick={e => onFlag(hire.id, hire.name, e)}>Flag</button>
-                  )}
                 </div>
               </td>
             </tr>
@@ -261,30 +261,6 @@ export default function HRDashboard() {
     ? newHire.formDeadline > newHire.startDate
     : false
 
-  async function handleApprove(id: string, name: string, e: React.MouseEvent) {
-    e.stopPropagation()
-    await fetch(`/api/hr/hires/${id}/status`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'approved' }),
-    })
-    setHires(prev => prev.map((h: NewHireRow) => h.id === id ? { ...h, status: 'approved' as const } : h))
-    setActivity(prev => [{ type:'green', msg:`<strong>${esc(name)}</strong> approved by HR`, time:'Just now' }, ...prev])
-    showToast(`${name} has been approved`)
-  }
-
-  async function handleFlag(id: string, name: string, e: React.MouseEvent) {
-    e.stopPropagation()
-    await fetch(`/api/hr/hires/${id}/status`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'flagged' }),
-    })
-    setHires(prev => prev.map((h: NewHireRow) => h.id === id ? { ...h, status: 'flagged' as const } : h))
-    setActivity(prev => [{ type:'red', msg:`<strong>${esc(name)}</strong> flagged for review`, time:'Just now' }, ...prev])
-    showToast(`${name} has been flagged`)
-  }
-
   function handleExport() {
     const headers = ['Name','Email','Role','Office Location','Status','Progress','Days Since Submission']
     const rows = hires.map(h => [h.name, h.email, h.role, h.office_location ?? '', STATUS_LABELS[h.status], `${h.progress}%`, h.days === 0 ? 'Today' : `${h.days} days ago`])
@@ -371,7 +347,7 @@ export default function HRDashboard() {
   const requiredMark = <span style={{ color:'#E74C3C' }}>*</span>
 
   return (
-    <div className="hr-page">
+    <div className="hr-page" data-portal="hr">
 
       {/* ── SIDEBAR ── */}
       <aside className="hr-sidebar">
@@ -379,6 +355,7 @@ export default function HRDashboard() {
           <div className="hr-sidebar-logo-mark">AEM</div>
           <div className="hr-sidebar-logo-label">HR Portal</div>
         </div>
+        <PortalSwitcher variant="sidebar" />
         <nav className="hr-sidebar-nav">
           <div className="hr-nav-section">Main</div>
           <div className={`hr-nav-item ${activeNav === 'dashboard' ? 'active' : ''}`} onClick={() => navTo('dashboard')}>
@@ -413,6 +390,13 @@ export default function HRDashboard() {
             <span className="hr-nav-badge-red">{stats.flagged}</span>
           </div>
           <div className="hr-nav-section">Records</div>
+          <Link href="/hr/outbox" className="hr-nav-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <path d="M22 12h-6l-2 3h-4l-2-3H2"/>
+              <path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>
+            </svg>
+            Queued notifications
+          </Link>
           <div className={`hr-nav-item ${activeNav === 'export' ? 'active' : ''}`} onClick={() => { setActiveNav('export'); handleExport() }}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
@@ -449,6 +433,7 @@ export default function HRDashboard() {
       <div className="hr-main">
         <div className="hr-topbar">
           <div className="hr-topbar-left">
+            <PortalIdentity role="hr" tone="light" hrTopbar />
             <div className="hr-topbar-title">
               {activeNav === 'dashboard' ? 'Dashboard' : activeNav === 'newhires' ? 'New Hires' :
                activeNav === 'pending' ? 'Pending Review' : activeNav === 'flagged' ? 'Flagged' :
@@ -457,7 +442,6 @@ export default function HRDashboard() {
             <div className="hr-topbar-date">{today}</div>
           </div>
           <div className="hr-topbar-right">
-            <PortalSwitcher />
             <button className="hr-topbar-btn secondary" onClick={handleExport}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
@@ -598,12 +582,15 @@ export default function HRDashboard() {
                               <div className="hr-table-progress-pct">{hire.progress}%</div>
                             </div>
                           </td>
-                          <td><span className={`hr-status ${hire.status}`}>{STATUS_LABELS[hire.status]}</span></td>
+                          <td>
+                            <div className="status-badge-row">
+                              <span className={`hr-status ${hire.status}`}>{STATUS_LABELS[hire.status]}</span>
+                              {hire.plan_chip && <PlanChipBadge chip={hire.plan_chip} />}
+                            </div>
+                          </td>
                           <td onClick={e => e.stopPropagation()}>
                             <div className="hr-table-actions">
                               <button className="hr-table-action-btn view" onClick={e => { e.stopPropagation(); router.push(`/hr/newhire/${hire.id}`) }}>View</button>
-                              {hire.status === 'needs-review' && <button className="hr-table-action-btn approve" onClick={e => handleApprove(hire.id, hire.name, e)}>Approve</button>}
-                              {hire.status !== 'flagged' && hire.status !== 'approved' && <button className="hr-table-action-btn flag" onClick={e => handleFlag(hire.id, hire.name, e)}>Flag</button>}
                             </div>
                           </td>
                         </tr>
@@ -674,8 +661,6 @@ export default function HRDashboard() {
               onFilter={applyFilter}
               onPage={setCurrentPage}
               onView={id => router.push(`/hr/newhire/${id}`)}
-              onApprove={handleApprove}
-              onFlag={handleFlag}
             />
           )}
 

@@ -44,6 +44,51 @@ export type Manager = {
   updated_at: string
 }
 
+export type ManagerPlanStatus = 'requested' | 'draft' | 'submitted'
+export type ClearanceType     = 'none' | 'rcmp' | 'pspc_rcmp'
+
+export type ManagerPlan = {
+  id:                string
+  newhire_id:        string
+  manager_id:        string
+  status:            ManagerPlanStatus
+  due_date:          string | null
+  training_needed:   string | null
+  training_delivery: string[] | null
+  training_notes:    string | null
+  week1:             string | null
+  week2:             string | null
+  week3:             string | null
+  day_one_contact:   string | null
+  first_day_gear:    string | null
+  anything_else:     string | null
+  clearance_type:    ClearanceType | null
+  project_number:    string | null
+  project_name:      string | null
+  project_region:    'Ontario' | 'New Brunswick' | 'Nova Scotia' | null
+  project_location:  string | null
+  project_branch:    string | null
+  submitted_at:      string | null
+  created_at:        string
+  updated_at:        string
+}
+
+export type OutboxStatus = 'pending' | 'sent' | 'failed'
+
+export type NotificationOutboxRow = {
+  id:         string
+  dedupe_key: string
+  to_emails:  string[]
+  template:   string
+  payload:    Record<string, unknown>
+  status:     OutboxStatus
+  attempts:   number
+  last_error: string | null
+  send_after: string
+  created_at: string
+  sent_at:    string | null
+}
+
 export type PersonalInfo = {
   id:                     string
   user_id:                string
@@ -193,6 +238,18 @@ export type Database = {
         Update:        Partial<Omit<Manager, 'id' | 'created_at'>>
         Relationships: []
       }
+      manager_plans: {
+        Row:           ManagerPlan
+        Insert:        Pick<ManagerPlan, 'newhire_id' | 'manager_id'> & Partial<Omit<ManagerPlan, 'id' | 'newhire_id' | 'manager_id'>>
+        Update:        Partial<Omit<ManagerPlan, 'id' | 'newhire_id' | 'created_at'>>
+        Relationships: []
+      }
+      notification_outbox: {
+        Row:           NotificationOutboxRow
+        Insert:        Pick<NotificationOutboxRow, 'dedupe_key' | 'to_emails' | 'template' | 'payload'> & Partial<Omit<NotificationOutboxRow, 'id' | 'dedupe_key' | 'to_emails' | 'template' | 'payload'>>
+        Update:        Partial<Omit<NotificationOutboxRow, 'id' | 'dedupe_key' | 'created_at'>>
+        Relationships: []
+      }
       personal_info: {
         Row:           PersonalInfo
         Insert:        Omit<PersonalInfo, 'id' | 'updated_at'> & { submitted_at?: string }
@@ -270,6 +327,10 @@ export type Database = {
         Args:    { p_user_id: string; p_code_hash: string }
         Returns: 'ok' | 'bad' | 'locked' | 'none'
       }
+      reassign_manager_plan: {
+        Args:    { p_newhire_id: string; p_manager_id: string }
+        Returns: 'ok' | 'unchanged' | 'no_hire' | 'no_manager'
+      }
     }
     Enums: {}
   }
@@ -288,7 +349,11 @@ export type NewHireRow = {
   days:                number
   last_submitted_at:   string | null
   office_location?:    string | null
+  plan_chip?:          PlanChip | null
 }
+
+// Manager plan state as shown on HR chips; null when no plan was requested
+export type PlanChip = 'awaiting' | 'draft' | 'submitted' | 'overdue'
 
 export type NewHireDetail = NewHireRow & {
   phone:                    string

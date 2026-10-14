@@ -1,0 +1,40 @@
+/* ── Manager plan badges (text always carries the meaning) ── */
+.plan-badge {
+  display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;
+  font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 100px; line-height: 1.4;
+}
+.plan-badge svg { width: 10px; height: 10px; flex-shrink: 0; }
+
+.plan-badge.requested { color: #1B3A6B; background: rgba(27,58,107,0.07); border: 1px solid rgba(27,58,107,0.18); }
+.plan-badge.draft     { color: #C8920A; background: rgba(200,146,10,0.1); border: 1px solid rgba(200,146,10,0.25); }
+.plan-badge.submitted { color: #0D5C46; background: rgba(13,92,70,0.1);   border: 1px solid rgba(13,92,70,0.2); }
+.plan-badge.overdue   { color: #C0392B; background: rgba(231,76,60,0.08); border: 1px solid rgba(231,76,60,0.3); }
+
+.plan-badge.clearance-none      { color: #5F5E5A; background: rgba(0,0,0,0.04);      border: 1px solid rgba(0,0,0,0.1); }
+.plan-badge.clearance-rcmp      { color: #1B3A6B; background: rgba(27,58,107,0.07);  border: 1px solid rgba(27,58,107,0.18); }
+.plan-badge.clearance-pspc_rcmp { color: #7C3AED; background: rgba(124,58,237,0.07); border: 1px solid rgba(124,58,237,0.2); }
+
+/* On the navy page header */
+.plan-badge.on-dark.requested { color: #fff;    background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.25); }
+.plan-badge.on-dark.draft     { color: #E8B84B; background: rgba(200,146,10,0.15); border-color: rgba(200,146,10,0.4); }
+.plan-badge.on-dark.submitted { color: #6EE7B7; background: rgba(13,92,70,0.3);    border-color: rgba(110,231,183,0.35); }
+
+/* ── HR hires table: plan chip beside the hire's status badge ──
+   Same 24px height and full pill shape as the status badge, but quieter:
+   soft tint, thin border, weight 600. Text contrast on its tint (and on a
+   hovered row): Submitted 7.23:1, Draft 5.09:1, Awaiting 6.06:1, Overdue 5.57:1. */
+.status-badge-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.status-badge-row .hr-status { height: 24px; box-sizing: border-box; }
+
+.plan-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 24px; box-sizing: border-box; padding: 0 10px;
+  border-radius: 999px; border: 1px solid transparent;
+  font-size: 11px; font-weight: 600; line-height: 1; white-space: nowrap;
+}
+.plan-chip-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; background: currentColor; }
+
+.plan-chip.submitted { color: #0D5C46; background: rgba(13,92,70,0.06);  border-color: rgba(13,92,70,0.18); }
+.plan-chip.draft     { color: #8A6206; background: rgba(200,146,10,0.08); border-color: rgba(200,146,10,0.3); }
+.plan-chip.awaiting  { color: #5F5E5A; background: rgba(0,0,0,0.03);      border-color: rgba(0,0,0,0.12); }
+.plan-chip.overdue   { color: #B03A2E; background: rgba(231,76,60,0.06);  border-color: rgba(231,76,60,0.25); }

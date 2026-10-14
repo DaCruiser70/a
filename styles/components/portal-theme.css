@@ -1,0 +1,86 @@
+/* ══════════════════════════════════════════════
+   PORTAL THEME TOKENS
+   Set on a page wrapper (or a single tab / tag) with data-portal="<role>".
+   Values mirror lib/portal-theme.ts — keep the two in step.
+══════════════════════════════════════════════ */
+
+[data-portal] {
+  --portal-on-accent: #FFFFFF;
+}
+
+[data-portal="hr"] {
+  --portal-accent:    #1B3A6B;
+  --portal-hover:     #0f2348;
+  --portal-soft:      rgba(27,58,107,0.08);
+  --portal-hero-from: #1B3A6B;
+  --portal-hero-to:   #0f2348;
+}
+
+[data-portal="stakeholder"] {
+  --portal-accent:    #1B3A6B;
+  --portal-hover:     #0f2449;
+  --portal-soft:      rgba(27,58,107,0.08);
+  --portal-hero-from: #1B3A6B;
+  --portal-hero-to:   #0f2449;
+}
+
+[data-portal="payroll"] {
+  --portal-accent:    #0F4C4A;
+  --portal-hover:     #0a3332;
+  --portal-soft:      rgba(15,76,74,0.08);
+  --portal-hero-from: #0F4C4A;
+  --portal-hero-to:   #0a3332;
+}
+
+[data-portal="newhire"] {
+  --portal-accent:    #1B3A6B;
+  --portal-hover:     #0f2348;
+  --portal-soft:      rgba(27,58,107,0.08);
+  --portal-hero-from: #1B3A6B;
+  --portal-hero-to:   #0f2348;
+}
+
+/* Deep violet */
+[data-portal="manager"] {
+  --portal-accent:    #4C2A85;
+  --portal-hover:     #3B1F69;
+  --portal-soft:      #F1ECF9;
+  --portal-hero-from: #4C2A85;
+  --portal-hero-to:   #2E1A52;
+}
+
+/* Reserved: copper, not applied to any page yet (hover and tint provisional) */
+[data-portal="project_mgmt"] {
+  --portal-accent:    #9A4F1D;
+  --portal-hover:     #7A3E16;
+  --portal-soft:      #F6EDE5;
+  --portal-hero-from: #9A4F1D;
+  --portal-hero-to:   #5E2F10;
+}
+
+/* ── Portal name pill (header identity) ── */
+.portal-name {
+  display: inline-flex; align-items: center; gap: 7px; white-space: nowrap;
+  padding: 4px 11px 4px 9px; border-radius: 100px;
+  font-size: 12px; font-weight: 700; letter-spacing: 0.01em; line-height: 1.4;
+  color: var(--portal-accent); background: var(--portal-soft);
+  border: 1px solid var(--portal-accent);
+}
+/* On a dark header the tint would disappear, so the pill sits on white */
+.portal-name.on-dark { background: #FFFFFF; border-color: #FFFFFF; }
+.portal-name-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: var(--portal-accent);
+}
+
+/* ── Small portal tag (e.g. on the HR Manager Plan card) ── */
+.portal-tag {
+  display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;
+  padding: 1px 8px; border-radius: 100px;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--portal-accent); background: var(--portal-soft); border: 1px solid var(--portal-accent);
+}
+.portal-tag .portal-name-dot { width: 6px; height: 6px; }
+
+@media (max-width: 480px) {
+  .portal-name { font-size: 11px; padding: 3px 9px 3px 7px; gap: 6px; }
+}

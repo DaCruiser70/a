@@ -1,0 +1,109 @@
+/* ── Manager Plan card on the HR detail page (inside .hrd-card) ──
+   Collapsed by default: header + one summary row. Submitted plans expand to show every answer. */
+
+/* Header: wraps on narrow screens (badges and actions drop under the title) */
+.mpc-header      { flex-wrap: wrap; row-gap: 10px; }
+.mpc-title-block { flex: 1 1 200px; min-width: 0; }
+.mpc-title       { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.mpc-header-right {
+  margin-left: auto; display: flex; align-items: center; justify-content: flex-end;
+  flex-wrap: wrap; gap: 8px;
+}
+.mpc-badges  { display: flex; flex-wrap: wrap; gap: 6px; }
+.mpc-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* Header buttons: 44px tap target, visible focus ring (navy on white 11.27:1) */
+.mpc-action {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: 44px; padding: 0 14px; box-sizing: border-box;
+  border-radius: 8px; border: 1px solid rgba(27,58,107,0.25);
+  background: #fff; color: #1B3A6B; cursor: pointer;
+  font-family: inherit; font-size: 12px; font-weight: 600; white-space: nowrap;
+  transition: background 0.15s;
+}
+.mpc-action:hover { background: rgba(27,58,107,0.06); }
+.mpc-action:focus-visible { outline: 2px solid #1B3A6B; outline-offset: 2px; }
+.mpc-toggle svg { width: 12px; height: 12px; transition: transform 200ms ease; }
+.mpc-toggle[aria-expanded="true"] svg { transform: rotate(180deg); }
+
+/* Summary row */
+.mpc-summary {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap;
+  padding: 0.875rem 1.5rem;
+}
+.mpc-summary-text { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #1a2e25; min-width: 0; }
+.mpc-summary-text strong { font-weight: 600; }
+.mpc-summary-text.muted  { color: #5F5E5A; line-height: 1.6; }
+.mpc-summary-text svg { width: 15px; height: 15px; flex-shrink: 0; }
+.mpc-summary-text svg.waiting { color: #C8920A; }
+.mpc-summary-text svg.done    { color: #0D5C46; }
+
+/* Expand / collapse: animates the height over 200ms; hidden content is inert and invisible */
+.mpc-collapse { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 200ms ease; }
+.mpc-collapse.open { grid-template-rows: 1fr; }
+.mpc-collapse-inner { min-height: 0; overflow: hidden; visibility: hidden; transition: visibility 0s linear 200ms; }
+.mpc-collapse.open > .mpc-collapse-inner { visibility: visible; transition-delay: 0s; }
+
+.mpc-body  { padding: 0.25rem 1.5rem 1.25rem; border-top: 1px solid rgba(0,0,0,0.06); }
+
+.mpc-group {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+  color: #B0ABA4; margin: 1rem 0 0.25rem;
+}
+
+.mpc-row {
+  display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 4px 16px;
+  padding: 8px 0; border-bottom: 1px solid rgba(0,0,0,0.04);
+}
+.mpc-row > * { min-width: 0; }
+.mpc-label { font-size: 11px; color: #888780; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; padding-top: 2px; }
+
+/* Answers are plain text: line breaks kept, long unbroken text wraps instead of widening the layout */
+.mpc-value { font-size: 13px; color: #1a2e25; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+.mpc-value.empty { color: #B0ABA4; font-style: italic; }
+.mpc-value.clamped {
+  display: -webkit-box; -webkit-box-orient: vertical;
+  -webkit-line-clamp: 6; line-clamp: 6; overflow: hidden;
+}
+.mpc-more {
+  margin-top: 4px; padding: 2px 0; border: none; background: none; cursor: pointer;
+  font-family: inherit; font-size: 12px; font-weight: 600; color: #1B3A6B;
+  text-decoration: underline; text-underline-offset: 2px;
+}
+.mpc-more:focus-visible { outline: 2px solid #1B3A6B; outline-offset: 2px; border-radius: 3px; }
+
+.mpc-note {
+  margin: 6px 0 2px; padding: 8px 12px; border-radius: 8px; font-size: 12px; color: #5F5E5A;
+  background: rgba(27,58,107,0.04); border: 1px solid rgba(27,58,107,0.1);
+}
+
+.mpc-skeleton {
+  height: 13px; border-radius: 6px;
+  background: linear-gradient(90deg, #F0EEEA 25%, #E6E3DD 50%, #F0EEEA 75%);
+  background-size: 200% 100%; animation: mpcShimmer 1.2s ease-in-out infinite;
+}
+@keyframes mpcShimmer { from { background-position: 200% 0 } to { background-position: -200% 0 } }
+
+.mpc-error {
+  flex: 1; display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+  padding: 10px 14px; border-radius: 8px; font-size: 12px; color: #C0392B;
+  background: rgba(231,76,60,0.06); border: 1px solid rgba(231,76,60,0.2);
+}
+.mpc-error button {
+  padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(192,57,43,0.35);
+  background: #fff; color: #C0392B; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mpc-collapse, .mpc-collapse-inner, .mpc-toggle svg, .mpc-action { transition: none; }
+  .mpc-skeleton { animation: none; }
+}
+
+@media (max-width: 560px) {
+  .mpc-summary { padding: 0.875rem 1rem; }
+  .mpc-body    { padding: 0.25rem 1rem 1rem; }
+  .mpc-row     { grid-template-columns: minmax(0, 1fr); }
+  .mpc-header-right { margin-left: 0; width: 100%; justify-content: flex-start; }
+  .mpc-actions { width: 100%; }
+  .mpc-action  { flex: 1 1 auto; }
+}

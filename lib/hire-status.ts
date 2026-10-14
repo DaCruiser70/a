@@ -1,6 +1,14 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { FormStatus, HireStatus, Database } from '@/types'
 
+export const HIRE_STATUS_LABELS: Record<HireStatus, string> = {
+  'not-started':  'Not Started',
+  'in-progress':  'In Progress',
+  'needs-review': 'Needs Review',
+  'approved':     'Approved',
+  'flagged':      'Flagged',
+}
+
 export interface HireStatusResult {
   status:       HireStatus
   approvedCount: number

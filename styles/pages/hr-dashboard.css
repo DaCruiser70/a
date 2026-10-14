@@ -193,12 +193,8 @@
 .hr-table-action-btn { padding: 5px 10px; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer; font-family: var(--font-sans); border: 1px solid; transition: all 0.15s; white-space: nowrap; }
 
 .hr-table-action-btn.view    { background: rgba(27,58,107,0.06);  color: #1B3A6B; border-color: rgba(27,58,107,0.15); }
-.hr-table-action-btn.approve { background: rgba(13,92,70,0.06);   color: #0D5C46; border-color: rgba(13,92,70,0.15); }
-.hr-table-action-btn.flag    { background: rgba(231,76,60,0.06);  color: #E74C3C; border-color: rgba(231,76,60,0.15); }
 
 .hr-table-action-btn.view:hover    { background: rgba(27,58,107,0.12); }
-.hr-table-action-btn.approve:hover { background: rgba(13,92,70,0.12); }
-.hr-table-action-btn.flag:hover    { background: rgba(231,76,60,0.12); }
 
 .hr-days-badge { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 500; color: #888780; }
 

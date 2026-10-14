@@ -17,7 +17,7 @@ export const PORTALS: Portal[] = [
   { role: 'hr',           label: 'HR Portal',                 prefix: '/hr',           href: '/hr/dashboard',           built: true  },
   { role: 'payroll',      label: 'Payroll Portal',            prefix: '/payroll',      href: '/payroll/dashboard',      built: true  },
   { role: 'stakeholder',  label: 'Stakeholder Portal',        prefix: '/stakeholder',  href: '/stakeholder/dashboard',  built: true  },
-  { role: 'manager',      label: 'Manager Portal',            prefix: '/manager',      href: '/manager/dashboard',      built: false },
+  { role: 'manager',      label: 'Manager Portal',            prefix: '/manager',      href: '/manager/dashboard',      built: true  },
   { role: 'project_mgmt', label: 'Project Management Portal', prefix: '/project-mgmt', href: '/project-mgmt/dashboard', built: false },
   { role: 'newhire',      label: 'Employee Onboarding',       prefix: '/newhire',      href: '/newhire/welcome',        built: true  },
 ]
@@ -48,6 +48,12 @@ export function portalForPath(pathname: string): Portal | null {
 export function landingRole(role: unknown, roles: Role[]): Role | null {
   if (isRole(role) && roles.includes(role)) return role
   return roles[0] ?? null
+}
+
+// Where an account lands after sign-in: its landing portal's home page
+export function landingHref(role: unknown, roles: Role[]): string {
+  const landing = landingRole(role, roles)
+  return landing ? portalForRole(landing).href : '/login'
 }
 
 // Portals the user may open from the switcher, in display order

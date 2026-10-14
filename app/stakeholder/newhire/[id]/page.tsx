@@ -2,7 +2,7 @@
 
 import { useRouter, useParams } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import PortalSwitcher from '@/components/ui/PortalSwitcher'
+import PortalHeader from '@/components/ui/PortalHeader'
 
 type Task = {
   id: string
@@ -105,52 +105,9 @@ export default function StakeholderHireDetail() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#F5F4F1', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+    <div data-portal="stakeholder" style={{ minHeight: '100vh', background: '#F5F4F1', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
 
-      {/* ── NAV ── */}
-      <nav style={{
-        background: '#1B3A6B', padding: '0 1.5rem', height: '60px',
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        position: 'sticky', top: 0, zIndex: 50,
-      }}>
-        <button
-          onClick={() => router.push('/stakeholder/dashboard')}
-          style={{
-            display: 'flex', alignItems: 'center', gap: '6px',
-            background: 'none', border: 'none', cursor: 'pointer',
-            color: 'rgba(255,255,255,0.65)', fontSize: '13px', fontFamily: 'inherit', fontWeight: 500,
-            padding: '6px 10px', borderRadius: '6px',
-          }}
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ width: '14px', height: '14px' }}>
-            <polyline points="15 18 9 12 15 6"/>
-          </svg>
-          Dashboard
-        </button>
-        <span style={{ fontSize: '13px', color: 'rgba(255,255,255,0.5)', fontWeight: 500 }}>
-          Stakeholder Portal
-        </span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        <PortalSwitcher tone="dark" />
-        <button
-          onClick={async () => { await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {}); window.location.href = '/login' }}
-          style={{
-            display: 'flex', alignItems: 'center', gap: '5px',
-            padding: '5px 11px', borderRadius: '7px',
-            border: '1px solid rgba(255,255,255,0.18)',
-            background: 'rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.6)',
-            cursor: 'pointer', fontSize: '12px', fontFamily: 'inherit', fontWeight: 500,
-          }}
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ width: '13px', height: '13px' }}>
-            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-            <polyline points="16 17 21 12 16 7"/>
-            <line x1="21" y1="12" x2="9" y2="12"/>
-          </svg>
-          Sign out
-        </button>
-        </div>
-      </nav>
+      <PortalHeader portal="stakeholder" back={{ href: '/stakeholder/dashboard', label: 'Dashboard' }} />
 
       <div style={{ maxWidth: '680px', margin: '0 auto', padding: '2rem 1.5rem' }}>
 

@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 import '../../../styles/pages/forms.css'
 import type { FormStatus } from '@/types'
-import PortalSwitcher from '@/components/ui/PortalSwitcher'
+import { PortalIdentity } from '@/components/ui/PortalName'
 
 const FORMS = [
   {
@@ -127,17 +127,16 @@ export default function FormsPage() {
     : `${total - doneCount} form${total - doneCount !== 1 ? 's' : ''} remaining`
 
   return (
-    <div className="forms-page">
+    <div className="forms-page" data-portal="newhire">
 
       {/* ── NAV ── */}
       <nav className="forms-nav">
         <div className="forms-nav-left">
           <Image src="/logo.png" alt="AEM" width={120} height={32} className="forms-nav-logo" />
           <div className="forms-nav-divider" />
-          <span className="forms-nav-label">Employee Onboarding Portal</span>
+          <PortalIdentity role="newhire" tone="light" />
         </div>
         <div className="forms-nav-right">
-          <PortalSwitcher />
           <button
             className="forms-nav-back"
             onClick={() => router.push('/newhire/welcome')}

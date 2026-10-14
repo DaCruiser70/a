@@ -1,10 +1,8 @@
 'use client'
 
-import Image from 'next/image'
-import { useRouter, notFound } from 'next/navigation'
+import { notFound } from 'next/navigation'
 import { useEffect, useState, use } from 'react'
-import { useMe } from '@/lib/use-me'
-import PortalSwitcher from '@/components/ui/PortalSwitcher'
+import PortalHeader from '@/components/ui/PortalHeader'
 import { timeAgo } from '@/lib/time-ago'
 
 const TEAL = '#0F4C4A'
@@ -208,7 +206,6 @@ function RevealField({ label, value }: { label: string; value: string | null | u
 }
 
 export default function PayrollNewHireDetail({ params }: { params: Promise<{ id: string }> }) {
-  const router = useRouter()
   const { id } = use(params)
 
   const [detail, setDetail]         = useState<HireDetail | null>(null)
@@ -222,8 +219,6 @@ export default function PayrollNewHireDetail({ params }: { params: Promise<{ id:
   const [assignError, setAssignError]         = useState('')
   const [toast, setToast]                     = useState('')
   const [downloading, setDownloading]         = useState<string | null>(null)
-  const { me } = useMe()
-  const displayName = me?.name ?? ''
 
   function showToast(msg: string) {
     setToast(msg)
@@ -240,11 +235,6 @@ export default function PayrollNewHireDetail({ params }: { params: Promise<{ id:
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [id])
-
-  async function handleSignOut() {
-    await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {})
-    window.location.href = '/login'
-  }
 
   async function approveForm(formId: string) {
     setSaving(formId)
@@ -372,7 +362,7 @@ export default function PayrollNewHireDetail({ params }: { params: Promise<{ id:
     : null
 
   return (
-    <div style={{ minHeight: '100vh', background: '#F5F4F1', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+    <div data-portal="payroll" style={{ minHeight: '100vh', background: '#F5F4F1', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
 
       {toast && (
         <div style={{
@@ -399,49 +389,7 @@ export default function PayrollNewHireDetail({ params }: { params: Promise<{ id:
         />
       )}
 
-      {/* ── NAV ── */}
-      <nav style={{
-        background: TEAL, borderBottom: '1px solid rgba(255,255,255,0.08)',
-        padding: '0 1.5rem', height: '60px',
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        position: 'sticky', top: 0, zIndex: 50,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-          <Image src="/logo.png" alt="AEM" width={100} height={26} style={{ filter: 'brightness(0) invert(1)', opacity: 0.9 }} />
-          <div style={{ width: '1px', height: '20px', background: 'rgba(255,255,255,0.18)' }} />
-          <span style={{ fontSize: '13px', color: 'rgba(255,255,255,0.6)', fontWeight: 500 }}>
-            Payroll Portal
-          </span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <button
-            onClick={() => router.push('/payroll/dashboard')}
-            style={{
-              fontSize: '12px', color: 'rgba(255,255,255,0.6)', background: 'none',
-              border: '1px solid rgba(255,255,255,0.18)', borderRadius: '7px',
-              padding: '5px 11px', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 500,
-            }}
-          >
-            ← Dashboard
-          </button>
-          <PortalSwitcher tone="dark" />
-          {displayName && (
-            <span style={{ fontSize: '13px', color: 'rgba(255,255,255,0.75)', fontWeight: 500 }}>{displayName}</span>
-          )}
-          <button
-            onClick={handleSignOut}
-            style={{
-              display: 'flex', alignItems: 'center', gap: '5px',
-              padding: '5px 11px', borderRadius: '7px',
-              border: '1px solid rgba(255,255,255,0.18)',
-              background: 'rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.6)',
-              cursor: 'pointer', fontSize: '12px', fontFamily: 'inherit', fontWeight: 500,
-            }}
-          >
-            Sign out
-          </button>
-        </div>
-      </nav>
+      <PortalHeader portal="payroll" back={{ href: '/payroll/dashboard', label: 'Dashboard' }} />
 
       {/* ── HERO ── */}
       <div style={{

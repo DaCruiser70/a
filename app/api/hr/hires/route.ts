@@ -5,6 +5,8 @@ import { requireRole } from '@/lib/roles'
 import { rateLimit, rateLimitKey } from '@/lib/rate-limit'
 import { z } from 'zod'
 import { computeHireStatus } from '@/lib/hire-status'
+import { queueNotification, appUrl } from '@/lib/notify'
+import { planChip, todayIso } from '@/lib/manager-plan'
 import type { NewHireRow } from '@/types'
 
 function generateTempPassword(): string {
@@ -52,6 +54,13 @@ export async function GET() {
       ])
     : [{ data: [] }, { data: [] }, { data: [] }, { data: [] }]
 
+  // One batched query for every listed hire's manager plan (no per-row lookups)
+  const { data: planRows } = hireIds.length
+    ? await admin.from('manager_plans').select('newhire_id, status, due_date').in('newhire_id', hireIds)
+    : { data: [] }
+  const planMap = Object.fromEntries((planRows ?? []).map(r => [r.newhire_id, r]))
+  const today   = todayIso()
+
   const piMap = Object.fromEntries((piRows.data ?? []).map(r => [r.user_id, r]))
   const biMap = Object.fromEntries((biRows.data ?? []).map(r => [r.user_id, r]))
   const siMap = Object.fromEntries((siRows.data ?? []).map(r => [r.user_id, r]))
@@ -82,6 +91,7 @@ export async function GET() {
       days:              Math.max(0, days),
       last_submitted_at,
       office_location:   p.office_location ?? null,
+      plan_chip:         planChip(planMap[p.id], today),
     }
   })
 
@@ -197,11 +207,38 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Failed to set up profile. Please try again.' }, { status: 500 })
   }
 
+  // Ask the reporting manager for an onboarding plan, due on the hire's form deadline
+  const { error: planError } = await admin.from('manager_plans').insert({
+    newhire_id: newUser.user.id,
+    manager_id: manager.id,
+    status:     'requested',
+    due_date:   formDeadline,
+  })
+
+  if (planError) {
+    console.error(`[hires] manager plan insert failed (code ${planError.code})`)
+    // Same orphan cleanup as above: the profile row goes with the auth user
+    await admin.auth.admin.deleteUser(newUser.user.id)
+    return NextResponse.json({ error: 'Failed to set up the manager plan. Please try again.' }, { status: 500 })
+  }
+
   await admin.from('audit_log').insert({
     user_id:      newUser.user.id,
     action_type:  'navy',
     message:      '<strong>HR</strong> created the onboarding account',
     performed_by: user.id,
+  })
+
+  await queueNotification({
+    template:  'manager_plan_requested',
+    to:        manager.email,
+    dedupeKey: `manager_plan_requested:${newUser.user.id}:${manager.id}`,
+    payload:   {
+      newhireId: newUser.user.id,
+      managerId: manager.id,
+      hireName:  name,
+      link:      appUrl(`/manager/newhire/${newUser.user.id}`),
+    },
   })
 
   return NextResponse.json({ ok: true, id: newUser.user.id, tempPassword })

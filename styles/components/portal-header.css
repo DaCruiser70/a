@@ -1,0 +1,65 @@
+/* ══════════════════════════════════════════════
+   SHARED PORTAL HEADER — manager, stakeholder, payroll
+   Height, padding and the white-on-colour controls match the bars it
+   replaced; the background is each portal's accent token.
+   Text contrast on the header colour: name (white 75%) navy 7.10:1,
+   teal 6.26:1, violet 6.71:1; button text (white 80% on its 7% fill)
+   navy 6.55:1, teal 5.80:1, violet 6.24:1.
+══════════════════════════════════════════════ */
+
+.portal-header {
+  background: var(--portal-accent);
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  padding: 0 1.5rem; height: 60px; box-sizing: border-box;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  position: sticky; top: 0; z-index: 50;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+.ph-left  { display: flex; align-items: center; gap: 14px; min-width: 0; flex: 1 1 auto; }
+.ph-right { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+
+/* Logo: the JPEG sits on a white rounded badge */
+.ph-logo-link {
+  display: inline-flex; align-items: center; flex-shrink: 0;
+  background: #FFFFFF; border-radius: 8px; padding: 6px 10px;
+  text-decoration: none;
+}
+.ph-logo { display: block; width: auto; height: auto; max-height: 28px; }
+.ph-logo-link:focus-visible { outline: 2px solid #FFFFFF; outline-offset: 3px; }
+
+.ph-user { display: flex; align-items: center; gap: 8px; }
+.ph-avatar {
+  width: 30px; height: 30px; border-radius: 50%;
+  background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.2);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700; color: #FFFFFF;
+}
+.ph-name { font-size: 13px; color: rgba(255,255,255,0.75); font-weight: 500; white-space: nowrap; }
+
+.ph-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 11px; border-radius: 7px; min-height: 30px; box-sizing: border-box;
+  border: 1px solid rgba(255,255,255,0.18); background: rgba(255,255,255,0.07);
+  color: rgba(255,255,255,0.8); cursor: pointer; text-decoration: none;
+  font-size: 12px; font-family: inherit; font-weight: 500; white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+}
+.ph-btn svg { width: 13px; height: 13px; flex-shrink: 0; }
+.ph-btn:hover { background: rgba(255,255,255,0.14); color: #FFFFFF; }
+.ph-btn:focus-visible { outline: 2px solid #FFFFFF; outline-offset: 2px; }
+
+@media (max-width: 720px) {
+  .ph-name { display: none; }
+}
+@media (max-width: 560px) {
+  .portal-header { padding: 0 1rem; gap: 8px; }
+  .ph-left  { gap: 8px; }
+  .ph-right { gap: 8px; }
+  .ph-btn-text { display: none; }
+  .ph-btn { padding: 0; width: 34px; height: 34px; justify-content: center; }
+}
+@media (max-width: 420px) {
+  .ph-avatar { display: none; }
+  .ph-logo-link { padding: 5px 8px; }
+}

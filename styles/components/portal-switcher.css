@@ -1,59 +1,94 @@
-/* ── Portal switcher (shown only to accounts with more than one portal) ── */
-.portal-switcher { position: relative; display: inline-flex; }
+/* ══════════════════════════════════════════════
+   PORTAL SWITCHER — segmented control inside the portal header,
+   plus the "Portals" group in the HR sidebar.
+   Shown only to accounts with more than one portal.
 
-.portal-switcher-btn {
-  display: flex; align-items: center; gap: 6px;
-  padding: 5px 11px; border-radius: 7px;
-  font-size: 12px; font-weight: 600; font-family: inherit;
-  cursor: pointer; white-space: nowrap;
-  transition: background 0.15s, border-color 0.15s;
-}
-.portal-switcher-btn svg { width: 13px; height: 13px; flex-shrink: 0; }
-.portal-switcher-btn .portal-switcher-chevron { width: 11px; height: 11px; transition: transform 0.15s; }
-.portal-switcher-btn[aria-expanded="true"] .portal-switcher-chevron { transform: rotate(180deg); }
+   Contrast on the coloured headers (track = header + 14% white):
+     inactive text, white 85%:  navy 5.93:1 · teal 5.32:1 · violet 5.74:1
+     hover text, white on +26%: navy 5.26:1 · teal 4.75:1 · violet 5.13:1
+     current, accent on white:  navy 11.27:1 · teal 9.75:1 · violet 10.62:1
+     focus ring, white on header ≥ 9.75:1
+   Light tone (white headers): inactive #4A4640 8.37:1, focus ring #1B3A6B 11.27:1.
+══════════════════════════════════════════════ */
 
-.portal-switcher-light .portal-switcher-btn {
-  border: 1px solid rgba(27,58,107,0.2); background: rgba(27,58,107,0.05); color: #1B3A6B;
+/* The nav is the horizontal scroll container. Its padding leaves room for the
+   44px hit areas and the focus rings, which would otherwise be clipped. */
+.psw {
+  position: relative;            /* offsetParent for scrolling the current segment into view */
+  min-width: 0; flex: 0 1 auto;
+  overflow-x: auto; overflow-y: hidden;
+  scroll-snap-type: x proximity;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding: 6px 4px;
 }
-.portal-switcher-light .portal-switcher-btn:hover { background: rgba(27,58,107,0.1); }
+.psw::-webkit-scrollbar { display: none; }
 
-.portal-switcher-dark .portal-switcher-btn {
-  border: 1px solid rgba(255,255,255,0.18); background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.8);
+/* One rounded track, never wrapping */
+.psw-track {
+  display: inline-flex; flex-wrap: nowrap; gap: 2px;
+  list-style: none; margin: 0; padding: 3px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.14);
 }
-.portal-switcher-dark .portal-switcher-btn:hover { background: rgba(255,255,255,0.14); }
+.psw-track > li { flex-shrink: 0; scroll-snap-align: start; }
 
-.portal-switcher-btn:focus-visible,
-.portal-switcher-item:focus-visible {
-  outline: 2px solid #C8920A; outline-offset: 2px;
+.psw-seg {
+  position: relative;
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 32px; padding: 0 12px; box-sizing: border-box;
+  border-radius: 999px;
+  font-family: inherit; font-size: 12.5px; font-weight: 600; line-height: 1;
+  color: rgba(255,255,255,0.85);
+  text-decoration: none; white-space: nowrap;
+  transition: background-color 180ms ease, color 180ms ease, box-shadow 180ms ease;
 }
+/* 44px minimum hit area around the 32px visible pill */
+.psw-seg::before { content: ''; position: absolute; left: 0; right: 0; top: -6px; bottom: -6px; }
+.psw-icon { width: 14px; height: 14px; flex-shrink: 0; }
 
-.portal-switcher-menu {
-  position: absolute; top: calc(100% + 8px); right: 0; z-index: 200;
-  width: 240px; max-width: calc(100vw - 32px);
-  background: #fff; border: 1px solid rgba(0,0,0,0.08); border-radius: 12px;
-  box-shadow: 0 12px 32px rgba(0,0,0,0.14);
-  padding: 6px; font-family: inherit;
-}
-.portal-switcher-menu ul { list-style: none; margin: 0; padding: 0; }
-.portal-switcher-menu-title {
-  font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
-  color: #888780; padding: 8px 10px 6px;
-}
+.psw-seg:hover { background: rgba(255,255,255,0.14); color: #FFFFFF; }
 
-.portal-switcher-item {
-  display: flex; align-items: center; justify-content: space-between; gap: 8px;
-  padding: 9px 10px; border-radius: 8px;
-  font-size: 13px; font-weight: 500; color: #1A1916; text-decoration: none;
-}
-.portal-switcher-item:hover { background: rgba(27,58,107,0.06); }
-.portal-switcher-item.current { color: #1B3A6B; font-weight: 600; background: rgba(27,58,107,0.05); }
-
-.portal-switcher-current {
-  font-size: 10px; font-weight: 700; letter-spacing: 0.03em;
-  padding: 2px 7px; border-radius: 100px;
-  color: #C8920A; background: rgba(200,146,10,0.1); border: 1px solid rgba(200,146,10,0.25);
+/* Current: solid white, the portal's accent for text and icon, soft shadow */
+.psw-seg.current,
+.psw-seg.current:hover {
+  background: #FFFFFF;
+  color: var(--portal-accent);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.18), 0 1px 1px rgba(0,0,0,0.08);
 }
 
+.psw-seg:focus-visible { outline: 2px solid #FFFFFF; outline-offset: 2px; }
+
+/* ── Light tone (white headers: onboarding, HR top bar on small screens) ── */
+.psw-light .psw-track { background: rgba(27,58,107,0.06); }
+.psw-light .psw-seg { color: #4A4640; }
+.psw-light .psw-seg:hover { background: rgba(27,58,107,0.08); color: #1a2e25; }
+.psw-light .psw-seg.current { box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 0 0 1px rgba(0,0,0,0.04); }
+.psw-light .psw-seg:focus-visible { outline-color: #1B3A6B; }
+
+@media (prefers-reduced-motion: reduce) {
+  .psw-seg { transition: none; }
+}
+
+/* Below ~480px: icon + short label for the current portal, icon only for the rest
+   (each link keeps its full name as aria-label) */
 @media (max-width: 480px) {
-  .portal-switcher-btn-text { display: none; }
+  .psw-seg:not(.current) { padding: 0 10px; }
+  .psw-seg:not(.current) .psw-label { display: none; }
 }
+
+/* ── Visibility helpers for the HR top bar (the sidebar is hidden at ≤ 768px) ── */
+.psw-below-768 { display: none; }
+@media (max-width: 768px) {
+  .psw-below-768   { display: block; }
+  .hide-below-768  { display: none !important; }
+}
+
+/* ── HR sidebar "Portals" group: existing .hr-nav-item rows and active style ── */
+.hr-sidebar-portals {
+  padding: 0.75rem 0 0.5rem;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+}
+.hr-sidebar-portals .hr-nav-item { min-height: 44px; box-sizing: border-box; }
+.hr-sidebar-portals .hr-nav-item:focus-visible { outline: 2px solid #E8B84B; outline-offset: -2px; }

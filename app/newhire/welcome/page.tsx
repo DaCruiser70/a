@@ -5,7 +5,7 @@ import Image from 'next/image'
 import { useState, useEffect, useRef } from 'react'
 import '../../../styles/pages/welcome.css'
 import { useMe } from '@/lib/use-me'
-import PortalSwitcher from '@/components/ui/PortalSwitcher'
+import { PortalIdentity } from '@/components/ui/PortalName'
 import { FORMS_HOME } from '@/lib/routes'
 
 function getInitials(name: string) {
@@ -114,17 +114,16 @@ export default function WelcomePage() {
   const heroLast  = nameParts.length > 1 ? nameParts[nameParts.length - 1] : ''
 
   return (
-    <div className="welcome-page">
+    <div className="welcome-page" data-portal="newhire">
 
       {/* ── NAV ── */}
       <nav className="welcome-nav">
         <div className="welcome-nav-left">
           <Image src="/logo.png" alt="Advanced Energy Management Ltd" width={120} height={32} className="welcome-nav-logo" />
           <div className="welcome-nav-divider" />
-          <span className="welcome-nav-label">Employee Onboarding Portal</span>
+          <PortalIdentity role="newhire" tone="light" />
         </div>
         <div className="welcome-nav-right">
-          <PortalSwitcher />
           <div className="welcome-nav-user">
             <div className="welcome-nav-avatar">{initials}</div>
             {displayName && <span className="welcome-nav-name">{displayName}</span>}

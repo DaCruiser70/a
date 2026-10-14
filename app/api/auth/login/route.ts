@@ -9,6 +9,7 @@ import { hmacHex } from '@/lib/auth-secrets'
 import { rateLimit, rateLimitKey, getClientIp } from '@/lib/rate-limit'
 import { getOtpRecipients } from '@/lib/otp-recipients'
 import { PENDING_SESSION_COOKIE, PENDING_SESSION_PATH } from '@/lib/otp-session'
+import { landingHref } from '@/lib/portals'
 
 const OTP_TTL_SECONDS = 300
 const WINDOW_SECONDS  = 15 * 60
@@ -78,7 +79,7 @@ export async function POST(request: Request) {
 
   if (roles.length === 1 && roles[0] === 'newhire') {
     // Newhire: session is ready, no OTP needed
-    return NextResponse.json({ role: 'newhire', session: authData.session })
+    return NextResponse.json({ role: 'newhire', session: authData.session, landing: landingHref('newhire', ['newhire']) })
   }
 
   // Everyone else: one-time code. Only its HMAC is stored.

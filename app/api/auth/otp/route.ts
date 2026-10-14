@@ -9,6 +9,7 @@ import {
   signOtpSession, OTP_SESSION_COOKIE, OTP_SESSION_MAX_AGE,
   PENDING_SESSION_COOKIE, PENDING_SESSION_PATH,
 } from '@/lib/otp-session'
+import { landingHref, parseRoles } from '@/lib/portals'
 
 const BodySchema = z.strictObject({
   code: z.string().regex(/^\d{6}$/),
@@ -80,14 +81,18 @@ export async function POST(request: Request) {
   // Write the Supabase session into cookies server-side so the middleware sees
   // it immediately on the next request — no client-side setSession needed.
   const ssrClient = await createClient()
-  const { error: sessionError } = await ssrClient.auth.setSession({
+  const { data: sessionData, error: sessionError } = await ssrClient.auth.setSession({
     access_token:  pending.access_token,
     refresh_token: pending.refresh_token,
   })
-  if (sessionError) {
+  if (sessionError || !sessionData.user || sessionData.user.id !== pending.user_id) {
     clearPending()
     return NextResponse.json({ error: SESSION_EXPIRED }, { status: 401 })
   }
+
+  // Landing portal from server-controlled app_metadata
+  const appMeta = sessionData.user.app_metadata ?? {}
+  const landing = landingHref(appMeta.role, parseRoles(appMeta.roles))
 
   clearPending()
 
@@ -99,5 +104,5 @@ export async function POST(request: Request) {
     maxAge:   OTP_SESSION_MAX_AGE,
   })
 
-  return NextResponse.json({ ok: true })
+  return NextResponse.json({ ok: true, landing })
 }

@@ -1,10 +1,9 @@
 'use client'
 
-import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { useMe } from '@/lib/use-me'
-import PortalSwitcher from '@/components/ui/PortalSwitcher'
+import PortalHeader from '@/components/ui/PortalHeader'
 
 type HireGroup = {
   hire_id: string
@@ -13,10 +12,6 @@ type HireGroup = {
   hire_start_date: string | null
   pending_count: number
   total_count: number
-}
-
-function getInitials(name: string) {
-  return name.split(' ').filter(Boolean).map(n => n[0]).join('').toUpperCase().slice(0, 2)
 }
 
 function HireCard({ hire, onView }: { hire: HireGroup; onView: () => void }) {
@@ -92,69 +87,15 @@ export default function StakeholderDashboard() {
       })
   }, [])
 
-  async function handleSignOut() {
-    await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {})
-    window.location.href = '/login'
-  }
-
   const needsAction       = hires.filter(h => h.pending_count > 0)
   const recentlyCompleted = hires.filter(h => h.pending_count === 0)
   const totalPending      = needsAction.reduce((sum, h) => sum + h.pending_count, 0)
   const totalTasks        = hires.reduce((sum, h) => sum + h.total_count, 0)
 
   return (
-    <div style={{ minHeight: '100vh', background: '#F5F4F1', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+    <div data-portal="stakeholder" style={{ minHeight: '100vh', background: '#F5F4F1', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
 
-      {/* ── NAV ── */}
-      <nav style={{
-        background: '#1B3A6B', borderBottom: '1px solid rgba(255,255,255,0.08)',
-        padding: '0 1.5rem', height: '60px',
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        position: 'sticky', top: 0, zIndex: 50,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-          <Image src="/logo.png" alt="AEM" width={100} height={26} style={{ filter: 'brightness(0) invert(1)', opacity: 0.9 }} />
-          <div style={{ width: '1px', height: '20px', background: 'rgba(255,255,255,0.18)' }} />
-          <span style={{ fontSize: '13px', color: 'rgba(255,255,255,0.6)', fontWeight: 500, letterSpacing: '0.01em' }}>
-            Stakeholder Portal
-          </span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <PortalSwitcher tone="dark" />
-          {displayName && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <div style={{
-                width: '30px', height: '30px', borderRadius: '50%',
-                background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.2)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: '11px', fontWeight: 700, color: '#fff',
-              }}>
-                {getInitials(displayName)}
-              </div>
-              <span style={{ fontSize: '13px', color: 'rgba(255,255,255,0.75)', fontWeight: 500 }}>
-                {displayName}
-              </span>
-            </div>
-          )}
-          <button
-            onClick={handleSignOut}
-            style={{
-              display: 'flex', alignItems: 'center', gap: '5px',
-              padding: '5px 11px', borderRadius: '7px',
-              border: '1px solid rgba(255,255,255,0.18)',
-              background: 'rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.6)',
-              cursor: 'pointer', fontSize: '12px', fontFamily: 'inherit', fontWeight: 500,
-            }}
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ width: '13px', height: '13px' }}>
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-              <polyline points="16 17 21 12 16 7"/>
-              <line x1="21" y1="12" x2="9" y2="12"/>
-            </svg>
-            Sign out
-          </button>
-        </div>
-      </nav>
+      <PortalHeader portal="stakeholder" />
 
       {/* ── HERO ── */}
       <div style={{

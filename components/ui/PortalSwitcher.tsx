@@ -1,104 +1,96 @@
 'use client'
 
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import { usePathname } from 'next/navigation'
 import { useMe } from '@/lib/use-me'
+import { portalForPath } from '@/lib/portals'
+import { themeForHref } from '@/lib/portal-theme'
+import PortalIcon from '@/components/ui/PortalIcon'
+import '../../styles/components/portal-theme.css'
 import '../../styles/components/portal-switcher.css'
 
-// Lets an account with more than one role move between its portals.
-// The OTP session is bound to the user, not the portal, so switching never asks for a second code.
+// Portal switcher for accounts with more than one portal. Every entry is a plain link in natural
+// tab order — no menu. The OTP session is bound to the user, not the portal, so switching never asks
+// for a second code; a portal that does need one (e.g. HR without an otp_session) goes through the
+// middleware's existing redirect.
+//
+//   variant="segmented"  a segmented control inside a portal header, right after the logo
+//                        (tone="dark" on coloured headers, tone="light" on white ones)
+//   variant="sidebar"    a "Portals" group of compact rows for the HR sidebar
+//
 // Renders nothing for single-portal accounts (and while loading, or if /api/me fails).
-export default function PortalSwitcher({ tone = 'light' }: { tone?: 'light' | 'dark' }) {
+export default function PortalSwitcher({
+  variant = 'segmented', tone = 'dark', className = '',
+}: {
+  variant?:   'segmented' | 'sidebar'
+  tone?:      'dark' | 'light'
+  className?: string
+}) {
   const { me } = useMe()
   const pathname = usePathname()
-  const [open, setOpen] = useState(false)
-  const rootRef   = useRef<HTMLDivElement>(null)
-  const buttonRef = useRef<HTMLButtonElement>(null)
-  const itemRefs  = useRef<(HTMLAnchorElement | null)[]>([])
-  const menuId    = useId()
+  const navRef = useRef<HTMLElement>(null)
 
+  const portals = (me?.portals ?? [])
+    .map(p => ({ ...p, theme: themeForHref(p.href) }))
+    .filter((p): p is typeof p & { theme: NonNullable<typeof p.theme> } => !!p.theme)
+  const currentRole = portalForPath(pathname)?.role ?? null
+  const visible = portals.length >= 2
+
+  // On narrow headers the track scrolls; bring the current segment into view without moving the page
   useEffect(() => {
-    if (!open) return
-    function onPointerDown(e: PointerEvent) {
-      if (!rootRef.current?.contains(e.target as Node)) setOpen(false)
+    if (!visible || variant !== 'segmented') return
+    const nav = navRef.current
+    const current = nav?.querySelector<HTMLElement>('[aria-current="page"]')
+    if (nav && current && nav.scrollWidth > nav.clientWidth) {
+      nav.scrollLeft = Math.max(0, current.offsetLeft - 8)
     }
-    document.addEventListener('pointerdown', onPointerDown)
-    return () => document.removeEventListener('pointerdown', onPointerDown)
-  }, [open])
+  }, [visible, variant, currentRole])
 
-  useEffect(() => {
-    if (open) itemRefs.current[0]?.focus()
-  }, [open])
+  if (!visible) return null
 
-  const portals = me?.portals ?? []
-  if (portals.length < 2) return null
-
-  // The current portal is the one whose first path segment matches the page
-  const section = `/${pathname.split('/')[1] ?? ''}`
-  const isCurrent = (href: string) => href === section || href.startsWith(`${section}/`)
-
-  function close(returnFocus: boolean) {
-    setOpen(false)
-    if (returnFocus) buttonRef.current?.focus()
-  }
-
-  function onMenuKeyDown(e: React.KeyboardEvent) {
-    const items = itemRefs.current.filter((el): el is HTMLAnchorElement => !!el)
-    const index = items.indexOf(document.activeElement as HTMLAnchorElement)
-    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(true) }
-    else if (e.key === 'ArrowDown') { e.preventDefault(); items[(index + 1) % items.length]?.focus() }
-    else if (e.key === 'ArrowUp')   { e.preventDefault(); items[(index - 1 + items.length) % items.length]?.focus() }
-    else if (e.key === 'Home')      { e.preventDefault(); items[0]?.focus() }
-    else if (e.key === 'End')       { e.preventDefault(); items[items.length - 1]?.focus() }
-    else if (e.key === 'Tab')       { close(false) }
+  if (variant === 'sidebar') {
+    return (
+      <nav className="hr-sidebar-portals" aria-label="Your portals">
+        <div className="hr-nav-section">Portals</div>
+        {portals.map(p => {
+          const current = p.theme.role === currentRole
+          return (
+            <a
+              key={p.href}
+              href={p.href}
+              className={`hr-nav-item${current ? ' active' : ''}`}
+              aria-current={current ? 'page' : undefined}
+            >
+              <PortalIcon role={p.theme.role} />
+              {p.label}
+            </a>
+          )
+        })}
+      </nav>
+    )
   }
 
   return (
-    <div className={`portal-switcher portal-switcher-${tone}`} ref={rootRef}>
-      <button
-        ref={buttonRef}
-        type="button"
-        className="portal-switcher-btn"
-        aria-haspopup="true"
-        aria-expanded={open}
-        aria-controls={menuId}
-        aria-label="Switch portal"
-        onClick={() => setOpen(v => !v)}
-        onKeyDown={e => { if (e.key === 'ArrowDown' && !open) { e.preventDefault(); setOpen(true) } }}
-      >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-          <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
-          <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
-        </svg>
-        <span className="portal-switcher-btn-text">Switch portal</span>
-        <svg className="portal-switcher-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
-          <polyline points="6 9 12 15 18 9"/>
-        </svg>
-      </button>
-
-      {open && (
-        <div id={menuId} className="portal-switcher-menu" onKeyDown={onMenuKeyDown}>
-          <div className="portal-switcher-menu-title">Your portals</div>
-          <ul>
-            {portals.map((p, i) => {
-              const current = isCurrent(p.href)
-              return (
-                <li key={p.href}>
-                  <a
-                    ref={el => { itemRefs.current[i] = el }}
-                    href={p.href}
-                    className={`portal-switcher-item${current ? ' current' : ''}`}
-                    aria-current={current ? 'page' : undefined}
-                  >
-                    <span>{p.label}</span>
-                    {current && <span className="portal-switcher-current">Current</span>}
-                  </a>
-                </li>
-              )
-            })}
-          </ul>
-        </div>
-      )}
-    </div>
+    <nav ref={navRef} className={`psw psw-${tone} ${className}`.trim()} aria-label="Your portals">
+      <ul className="psw-track">
+        {portals.map(p => {
+          const current = p.theme.role === currentRole
+          return (
+            <li key={p.href}>
+              <a
+                href={p.href}
+                className={`psw-seg${current ? ' current' : ''}`}
+                data-portal={p.theme.role}
+                aria-current={current ? 'page' : undefined}
+                aria-label={p.label}
+              >
+                <PortalIcon role={p.theme.role} className="psw-icon" />
+                <span className="psw-label">{p.theme.short}</span>
+              </a>
+            </li>
+          )
+        })}
+      </ul>
+    </nav>
   )
 }

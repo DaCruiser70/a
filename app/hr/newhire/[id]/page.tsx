@@ -7,6 +7,9 @@ import { timeAgo } from '@/lib/time-ago'
 import { groupStakeholderTasks } from '@/lib/stakeholder-groups'
 import { SafeMessage } from '@/lib/safe-html'
 import PortalSwitcher from '@/components/ui/PortalSwitcher'
+import { PortalIdentity } from '@/components/ui/PortalName'
+import ManagerPlanCard from '@/components/hr/ManagerPlanCard'
+import Link from 'next/link'
 import type { NewHireDetail, FormStatus, HrNote, AuditEntry, NewhireDocument, StakeholderTask } from '@/types'
 
 type HireDetail = NewHireDetail & {
@@ -412,7 +415,7 @@ export default function HRNewHirePage() {
   const displayedAudit = showAllAudit ? auditLog : auditLog.slice(0, 6)
 
   return (
-    <div className="hr-detail-page">
+    <div className="hr-detail-page" data-portal="hr">
 
       {/* ── SIDEBAR ── */}
       <aside className="hr-sidebar">
@@ -420,6 +423,7 @@ export default function HRNewHirePage() {
           <div className="hr-sidebar-logo-mark">AEM</div>
           <div className="hr-sidebar-logo-label">HR Portal</div>
         </div>
+        <PortalSwitcher variant="sidebar" />
         <nav className="hr-sidebar-nav">
           <div className="hr-nav-section">Main</div>
           <div className="hr-nav-item" onClick={() => router.push('/hr/dashboard')}>
@@ -436,6 +440,13 @@ export default function HRNewHirePage() {
             </svg>
             New Hire Record
           </div>
+          <Link href="/hr/outbox" className="hr-nav-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <path d="M22 12h-6l-2 3h-4l-2-3H2"/>
+              <path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>
+            </svg>
+            Queued notifications
+          </Link>
           <div className="hr-nav-section">Settings</div>
           <div className="hr-nav-item">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -467,6 +478,7 @@ export default function HRNewHirePage() {
         {/* Topbar — Email only, no manual status buttons */}
         <div className="hr-detail-topbar">
           <div className="hr-detail-topbar-left">
+            <PortalIdentity role="hr" tone="light" hrTopbar />
             <button className="hr-detail-back" onClick={() => router.push('/hr/dashboard')}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                 <polyline points="15 18 9 12 15 6"/>
@@ -482,7 +494,6 @@ export default function HRNewHirePage() {
             </div>
           </div>
           <div className="hr-detail-topbar-right">
-            <PortalSwitcher />
             <button className="hr-detail-action-btn email" onClick={() => { window.location.href=`mailto:${hire.email}` }}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                 <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
@@ -1124,6 +1135,15 @@ export default function HRNewHirePage() {
                 </div>
               )}
             </div>
+
+            {/* ── Manager Plan ── */}
+            <ManagerPlanCard
+              hireId={hireId}
+              onManagerChanged={m => {
+                setHire(h => h ? { ...h, reporting_manager_name: m.name, reporting_manager_email: m.email } : h)
+                addAuditLocal('navy', '<strong>HR</strong> changed the reporting manager for the onboarding plan')
+              }}
+            />
 
           </div>
 

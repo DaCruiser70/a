@@ -1,0 +1,41 @@
+/* ── Shared dialog (matches the HR detail flag / reject modals) ── */
+.ui-modal-overlay {
+  position: fixed; inset: 0; z-index: 1000;
+  background: rgba(0,0,0,0.55);
+  display: flex; align-items: center; justify-content: center; padding: 1rem;
+}
+.ui-modal {
+  background: #fff; border-radius: 16px; padding: 28px 28px 24px;
+  width: 100%; max-width: 440px; max-height: calc(100vh - 2rem); overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+  font-family: sans-serif; outline: none;
+}
+.ui-modal-head  { margin-bottom: 18px; }
+.ui-modal-title { font-weight: 700; font-size: 17px; color: #1A1916; margin-bottom: 6px; }
+.ui-modal-desc  { font-size: 13px; color: #7A7875; line-height: 1.5; }
+
+.ui-modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 16px; flex-wrap: wrap; }
+
+.ui-btn-cancel {
+  padding: 8px 18px; border-radius: 8px; border: 1.5px solid rgba(0,0,0,0.12);
+  background: #fff; cursor: pointer; font-family: sans-serif; font-size: 13px; color: #4A4640;
+}
+.ui-btn-primary {
+  padding: 8px 18px; border-radius: 8px; border: none;
+  background: #1B3A6B; color: #fff; cursor: pointer;
+  font-family: sans-serif; font-size: 13px; font-weight: 600;
+}
+.ui-btn-primary:disabled { background: rgba(27,58,107,0.35); cursor: not-allowed; }
+.ui-btn-cancel:disabled  { opacity: 0.6; cursor: not-allowed; }
+
+.ui-btn-cancel:focus-visible,
+.ui-btn-primary:focus-visible { outline: 2px solid #C8920A; outline-offset: 2px; }
+
+.ui-modal-error {
+  margin-top: 4px; padding: 9px 12px; border-radius: 8px; font-size: 12px; color: #C0392B;
+  background: rgba(231,76,60,0.08); border: 1px solid rgba(231,76,60,0.25);
+}
+
+@media (max-width: 480px) {
+  .ui-modal { padding: 22px 18px 18px; }
+}

@@ -1,0 +1,226 @@
+/* ══════════════════════════════════════════════
+   MANAGER PORTAL — dashboard + onboarding plan form
+   Nav and hero follow the stakeholder portal; the plan form
+   builds on form-pages.css (banking form layout).
+   Colours come from the Manager tokens (deep violet) in
+   styles/components/portal-theme.css via data-portal="manager".
+   Green / amber / red status colours are left as they are.
+══════════════════════════════════════════════ */
+
+/* ── PAGE (header: components/ui/PortalHeader.tsx) ── */
+.mgr-page { min-height: 100vh; background: #F5F4F1; font-family: system-ui, -apple-system, sans-serif; }
+
+/* ── HERO (stakeholder portal) ── */
+.mgr-hero {
+  background: linear-gradient(135deg, var(--portal-hero-from, #1B3A6B) 0%, var(--portal-hero-to, #0f2449) 100%);
+  padding: 2.5rem 1.5rem; position: relative; overflow: hidden;
+}
+.mgr-hero-orb {
+  position: absolute; top: -60px; right: -60px; width: 300px; height: 300px;
+  border-radius: 50%; background: rgba(255,255,255,0.04); pointer-events: none;
+}
+.mgr-hero-inner { max-width: 960px; margin: 0 auto; position: relative; }
+.mgr-hero-tag {
+  display: inline-flex; align-items: center; gap: 6px; margin-bottom: 4px;
+  font-size: 11px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase;
+  color: rgba(255,255,255,0.5);
+}
+.mgr-hero-dot  { width: 5px; height: 5px; border-radius: 50%; display: inline-block; }
+.mgr-hero h1   { font-size: 1.75rem; font-weight: 700; color: #fff; margin: 0 0 6px; letter-spacing: -0.01em; }
+.mgr-hero p    { font-size: 14px; color: rgba(255,255,255,0.55); margin: 0; }
+
+/* ── BODY ── */
+.mgr-body { max-width: 960px; margin: 0 auto; padding: 2rem 1.5rem; }
+.mgr-section { margin-bottom: 2rem; }
+.mgr-section-title {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase;
+  color: #888780; margin-bottom: 12px;
+}
+.mgr-section-count {
+  font-size: 10px; padding: 1px 7px; border-radius: 100px;
+  background: var(--portal-soft, rgba(0,0,0,0.05)); color: var(--portal-accent, #888780); letter-spacing: 0.02em;
+}
+.mgr-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); }
+
+/* ── HIRE CARD (stakeholder HireCard) ── */
+.mgr-card {
+  background: #fff; border-radius: 14px; border: 1px solid rgba(0,0,0,0.07);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.05); overflow: hidden; display: flex; flex-direction: column;
+}
+.mgr-card.needs-action { border-color: rgba(200,146,10,0.25); }
+.mgr-card.overdue      { border-color: rgba(231,76,60,0.3); }
+.mgr-card-body  { padding: 1.25rem 1.25rem 1rem; flex: 1; }
+.mgr-card-top   { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.mgr-card-name  { font-weight: 700; font-size: 15px; color: #1A1916; margin-bottom: 2px; overflow-wrap: anywhere; }
+.mgr-card-role  { font-size: 12px; color: #888780; }
+.mgr-card-meta  { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 11px; color: #B0ABA4; margin-top: 4px; }
+.mgr-card-badges { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; flex-shrink: 0; }
+.mgr-card-foot  { border-top: 1px solid rgba(0,0,0,0.06); padding: 0.75rem 1.25rem; }
+
+.mgr-progress       { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+.mgr-progress-bar   { flex: 1; height: 6px; border-radius: 100px; background: rgba(0,0,0,0.06); overflow: hidden; }
+.mgr-progress-fill  { height: 100%; border-radius: 100px; background: var(--portal-accent, #1B3A6B); }
+.mgr-progress-pct   { font-size: 12px; font-weight: 700; color: var(--portal-accent, #1B3A6B); min-width: 36px; text-align: right; }
+.mgr-progress-label { font-size: 11px; color: #888780; margin-top: 6px; }
+
+.mgr-due { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px; color: #4A4640; margin-top: 10px; }
+.mgr-due svg { width: 12px; height: 12px; color: #888780; }
+
+.mgr-open-btn {
+  width: 100%; padding: 8px 16px; border-radius: 8px; border: none; cursor: pointer;
+  font-size: 13px; font-weight: 600; font-family: inherit;
+  background: var(--portal-accent, #1B3A6B); color: #fff; text-align: center; text-decoration: none; display: block;
+  transition: background 0.15s;
+}
+.mgr-open-btn:hover { background: var(--portal-hover, #0f2449); }
+.mgr-open-btn.quiet { background: var(--portal-soft, rgba(0,0,0,0.04)); color: var(--portal-accent, #4A4640); }
+.mgr-open-btn.quiet:hover { box-shadow: inset 0 0 0 1.5px var(--portal-accent, #4A4640); }
+
+.mgr-more-btn {
+  margin: 16px auto 0; display: block; padding: 8px 18px; border-radius: 8px;
+  border: 1.5px solid var(--portal-accent, #1B3A6B); background: #fff; color: var(--portal-accent, #1B3A6B);
+  font-size: 12px; font-weight: 600; font-family: inherit; cursor: pointer;
+}
+.mgr-more-btn:disabled { opacity: 0.6; cursor: default; }
+
+/* ── STATES ── */
+.mgr-empty {
+  background: #fff; border-radius: 14px; border: 1px solid rgba(0,0,0,0.07);
+  padding: 2.5rem 2rem; text-align: center; box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+}
+.mgr-empty-icon  { font-size: 28px; margin-bottom: 10px; }
+.mgr-empty-title { font-weight: 600; font-size: 15px; color: #1A1916; margin-bottom: 6px; }
+.mgr-empty-text  { font-size: 13px; color: #888780; line-height: 1.5; }
+
+.mgr-error {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  padding: 12px 16px; border-radius: 12px; font-size: 13px; color: #7A1B12;
+  background: rgba(231,76,60,0.08); border: 1.5px solid rgba(231,76,60,0.3);
+}
+.mgr-error button {
+  padding: 5px 12px; border-radius: 7px; border: 1px solid rgba(192,57,43,0.35);
+  background: #fff; color: #C0392B; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit;
+}
+
+.mgr-skeleton {
+  border-radius: 14px; background: linear-gradient(90deg, #EEECE8 25%, #E4E1DB 50%, #EEECE8 75%);
+  background-size: 200% 100%; animation: mgrShimmer 1.2s ease-in-out infinite;
+}
+.mgr-skeleton.card { height: 190px; }
+.mgr-skeleton.line { height: 14px; border-radius: 6px; margin-bottom: 10px; }
+.mgr-skeleton.block { height: 220px; border-radius: 20px; margin-bottom: 2rem; }
+@keyframes mgrShimmer { from { background-position: 200% 0 } to { background-position: -200% 0 } }
+@media (prefers-reduced-motion: reduce) { .mgr-skeleton { animation: none; } }
+
+/* ── FOCUS ── accent ring on light surfaces (9:1+ on white), white ring on the violet nav / header */
+.mgr-open-btn:focus-visible, .mgr-more-btn:focus-visible,
+.mgr-error button:focus-visible, .plan-option input:focus-visible + span,
+.plan-textarea:focus-visible, .form-btn-primary:focus-visible, .form-btn-secondary:focus-visible,
+.form-input:focus-visible, .plan-summary a:focus-visible {
+  outline: 3px solid var(--portal-accent, #1B3A6B); outline-offset: 2px;
+}
+.form-page-back:focus-visible {
+  outline: 3px solid #FFFFFF; outline-offset: 2px;
+}
+
+/* ── PLAN FORM (on top of form-pages.css) ── */
+.plan-textarea {
+  width: 100%; min-height: 96px; resize: vertical;
+  padding: 11px 14px; background: #fff; border: 1.5px solid #E2DED8; border-radius: 10px;
+  font-size: 14px; line-height: 1.55; color: #1a2e25; font-family: var(--font-sans); outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+}
+.plan-textarea::placeholder { color: #C0BAB4; }
+.plan-textarea:focus { border-color: var(--portal-accent, #1B3A6B); box-shadow: 0 0 0 3px var(--portal-soft, rgba(27,58,107,0.08)); background: #fff; }
+.plan-textarea.invalid, .form-input.invalid { border-color: #E74C3C; }
+
+.plan-counter { font-size: 11px; color: #B0ABA4; text-align: right; }
+.plan-counter.near { color: #C8920A; }
+
+.plan-field-error { font-size: 12px; color: #C0392B; display: flex; align-items: center; gap: 5px; }
+.plan-field-error svg { width: 12px; height: 12px; flex-shrink: 0; }
+
+fieldset.plan-fieldset { border: none; margin: 0; padding: 0; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+fieldset.plan-fieldset legend { padding: 0; margin-bottom: 8px; }
+
+.plan-options { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 170px), 1fr)); gap: 10px; }
+.plan-option { position: relative; display: block; cursor: pointer; }
+.plan-option input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.plan-option > span {
+  display: flex; align-items: center; gap: 10px; padding: 11px 14px; border-radius: 10px;
+  border: 1.5px solid #E2DED8; background: #fff; font-size: 13px; color: #1a2e25; font-weight: 500;
+  transition: border-color 0.15s, background 0.15s;
+}
+.plan-option:hover > span { border-color: #C0BAB4; }
+.plan-option input:checked + span { border-color: var(--portal-accent, #1B3A6B); background: var(--portal-soft, rgba(27,58,107,0.04)); color: var(--portal-accent, #1a2e25); font-weight: 600; }
+.plan-option.invalid > span { border-color: #E74C3C; }
+
+/* Box / dot drawn inside the span so the checked state is a shape, not only a colour */
+.plan-mark {
+  width: 18px; height: 18px; flex-shrink: 0; border: 2px solid #C0BAB4; background: #fff;
+  display: flex; align-items: center; justify-content: center; color: #fff;
+}
+.plan-mark.box   { border-radius: 5px; }
+.plan-mark.round { border-radius: 50%; }
+.plan-mark svg   { width: 11px; height: 11px; display: none; }
+.plan-mark .dot  { width: 8px; height: 8px; border-radius: 50%; background: var(--portal-accent, #1B3A6B); display: none; }
+.plan-option input:checked + span .plan-mark.box   { background: var(--portal-accent, #1B3A6B); border-color: var(--portal-accent, #1B3A6B); }
+.plan-option input:checked + span .plan-mark.box svg { display: block; }
+.plan-option input:checked + span .plan-mark.round { border-color: var(--portal-accent, #1B3A6B); }
+.plan-option input:checked + span .plan-mark .dot  { display: block; }
+
+.plan-reveal {
+  grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem 1.5rem;
+  padding: 1.25rem; border-radius: 12px; background: var(--portal-soft, rgba(27,58,107,0.03)); border: 1px solid var(--portal-accent, rgba(27,58,107,0.1));
+}
+.plan-reveal-title { grid-column: 1 / -1; font-size: 12px; font-weight: 600; color: var(--portal-accent, #1B3A6B); }
+
+.plan-summary {
+  display: flex; gap: 12px; align-items: flex-start; padding: 14px 18px; border-radius: 14px;
+  background: rgba(231,76,60,0.08); border: 1.5px solid rgba(231,76,60,0.3); color: #7A1B12; font-size: 13px;
+}
+.plan-summary ul { margin: 6px 0 0; padding-left: 18px; }
+.plan-summary a  { color: #7A1B12; }
+.plan-summary svg { width: 18px; height: 18px; flex-shrink: 0; color: #E74C3C; margin-top: 1px; }
+
+.plan-saved {
+  display: flex; gap: 10px; align-items: center; padding: 12px 16px; border-radius: 12px;
+  background: rgba(13,92,70,0.08); border: 1px solid rgba(13,92,70,0.2); color: #0D5C46; font-size: 13px; font-weight: 600;
+}
+.plan-saved svg { width: 16px; height: 16px; flex-shrink: 0; }
+
+.plan-header-badges { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 1rem; }
+
+/* ── MANAGER TOKENS over the shared form-page (banking form) styles ── */
+[data-portal="manager"] .form-page-header {
+  background: linear-gradient(135deg, var(--portal-hero-from) 0%, var(--portal-hero-to) 60%, var(--portal-hero-from) 100%);
+}
+[data-portal="manager"] .form-page-header-orb {
+  background: radial-gradient(circle, rgba(124,86,190,0.4) 0%, transparent 70%);
+}
+[data-portal="manager"] .form-btn-primary {
+  background: var(--portal-accent); box-shadow: 0 4px 16px rgba(76,42,133,0.25);
+}
+[data-portal="manager"] .form-btn-primary:hover { background: var(--portal-hover); box-shadow: 0 8px 24px rgba(76,42,133,0.35); }
+[data-portal="manager"] .form-btn-primary:disabled { opacity: 0.6; cursor: default; transform: none; }
+[data-portal="manager"] .form-input:focus {
+  border-color: var(--portal-accent); box-shadow: 0 0 0 3px var(--portal-soft); background: #fff;
+}
+[data-portal="manager"] .form-section-icon.navy { background: var(--portal-soft); border-color: rgba(76,42,133,0.2); }
+[data-portal="manager"] .form-section-icon.navy svg { stroke: var(--portal-accent); }
+/* The neutral "Requested" chip takes the Manager colour; draft / submitted / overdue keep their status colours */
+[data-portal="manager"] .plan-badge.requested:not(.on-dark) {
+  color: var(--portal-accent); background: var(--portal-soft); border-color: rgba(76,42,133,0.3);
+}
+
+/* ── RESPONSIVE ── */
+@media (max-width: 700px) {
+  .plan-reveal { grid-template-columns: 1fr; }
+  .form-action-btns { flex-wrap: wrap; }
+}
+@media (max-width: 560px) {
+  .mgr-hero { padding: 2rem 1rem; }
+  .mgr-hero h1 { font-size: 1.4rem; }
+  .mgr-body { padding: 1.5rem 1rem; }
+}
