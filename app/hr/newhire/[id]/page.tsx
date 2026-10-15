@@ -9,6 +9,10 @@ import { SafeMessage } from '@/lib/safe-html'
 import PortalSwitcher from '@/components/ui/PortalSwitcher'
 import { PortalIdentity } from '@/components/ui/PortalName'
 import ManagerPlanCard from '@/components/hr/ManagerPlanCard'
+import ClearanceReviewRow from '@/components/hr/ClearanceReviewRow'
+import ClearanceTrackerCard from '@/components/hr/ClearanceTrackerCard'
+import { ClearanceChipBadge } from '@/components/ui/PlanBadges'
+import type { HrClearanceView } from '@/lib/clearance-server'
 import Link from 'next/link'
 import type { NewHireDetail, FormStatus, HrNote, AuditEntry, NewhireDocument, StakeholderTask } from '@/types'
 
@@ -148,6 +152,9 @@ export default function HRNewHirePage() {
   const [fetchingNote, setFetchingNote]         = useState<string | null>(null)
   const [expandedGroups, setExpandedGroups]     = useState<Record<string, boolean>>({})
   const [downloading, setDownloading]           = useState<string | null>(null)
+  // Security clearance: tracked apart from the four forms (never in formStatuses or the 4/4 count)
+  const [clearance, setClearance]               = useState<HrClearanceView | null>(null)
+  const [clearanceVersion, setClearanceVersion] = useState(0)
 
   useEffect(() => {
     fetch(`/api/hr/hires/${hireId}`)
@@ -172,6 +179,14 @@ export default function HRNewHirePage() {
       .then(data => setHireDocuments(data.documents ?? []))
       .catch(() => {})
   }, [hireId])
+
+  useEffect(() => {
+    if (!hireId) return
+    fetch(`/api/hr/hires/${hireId}/clearance`, { cache: 'no-store' })
+      .then(r => r.ok ? r.json() : null)
+      .then((data: HrClearanceView | null) => setClearance(data))
+      .catch(() => {})
+  }, [hireId, clearanceVersion])
 
   useEffect(() => {
     if (!hireId) return
@@ -216,6 +231,10 @@ export default function HRNewHirePage() {
     setAuditLog(prev => [entry, ...prev].slice(0, 20))
   }
 
+  function formName(formId: string) {
+    return formId === 'clearance' ? 'Security Clearance' : FORMS.find(f => f.id === formId)?.name
+  }
+
   async function handleFormApprove(formId: string) {
     const res = await fetch(`/api/hr/hires/${hireId}/status`, {
       method: 'PATCH',
@@ -224,10 +243,11 @@ export default function HRNewHirePage() {
     })
     if (!res.ok) { showToast('Update failed'); return }
     const { overallStatus } = await res.json()
-    setFormStatuses(prev => ({ ...prev, [formId]: 'approved' }))
+    if (formId === 'clearance') setClearanceVersion(v => v + 1)
+    else setFormStatuses(prev => ({ ...prev, [formId]: 'approved' }))
     if (overallStatus) setHire(h => h ? { ...h, status: overallStatus } : h)
-    addAuditLocal('green', `<strong>HR</strong> approved <strong>${FORMS.find(f=>f.id===formId)?.name}</strong>`)
-    showToast(`${FORMS.find(f=>f.id===formId)?.name} approved`)
+    addAuditLocal('green', `<strong>HR</strong> approved <strong>${formName(formId)}</strong>`)
+    showToast(`${formName(formId)} approved`)
   }
 
   function openFlagModal(formId: string) {
@@ -246,11 +266,14 @@ export default function HRNewHirePage() {
     })
     if (!res.ok) { showToast('Update failed'); return }
     const { overallStatus } = await res.json()
-    setFormStatuses(prev => ({ ...prev, [formId]: 'flagged' }))
-    setFlagReasons(prev => ({ ...prev, [formId]: reason }))
+    if (formId === 'clearance') setClearanceVersion(v => v + 1)
+    else {
+      setFormStatuses(prev => ({ ...prev, [formId]: 'flagged' }))
+      setFlagReasons(prev => ({ ...prev, [formId]: reason }))
+    }
     if (overallStatus) setHire(h => h ? { ...h, status: overallStatus } : h)
-    addAuditLocal('red', `<strong>HR</strong> flagged <strong>${FORMS.find(f=>f.id===formId)?.name}</strong>`)
-    showToast(`${FORMS.find(f=>f.id===formId)?.name} flagged`)
+    addAuditLocal('red', `<strong>HR</strong> flagged <strong>${formName(formId)}</strong>`)
+    showToast(`${formName(formId)} flagged`)
     setFlagModal(null)
     setFlagReasonInput('')
   }
@@ -567,8 +590,9 @@ export default function HRNewHirePage() {
                   <div className="hrd-card-title">Form Review</div>
                   <div className="hrd-card-sub">Click View to expand — approve or flag from inside</div>
                 </div>
-                <div className="hrd-card-header-right" style={{ color: approvedForms === 4 ? '#0D5C46' : '#C8920A' }}>
-                  {approvedForms}/4 approved
+                <div className="hrd-card-header-right" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                  {clearance?.required && <ClearanceChipBadge status={clearance.status} />}
+                  <span style={{ color: approvedForms === 4 ? '#0D5C46' : '#C8920A' }}>{approvedForms}/4 approved</span>
                 </div>
               </div>
 
@@ -719,6 +743,16 @@ export default function HRNewHirePage() {
                   </div>
                 )
               })}
+
+              {clearance?.required && (
+                <ClearanceReviewRow
+                  hireId={hireId}
+                  view={clearance}
+                  onApprove={() => handleFormApprove('clearance')}
+                  onFlag={() => openFlagModal('clearance')}
+                  onToast={showToast}
+                />
+              )}
             </div>
 
             {/* Equipment */}
@@ -1144,6 +1178,16 @@ export default function HRNewHirePage() {
                 addAuditLocal('navy', '<strong>HR</strong> changed the reporting manager for the onboarding plan')
               }}
             />
+
+            {/* ── Clearance Tracker ── */}
+            {clearance?.required && (
+              <ClearanceTrackerCard
+                hireId={hireId}
+                view={clearance}
+                onChange={setClearance}
+                onToast={showToast}
+              />
+            )}
 
           </div>
 

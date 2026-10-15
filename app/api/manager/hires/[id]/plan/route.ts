@@ -8,6 +8,7 @@ import {
   PlanPutSchema, answersFromRow, fieldErrors, isPlanOverdue, todayIso,
   PLAN_TEXT_FIELDS, PROJECT_TEXT_FIELDS,
 } from '@/lib/manager-plan'
+import { getClearanceRequirements } from '@/lib/clearance'
 import type { Database } from '@/types'
 
 type PlanUpdate = Database['public']['Tables']['manager_plans']['Update']
@@ -147,6 +148,23 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
         link:      appUrl(`/hr/newhire/${id}`),
       },
     })
+  }
+
+  // Clearance unlocked: the hire's form appears once the submitted plan asks for RCMP or PSPC & RCMP.
+  // Covers a first submit with clearance and a later change from 'none' (drafts never unlock it).
+  const wasRequired = getClearanceRequirements(existing).required
+  const nowRequired = getClearanceRequirements({ status: saved[0].status, clearance_type: answers.clearance_type }).required
+  if (!wasRequired && nowRequired) {
+    const { data: hire } = await admin.from('profiles').select('full_name, personal_email, aem_email').eq('id', id).maybeSingle()
+    const to = hire?.personal_email || hire?.aem_email
+    if (to) {
+      await queueNotification({
+        template:  'clearance_unlocked',
+        to,
+        dedupeKey: `clearance_unlocked:${id}`,
+        payload:   { newhireId: id, hireName: hire?.full_name ?? '', link: appUrl('/newhire/forms/clearance') },
+      })
+    }
   }
 
   return NextResponse.json({ ok: true, status: saved[0].status, submitted_at: submittedAt })

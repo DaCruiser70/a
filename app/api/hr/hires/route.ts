@@ -7,6 +7,7 @@ import { z } from 'zod'
 import { computeHireStatus } from '@/lib/hire-status'
 import { queueNotification, appUrl } from '@/lib/notify'
 import { planChip, todayIso } from '@/lib/manager-plan'
+import { getClearanceRequirements, computeClearanceStatus } from '@/lib/clearance'
 import type { NewHireRow } from '@/types'
 
 function generateTempPassword(): string {
@@ -54,11 +55,15 @@ export async function GET() {
       ])
     : [{ data: [] }, { data: [] }, { data: [] }, { data: [] }]
 
-  // One batched query for every listed hire's manager plan (no per-row lookups)
-  const { data: planRows } = hireIds.length
-    ? await admin.from('manager_plans').select('newhire_id, status, due_date').in('newhire_id', hireIds)
-    : { data: [] }
-  const planMap = Object.fromEntries((planRows ?? []).map(r => [r.newhire_id, r]))
+  // Batched queries for every listed hire's manager plan and clearance form (no per-row lookups)
+  const [{ data: planRows }, { data: clearanceRows }] = hireIds.length
+    ? await Promise.all([
+        admin.from('manager_plans').select('newhire_id, status, due_date, clearance_type').in('newhire_id', hireIds),
+        admin.from('clearance_info').select('user_id, form_status').in('user_id', hireIds),
+      ])
+    : [{ data: [] }, { data: [] }]
+  const planMap      = Object.fromEntries((planRows ?? []).map(r => [r.newhire_id, r]))
+  const clearanceMap = Object.fromEntries((clearanceRows ?? []).map(r => [r.user_id, r]))
   const today   = todayIso()
 
   const piMap = Object.fromEntries((piRows.data ?? []).map(r => [r.user_id, r]))
@@ -92,6 +97,10 @@ export async function GET() {
       last_submitted_at,
       office_location:   p.office_location ?? null,
       plan_chip:         planChip(planMap[p.id], today),
+      // Shown only when the manager's submitted plan asks for a clearance; never affects status or progress
+      clearance_chip:    getClearanceRequirements(planMap[p.id]).required
+        ? computeClearanceStatus(clearanceMap[p.id]?.form_status)
+        : null,
     }
   })
 
@@ -208,15 +217,15 @@ export async function POST(request: Request) {
   }
 
   // Ask the reporting manager for an onboarding plan, due on the hire's form deadline
-  const { error: planError } = await admin.from('manager_plans').insert({
+  const { data: plan, error: planError } = await admin.from('manager_plans').insert({
     newhire_id: newUser.user.id,
     manager_id: manager.id,
     status:     'requested',
     due_date:   formDeadline,
-  })
+  }).select('assignment_seq').single()
 
-  if (planError) {
-    console.error(`[hires] manager plan insert failed (code ${planError.code})`)
+  if (planError || !plan) {
+    console.error(`[hires] manager plan insert failed (code ${planError?.code ?? 'none'})`)
     // Same orphan cleanup as above: the profile row goes with the auth user
     await admin.auth.admin.deleteUser(newUser.user.id)
     return NextResponse.json({ error: 'Failed to set up the manager plan. Please try again.' }, { status: 500 })
@@ -232,7 +241,7 @@ export async function POST(request: Request) {
   await queueNotification({
     template:  'manager_plan_requested',
     to:        manager.email,
-    dedupeKey: `manager_plan_requested:${newUser.user.id}:${manager.id}`,
+    dedupeKey: `manager_plan_request:${newUser.user.id}:${manager.id}:${plan.assignment_seq}`,
     payload:   {
       newhireId: newUser.user.id,
       managerId: manager.id,

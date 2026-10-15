@@ -56,13 +56,9 @@ const FORMS = [
   },
 ]
 
-function computeDocumentStatus(docs: Array<{ document_type: string; form_status: string }>): FormStatus {
-  const required = ['td1_federal', 'td1_provincial']
-  const requiredDocs = required.map(t => docs.find(d => d.document_type === t))
-  if (docs.some(d => d.form_status === 'rejected')) return 'flagged'
-  if (requiredDocs.every(d => d?.form_status === 'approved')) return 'approved'
-  if (requiredDocs.every(d => !!d)) return 'review'
-  return 'pending'
+// Sidebar row state; text is always present for screen readers, not only colour and icon
+const ROW_STATUS_TEXT: Record<FormStatus, string> = {
+  pending: 'not started', review: 'sent to HR, in review', approved: 'approved', flagged: 'action required',
 }
 
 function getInitials(name: string) {
@@ -75,18 +71,19 @@ export default function FormsPage() {
   const [formStatuses, setFormStatuses] = useState<Record<string, FormStatus>>({})
   const [userName, setUserName]         = useState('')
   const [loading, setLoading]           = useState(true)
+  // Security clearance is separate: shown only when the manager's plan unlocks it, never counted in progress
+  const [clearance, setClearance]       = useState<{ required: boolean; status: FormStatus | null }>({ required: false, status: null })
+  // What has been sent to HR, derived on the server from the stored form statuses
+  const [submission, setSubmission]     = useState<{ sent: number; total: number; complete: boolean } | null>(null)
 
   useEffect(() => {
-    Promise.all([
-      fetch('/api/newhire/status', { cache: 'no-store' }).then(r => r.ok ? r.json() : Promise.reject()),
-      fetch('/api/forms/documents', { cache: 'no-store' }).then(r => r.ok ? r.json() : { documents: [] }),
-    ])
-      .then(([statusData, docsData]) => {
-        setFormStatuses({
-          ...statusData.formStatuses,
-          documents: computeDocumentStatus(docsData.documents ?? []),
-        })
+    fetch('/api/newhire/status', { cache: 'no-store' })
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(statusData => {
+        setFormStatuses({ ...statusData.formStatuses, documents: statusData.documentsStatus })
         setUserName(statusData.name)
+        setSubmission(statusData.submission)
+        if (statusData.clearance) setClearance(statusData.clearance)
       })
       .catch(() => {})
       .finally(() => setLoading(false))
@@ -97,11 +94,10 @@ export default function FormsPage() {
     window.location.href = '/login'
   }
 
-  const total = FORMS.length
-
-  // Count non-pending forms as "submitted" for progress ring
-  const doneCount = FORMS.filter(f => (formStatuses[f.id] ?? 'pending') !== 'pending').length
-  const allDone   = doneCount === total
+  // A form counts as sent once saved (review, approved or flagged). Clearance is never counted.
+  const total     = submission?.total ?? FORMS.length
+  const doneCount = submission?.sent ?? 0
+  const allDone   = submission?.complete ?? false
   const progress  = (doneCount / total) * 100
 
   // First form still needing action (pending or flagged), in step order
@@ -121,10 +117,10 @@ export default function FormsPage() {
     }
   }, [doneCount, total])
 
-  const progressTitle = allDone ? 'All submitted!' : doneCount === 0 ? 'Not started' : 'In progress'
+  const progressTitle = allDone ? 'All received' : doneCount === 0 ? 'Not started' : 'In progress'
   const progressSub   = allDone
-    ? 'Awaiting HR review.'
-    : `${total - doneCount} form${total - doneCount !== 1 ? 's' : ''} remaining`
+    ? 'HR is reviewing.'
+    : `${total - doneCount} required form${total - doneCount !== 1 ? 's' : ''} remaining`
 
   return (
     <div className="forms-page" data-portal="newhire">
@@ -180,7 +176,7 @@ export default function FormsPage() {
             </div>
             <h1 className="forms-header-title">Your onboarding checklist.</h1>
             <p className="forms-header-sub">
-              Complete all four forms below to finish your onboarding.
+              Complete all required forms below. Each one goes to HR as soon as you save it.
               Your progress is saved automatically — pick up where you left off any time.
             </p>
           </div>
@@ -276,6 +272,38 @@ export default function FormsPage() {
               </Link>
             )
           })}
+
+          {clearance.required && (() => {
+            const status     = clearance.status ?? 'pending'
+            const isApproved = status === 'approved'
+            const isFlagged  = status === 'flagged'
+            const isReview   = status === 'review'
+            const statusClass = isApproved ? 'completed' : isFlagged ? 'flagged' : isReview ? 'review' : ''
+            const stepClass   = isApproved ? 'step-done' : isFlagged ? 'step-flagged' : isReview ? 'step-review' : 'step-pending'
+            return (
+              <Link href="/newhire/forms/clearance" className={`form-card ${statusClass}`} style={{ textDecoration: 'none' }}>
+                <div className={`form-card-step ${stepClass}`}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    {isApproved
+                      ? <polyline points="20 6 9 17 4 12"/>
+                      : <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>}
+                  </svg>
+                </div>
+                <div className="form-card-content">
+                  <div className="form-card-title">Security Clearance</div>
+                  <div className="form-card-desc">Your legal name, place of birth and the clearance forms your role needs.</div>
+                  <div className="form-card-meta">
+                    <span className="form-card-unlocked">Unlocked by your manager</span>
+                    <span className="form-card-sensitive">Encrypted</span>
+                    {isApproved && <span className="form-card-completed-badge">Approved</span>}
+                    {isReview   && <span className="form-card-review-badge">Under Review</span>}
+                    {isFlagged  && <span className="form-card-flagged-badge">Action Required</span>}
+                  </div>
+                </div>
+                <div className="form-card-arrow">→</div>
+              </Link>
+            )
+          })()}
         </div>
 
         {/* ── SIDEBAR ── */}
@@ -283,23 +311,24 @@ export default function FormsPage() {
 
           <div className="forms-submit-card">
             <div className="forms-submit-card-header">
-              <div className="forms-submit-title">Submit to HR</div>
+              <div className="forms-submit-title">Your progress</div>
               <div className="forms-submit-sub">
-                Once all four forms are complete, submit your information securely to the HR team.
+                Each form goes to HR as soon as you save it. There is nothing else to submit.
               </div>
             </div>
             <div className="forms-submit-card-body">
               <div className="forms-mini-progress">
-                <div className="forms-mini-bar-wrap">
+                <div className="forms-mini-bar-wrap" role="progressbar" aria-label="Required forms sent to HR"
+                  aria-valuemin={0} aria-valuemax={total} aria-valuenow={doneCount}>
                   <div className="forms-mini-bar" style={{ width: `${progress}%` }} />
                 </div>
                 <div className="forms-mini-label">
-                  <span>{doneCount} of {total} completed</span>
+                  <span>{loading ? 'Loading…' : `${doneCount} of ${total} sent to HR`}</span>
                   <span>{Math.round(progress)}%</span>
                 </div>
               </div>
 
-              <div className="forms-mini-list">
+              <ul className="forms-mini-list">
                 {FORMS.map((form) => {
                   const status     = (formStatuses[form.id] ?? 'pending') as FormStatus
                   const isApproved = status === 'approved'
@@ -307,8 +336,8 @@ export default function FormsPage() {
                   const isReview   = status === 'review'
                   const itemClass  = isApproved ? 'done' : isFlagged ? 'flagged' : isReview ? 'review' : ''
                   return (
-                    <div key={form.id} className={`forms-mini-item ${itemClass}`}>
-                      <div className="forms-mini-check">
+                    <li key={form.id} className={`forms-mini-item ${itemClass}`}>
+                      <div className="forms-mini-check" aria-hidden="true">
                         {isApproved && (
                           <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round">
                             <polyline points="20 6 9 17 4 12"/>
@@ -325,24 +354,59 @@ export default function FormsPage() {
                           </svg>
                         )}
                       </div>
-                      {form.title}
-                    </div>
+                      <span className="forms-mini-name">{form.title}</span>
+                      <span className="forms-sr-only">: {ROW_STATUS_TEXT[status]}</span>
+                    </li>
                   )
                 })}
-              </div>
 
-              <button
-                className={`forms-submit-btn ${allDone ? 'unlocked' : 'locked'}`}
-                disabled={!allDone}
-              >
-                {allDone ? <>Submit all forms →</> : (
-                  <><span className="forms-submit-lock-icon">🔒</span> Complete all forms to submit</>
-                )}
-              </button>
+                {/* Security clearance: shown when unlocked; never in the bar, the count or completion */}
+                {clearance.required && (() => {
+                  const status     = clearance.status ?? 'pending'
+                  const isApproved = status === 'approved'
+                  const isFlagged  = status === 'flagged'
+                  const isReview   = status === 'review'
+                  const itemClass  = isApproved ? 'done' : isFlagged ? 'flagged' : isReview ? 'review' : ''
+                  return (
+                    <li className={`forms-mini-item forms-mini-separate ${itemClass}`}>
+                      <div className="forms-mini-check" aria-hidden="true">
+                        {isApproved && (
+                          <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round">
+                            <polyline points="20 6 9 17 4 12"/>
+                          </svg>
+                        )}
+                        {isReview && (
+                          <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round">
+                            <polyline points="12 6 12 12 16 14"/>
+                          </svg>
+                        )}
+                        {isFlagged && (
+                          <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round">
+                            <line x1="12" y1="8" x2="12" y2="13"/>
+                          </svg>
+                        )}
+                      </div>
+                      <span className="forms-mini-name">Security Clearance</span>
+                      <span className="forms-sr-only">: {ROW_STATUS_TEXT[status]}</span>
+                      <span className="forms-mini-tag">Tracked separately</span>
+                    </li>
+                  )
+                })()}
+              </ul>
 
-              {!allDone && (
+              {allDone ? (
+                <div className="forms-complete-state" role="status">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+                    <polyline points="20 6 9 17 4 12"/>
+                  </svg>
+                  <div>
+                    <div className="forms-complete-title">All forms received</div>
+                    <div className="forms-complete-text">HR is reviewing. If anything needs a fix, the form will be marked here and you can resave it.</div>
+                  </div>
+                </div>
+              ) : !loading && (
                 <div className="forms-submit-note">
-                  {total - doneCount} form{total - doneCount !== 1 ? 's' : ''} remaining before you can submit
+                  {total - doneCount} required form{total - doneCount !== 1 ? 's' : ''} left. Each is sent to HR when you save it.
                 </div>
               )}
             </div>

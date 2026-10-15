@@ -34,9 +34,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const { managerId } = parsed.data
 
   const admin = createServiceClient()
-  const { data: result, error } = await admin.rpc('reassign_manager_plan', { p_newhire_id: id, p_manager_id: managerId })
+  const { data: rows, error } = await admin.rpc('reassign_manager_plan', { p_newhire_id: id, p_manager_id: managerId })
   if (error) {
     console.error(`[reassign] reassign_manager_plan failed (code ${error.code})`)
+    return NextResponse.json({ error: 'Could not change the manager. Please try again.' }, { status: 500 })
+  }
+  const result = rows?.[0]?.outcome
+  const seq    = rows?.[0]?.assignment_seq ?? null
+  if (!result) {
+    console.error('[reassign] reassign_manager_plan returned no result')
     return NextResponse.json({ error: 'Could not change the manager. Please try again.' }, { status: 500 })
   }
   if (result === 'no_hire')    return NOT_FOUND()
@@ -58,11 +64,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     performed_by: user.id,
   })
 
-  if (manager) {
+  if (manager && seq !== null) {
+    // The sequence makes a return to a former manager a new request; a retry of the same
+    // assignment produces the same key and is ignored as a duplicate
     await queueNotification({
       template:  'manager_plan_requested',
       to:        manager.email,
-      dedupeKey: `manager_plan_requested:${id}:${manager.id}`,
+      dedupeKey: `manager_plan_request:${id}:${manager.id}:${seq}`,
       payload:   {
         newhireId: id,
         managerId: manager.id,

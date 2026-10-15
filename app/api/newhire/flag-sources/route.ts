@@ -20,7 +20,7 @@ export async function GET() {
     .order('created_at', { ascending: false })
     .limit(30)
 
-  const formIds = ['personal', 'banking', 'sin', 'policy', 'documents']
+  const formIds = ['personal', 'banking', 'sin', 'policy', 'documents', 'clearance']
   const sources: Record<string, string | null> = {}
 
   for (const formId of formIds) {

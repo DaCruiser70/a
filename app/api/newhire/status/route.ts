@@ -1,8 +1,11 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 import { requireRole } from '@/lib/roles'
-import type { FormStatus } from '@/types'
+import { getClearanceRequirements, computeClearanceStatus } from '@/lib/clearance'
+import { loadSubmission } from '@/lib/submission-server'
 
+// The hire's checklist state: each form's status, the documents item, what has been sent to HR,
+// and security clearance (only when unlocked; never part of formStatuses or any progress count).
 export async function GET() {
   const auth = await requireRole('newhire')
   if (auth instanceof NextResponse) return auth
@@ -12,27 +15,30 @@ export async function GET() {
 
   const [
     { data: profile },
-    { data: personal },
-    { data: banking },
-    { data: sin },
-    { data: policy },
+    { statuses, submission },
+    { data: plan },
+    { data: clearance },
   ] = await Promise.all([
     admin.from('profiles').select('full_name').eq('id', user.id).single(),
-    admin.from('personal_info').select('form_status').eq('user_id', user.id).maybeSingle(),
-    admin.from('banking_info').select('form_status').eq('user_id', user.id).maybeSingle(),
-    admin.from('sin_info').select('form_status').eq('user_id', user.id).maybeSingle(),
-    admin.from('policy_acknowledgements').select('form_status').eq('user_id', user.id).maybeSingle(),
+    loadSubmission(admin, user.id),
+    admin.from('manager_plans').select('status, clearance_type').eq('newhire_id', user.id).maybeSingle(),
+    admin.from('clearance_info').select('form_status').eq('user_id', user.id).maybeSingle(),
   ])
 
-  const formStatuses: Record<string, FormStatus> = {
-    personal: (personal?.form_status ?? 'pending') as FormStatus,
-    banking:  (banking?.form_status  ?? 'pending') as FormStatus,
-    sin:      (sin?.form_status      ?? 'pending') as FormStatus,
-    policy:   (policy?.form_status   ?? 'pending') as FormStatus,
-  }
+  const clearanceRequired = getClearanceRequirements(plan).required
 
   return NextResponse.json({
-    name:         profile?.full_name ?? '',
-    formStatuses,
+    name: profile?.full_name ?? '',
+    formStatuses: {
+      personal: statuses.personal,
+      banking:  statuses.banking,
+      sin:      statuses.sin,
+      policy:   statuses.policy,
+    },
+    documentsStatus: statuses.documents,
+    submission: { sent: submission.sent, total: submission.total, complete: submission.complete },
+    clearance: clearanceRequired
+      ? { required: true, status: computeClearanceStatus(clearance?.form_status) }
+      : { required: false, status: null },
   })
 }

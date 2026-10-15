@@ -1,0 +1,94 @@
+/* ── Security Clearance form (builds on form-pages.css, the banking form layout) ── */
+
+.clr-steps { margin: 0; padding-left: 1.2rem; font-size: 13px; color: #4A4640; line-height: 1.7; }
+.clr-steps strong { color: #1a2e25; }
+
+.clr-download {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  padding: 12px 16px; border-radius: 12px; background: #F5F3EF; border: 1.5px solid #E2DED8;
+}
+.clr-download-label { font-size: 13px; font-weight: 600; color: #1a2e25; }
+.clr-download-sub   { font-size: 11px; color: #5F5E5A; margin-top: 2px; }
+.clr-download .form-btn-secondary { min-height: 44px; }
+.clr-soon {
+  font-size: 12px; font-weight: 600; color: #5F5E5A;
+  padding: 6px 12px; border-radius: 100px; background: rgba(0,0,0,0.05);
+}
+
+.clr-dcn { letter-spacing: 0.08em; font-variant-numeric: tabular-nums; }
+
+/* File on file / chosen file rows */
+.clr-file {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 12px 16px; background: #F5F3EF; border: 1.5px solid #E2DED8; border-radius: 12px;
+}
+.clr-file-icon { width: 18px; height: 18px; flex-shrink: 0; color: #1B3A6B; }
+.clr-file-main { flex: 1; min-width: 0; }
+.clr-file-name { font-weight: 600; font-size: 13px; color: #1a2e25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.clr-file-meta { font-size: 11px; color: #5F5E5A; margin-top: 2px; }
+.clr-onfile {
+  display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0;
+  font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 100px;
+  background: rgba(13,92,70,0.1); color: #0D5C46; border: 1px solid rgba(13,92,70,0.2);
+}
+.clr-onfile svg { width: 10px; height: 10px; }
+.clr-file-btn {
+  min-height: 36px; padding: 4px 12px; border-radius: 8px; cursor: pointer; white-space: nowrap;
+  font-size: 12px; font-weight: 600; font-family: var(--font-sans);
+  color: #1B3A6B; background: rgba(27,58,107,0.07); border: 1px solid rgba(27,58,107,0.15);
+}
+.clr-file-x {
+  display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; padding: 0;
+  color: #C0392B; background: none; border: none; border-radius: 8px; cursor: pointer; flex-shrink: 0;
+}
+.clr-file-x svg { width: 14px; height: 14px; }
+.clr-file-x:hover { background: rgba(192,57,43,0.07); }
+
+/* Upload zone: a real <label> for the hidden file input, so keyboard and screen readers work */
+.clr-upload {
+  border: 2px dashed #D5D0C8; border-radius: 14px; padding: 2rem 1.25rem;
+  display: flex; flex-direction: column; align-items: center; gap: 0.5rem;
+  background: #FAFAF8; text-align: center; cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+.clr-upload:hover, .clr-upload.dragging { border-color: #1B3A6B; background: rgba(27,58,107,0.03); }
+.clr-upload:focus-within { outline: 3px solid #1B3A6B; outline-offset: 2px; }
+.clr-upload-title { font-size: 14px; font-weight: 500; color: #1a2e25; }
+.clr-upload-title span { color: #1B3A6B; font-weight: 700; text-decoration: underline; text-underline-offset: 2px; }
+.clr-upload-sub   { font-size: 12px; color: #5F5E5A; }
+.clr-upload input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+
+.clr-error { font-size: 12px; color: #C0392B; display: flex; align-items: center; gap: 5px; }
+.clr-error svg { width: 12px; height: 12px; flex-shrink: 0; }
+.clr-muted { font-size: 12px; color: #5F5E5A; }
+
+/* ID status (read from Documents) */
+.clr-id {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 14px 16px; border-radius: 12px; border: 1.5px solid #E2DED8; background: #fff;
+}
+.clr-id.missing { border-color: rgba(231,76,60,0.3); background: rgba(231,76,60,0.04); }
+.clr-id-text { flex: 1; min-width: 0; font-size: 13px; color: #1a2e25; }
+.clr-id-text strong { font-weight: 600; }
+.clr-link { font-size: 13px; font-weight: 600; color: #1B3A6B; text-decoration: underline; text-underline-offset: 2px; }
+
+.clr-file-btn:focus-visible, .clr-file-x:focus-visible, .clr-link:focus-visible,
+.form-btn-primary:focus-visible, .form-btn-secondary:focus-visible, .form-page-back:focus-visible {
+  outline: 3px solid #1B3A6B; outline-offset: 2px;
+}
+.form-page-back:focus-visible { outline-color: #fff; }
+
+.clr-skeleton {
+  height: 200px; border-radius: 20px;
+  background: linear-gradient(90deg, #EEECE8 25%, #E4E1DB 50%, #EEECE8 75%);
+  background-size: 200% 100%; animation: clrShimmer 1.2s ease-in-out infinite;
+}
+@keyframes clrShimmer { from { background-position: 200% 0 } to { background-position: -200% 0 } }
+@media (prefers-reduced-motion: reduce) { .clr-skeleton { animation: none; } }
+
+.clr-empty {
+  background: #fff; border-radius: 20px; border: 1px solid rgba(0,0,0,0.07);
+  padding: 2.5rem 2rem; text-align: center;
+}
+.clr-empty-title { font-weight: 600; font-size: 15px; color: #1A1916; margin-bottom: 6px; }
+.clr-empty-text  { font-size: 13px; color: #5F5E5A; line-height: 1.5; margin-bottom: 16px; }

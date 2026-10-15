@@ -53,6 +53,7 @@ export type ManagerPlan = {
   manager_id:        string
   status:            ManagerPlanStatus
   due_date:          string | null
+  assignment_seq:    number               // +1 on every change of manager; part of the request dedupe key
   training_needed:   string | null
   training_delivery: string[] | null
   training_notes:    string | null
@@ -72,6 +73,39 @@ export type ManagerPlan = {
   created_at:        string
   updated_at:        string
 }
+
+export type ClearanceInfo = {
+  id:                 string
+  user_id:            string
+  legal_name_enc:     string | null
+  place_of_birth_enc: string | null
+  dcn_enc:            string | null
+  fingerprint_path:   string | null
+  fingerprint_name:   string | null
+  rcmp_path:          string | null
+  rcmp_name:          string | null
+  form_status:        FormStatus
+  flag_reason:        string | null
+  submitted_at:       string | null
+  updated_at:         string
+}
+
+export type ClearanceTracking = {
+  id:             string
+  newhire_id:     string
+  pspc_sent_at:   string | null
+  pspc_sent_by:   string | null
+  rcmp_sent_at:   string | null
+  rcmp_sent_by:   string | null
+  rcmp_recipient: string | null
+  cleared_at:     string | null
+  cleared_by:     string | null
+  created_at:     string
+  updated_at:     string
+}
+
+// Clearance form state as shown in chips and badges ('pending' = not submitted yet)
+export type ClearanceStatus = FormStatus
 
 export type OutboxStatus = 'pending' | 'sent' | 'failed'
 
@@ -244,6 +278,18 @@ export type Database = {
         Update:        Partial<Omit<ManagerPlan, 'id' | 'newhire_id' | 'created_at'>>
         Relationships: []
       }
+      clearance_info: {
+        Row:           ClearanceInfo
+        Insert:        Pick<ClearanceInfo, 'user_id'> & Partial<Omit<ClearanceInfo, 'id' | 'user_id'>>
+        Update:        Partial<Omit<ClearanceInfo, 'id' | 'user_id'>>
+        Relationships: []
+      }
+      clearance_tracking: {
+        Row:           ClearanceTracking
+        Insert:        Pick<ClearanceTracking, 'newhire_id'> & Partial<Omit<ClearanceTracking, 'id' | 'newhire_id'>>
+        Update:        Partial<Omit<ClearanceTracking, 'id' | 'newhire_id' | 'created_at'>>
+        Relationships: []
+      }
       notification_outbox: {
         Row:           NotificationOutboxRow
         Insert:        Pick<NotificationOutboxRow, 'dedupe_key' | 'to_emails' | 'template' | 'payload'> & Partial<Omit<NotificationOutboxRow, 'id' | 'dedupe_key' | 'to_emails' | 'template' | 'payload'>>
@@ -329,7 +375,7 @@ export type Database = {
       }
       reassign_manager_plan: {
         Args:    { p_newhire_id: string; p_manager_id: string }
-        Returns: 'ok' | 'unchanged' | 'no_hire' | 'no_manager'
+        Returns: Array<{ outcome: 'ok' | 'unchanged' | 'no_hire' | 'no_manager'; assignment_seq: number | null }>
       }
     }
     Enums: {}
@@ -350,6 +396,7 @@ export type NewHireRow = {
   last_submitted_at:   string | null
   office_location?:    string | null
   plan_chip?:          PlanChip | null
+  clearance_chip?:     ClearanceStatus | null   // null when the hire needs no clearance
 }
 
 // Manager plan state as shown on HR chips; null when no plan was requested

@@ -11,6 +11,9 @@ export { NOTIFICATION_TEMPLATES, TEMPLATE_LABELS, type NotificationTemplate } fr
 type PayloadByTemplate = {
   manager_plan_requested: { newhireId: string; managerId: string; hireName: string; link: string }
   manager_plan_submitted: { newhireId: string; managerId: string; hireName: string; link: string }
+  clearance_unlocked:     { newhireId: string; hireName: string; link: string }
+  clearance_submitted:    { newhireId: string; hireName: string; link: string }
+  onboarding_complete:    { newhireId: string; hireName: string; link: string }
 }
 
 export function appUrl(path: string): string {
@@ -30,7 +33,8 @@ function parseEmails(value: string | string[]): string[] {
 }
 
 // Queues one message. The dedupe key makes retries and double-clicks harmless: a second call
-// with the same key is ignored. Never throws and never fails the calling request.
+// with the same key is ignored. Returns true only when this call queued a new message (false for
+// a duplicate or a failure), so callers can run once-only side effects. Never throws.
 export async function queueNotification<T extends NotificationTemplate>({
   template, to, payload, dedupeKey,
 }: {
@@ -46,7 +50,8 @@ export async function queueNotification<T extends NotificationTemplate>({
   }
 
   try {
-    const { error } = await createServiceClient()
+    // ON CONFLICT DO NOTHING returns only rows it actually inserted
+    const { data, error } = await createServiceClient()
       .from('notification_outbox')
       .upsert({
         dedupe_key: dedupeKey,
@@ -55,13 +60,15 @@ export async function queueNotification<T extends NotificationTemplate>({
         payload,
         status:     'pending',
       }, { onConflict: 'dedupe_key', ignoreDuplicates: true })
+      .select('id')
 
     if (error) {
       console.error('[notify] failed to queue notification')
       return false
     }
-    console.log(`[notify] queued ${template}`)
-    return true
+    const inserted = (data?.length ?? 0) > 0
+    if (inserted) console.log(`[notify] queued ${template}`)
+    return inserted
   } catch {
     console.error('[notify] failed to queue notification')
     return false

@@ -1,6 +1,7 @@
 import '../../styles/components/plan-badges.css'
 import { PLAN_STATUS_LABELS, PLAN_CHIP_LABELS, CLEARANCE_LABELS } from '@/lib/manager-plan'
-import type { ManagerPlanStatus, PlanChip, ClearanceType } from '@/types'
+import { CLEARANCE_STATUS_LABELS } from '@/lib/clearance'
+import type { ManagerPlanStatus, PlanChip, ClearanceType, ClearanceStatus } from '@/types'
 
 // Every badge carries its meaning in text; colour and icon only reinforce it.
 
@@ -52,6 +53,21 @@ export function PlanChipBadge({ chip }: { chip: PlanChip }) {
     <span className={`plan-chip ${chip}`}>
       <span className="plan-chip-dot" aria-hidden="true" />
       Plan · {PLAN_CHIP_LABELS[chip]}
+    </span>
+  )
+}
+
+// Clearance chip: the same quiet pill as the plan chip, reusing its colour meaning
+// (not submitted → grey, needs review → amber, approved → green, flagged → red)
+const CLEARANCE_CHIP_TONE: Record<ClearanceStatus, PlanChip> = {
+  pending: 'awaiting', review: 'draft', approved: 'submitted', flagged: 'overdue',
+}
+
+export function ClearanceChipBadge({ status }: { status: ClearanceStatus }) {
+  return (
+    <span className={`plan-chip ${CLEARANCE_CHIP_TONE[status]}`}>
+      <span className="plan-chip-dot" aria-hidden="true" />
+      Clearance · {CLEARANCE_STATUS_LABELS[status]}
     </span>
   )
 }

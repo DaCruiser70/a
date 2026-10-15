@@ -1,39 +1,62 @@
+'use client'
+
 import Image from 'next/image'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { useEffect } from 'react'
 import '../../../styles/pages/complete.css'
+import { useMe } from '@/lib/use-me'
+import { FORMS_HOME } from '@/lib/routes'
+
+function getInitials(name: string) {
+  return name.split(' ').filter(Boolean).map(n => n[0]).join('').toUpperCase().slice(0, 2)
+}
+
+// Every required item on the checklist (Security Clearance is tracked separately and not listed)
+const SUBMITTED_FORMS = [
+  { name: 'Personal Information',     badge: 'Sent to HR' },
+  { name: 'Banking & Direct Deposit', badge: 'Encrypted & sent to HR' },
+  { name: 'Social Insurance Number',  badge: 'Encrypted & sent to HR' },
+  { name: 'Policy Acknowledgement',   badge: 'Signed & sent to HR' },
+  { name: 'Document Uploads',         badge: 'Sent to HR' },
+]
+
+const NEXT_STEPS = [
+  {
+    num: 1,
+    title: 'HR reviews your forms',
+    desc: 'A member of the HR team will review your forms and verify your information. If anything needs a fix, it will be marked on your checklist and you can resave it.',
+    eta: 'Within 1–2 business days',
+  },
+  {
+    num: 2,
+    title: 'Payroll is set up',
+    desc: 'Your banking and SIN details will be securely forwarded to the payroll team to set up your direct deposit.',
+    eta: 'Before your first pay date',
+  },
+  {
+    num: 3,
+    title: 'You\'re ready to go',
+    desc: 'Once HR approves your record, you\'ll receive a welcome email with everything you need for your first day.',
+    eta: 'We\'ll be in touch',
+  },
+]
 
 export default function CompletePage() {
-  const submittedAt = new Date().toLocaleDateString('en-CA', {
-    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
-  })
+  const router = useRouter()
+  const { me } = useMe()
+  const name = me?.name ?? ''
+  const firstName = name.trim().split(/\s+/)[0] ?? ''
 
-  const SUBMITTED_FORMS = [
-    { name: 'Personal Information', badge: 'Submitted' },
-    { name: 'Banking & Direct Deposit', badge: 'Encrypted & Submitted' },
-    { name: 'Social Insurance Number', badge: 'Encrypted & Submitted' },
-    { name: 'Policy Acknowledgement', badge: 'Signed & Submitted' },
-  ]
-
-  const NEXT_STEPS = [
-    {
-      num: 1,
-      title: 'HR reviews your submission',
-      desc: 'A member of the HR team will review your submitted forms and verify your information. You will receive an email confirmation shortly.',
-      eta: 'Within 1–2 business days',
-    },
-    {
-      num: 2,
-      title: 'Payroll is set up',
-      desc: 'Your banking and SIN details will be securely forwarded to the payroll team to set up your direct deposit.',
-      eta: 'Before your first pay date',
-    },
-    {
-      num: 3,
-      title: 'You\'re ready to go',
-      desc: 'Once HR approves your record, you\'ll receive a welcome email with everything you need for your first day.',
-      eta: 'We\'ll be in touch',
-    },
-  ]
+  // Only for hires who have sent every required form; anyone else goes back to the checklist
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/newhire/status', { cache: 'no-store' })
+      .then(r => (r.ok ? r.json() : null))
+      .then(data => { if (!cancelled && data && !data.submission?.complete) router.replace(FORMS_HOME) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [router])
 
   return (
     <div className="complete-page">
@@ -47,8 +70,8 @@ export default function CompletePage() {
         </div>
         <div className="complete-nav-right">
           <div className="complete-nav-user">
-            <div className="complete-nav-avatar">LD</div>
-            <span className="complete-nav-name">Lucas DaCruz</span>
+            <div className="complete-nav-avatar" aria-hidden="true">{name ? getInitials(name) : '…'}</div>
+            {name && <span className="complete-nav-name">{name}</span>}
           </div>
         </div>
       </nav>
@@ -61,7 +84,7 @@ export default function CompletePage() {
         <div className="complete-hero-inner">
 
           {/* Animated check */}
-          <div className="complete-check-wrap">
+          <div className="complete-check-wrap" aria-hidden="true">
             <div className="complete-check-ring" />
             <div className="complete-check-ring-2" />
             <div className="complete-check-ring-3" />
@@ -74,25 +97,17 @@ export default function CompletePage() {
 
           <div className="complete-hero-tag">
             <div className="complete-hero-tag-dot" />
-            Onboarding Complete
+            All forms received
           </div>
 
           <h1 className="complete-hero-title">
-            You&apos;re all set,<br /><em>Lucas.</em>
+            {firstName ? <>You&apos;re all set,<br /><em>{firstName}.</em></> : <>You&apos;re all set.</>}
           </h1>
 
           <p className="complete-hero-sub">
-            All four forms have been submitted successfully and securely.
+            All required forms have been sent to HR securely.
             The HR team has been notified and will be in touch shortly.
           </p>
-
-          <div className="complete-hero-timestamp">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <circle cx="12" cy="12" r="10"/>
-              <polyline points="12 6 12 12 16 14"/>
-            </svg>
-            Submitted {submittedAt}
-          </div>
 
         </div>
       </div>
@@ -100,7 +115,7 @@ export default function CompletePage() {
       {/* ── BODY ── */}
       <div className="complete-body">
 
-        {/* Forms submitted */}
+        {/* Forms sent */}
         <div className="complete-card">
           <div className="complete-card-header">
             <div className="complete-card-icon green">
@@ -110,15 +125,15 @@ export default function CompletePage() {
               </svg>
             </div>
             <div>
-              <div className="complete-card-heading">Forms Submitted</div>
-              <div className="complete-card-sub">All four forms received — encrypted and stored securely</div>
+              <div className="complete-card-heading">Forms Received</div>
+              <div className="complete-card-sub">All required forms received — sensitive details encrypted, files stored privately</div>
             </div>
           </div>
 
           <div className="complete-forms-list">
             {SUBMITTED_FORMS.map((form) => (
               <div key={form.name} className="complete-form-item">
-                <div className="complete-form-check">
+                <div className="complete-form-check" aria-hidden="true">
                   <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round">
                     <polyline points="20 6 9 17 4 12"/>
                   </svg>
@@ -183,7 +198,7 @@ export default function CompletePage() {
           </div>
           <div style={{ padding: '1.5rem 1.75rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
             <div style={{ fontSize: '14px', color: '#5F5E5A', lineHeight: 1.6 }}>
-              If you have any questions about your submission or need to make a correction,<br />
+              If you have any questions about your forms or need to make a correction,
               reach out to the HR team directly.
             </div>
             <a
@@ -218,8 +233,8 @@ export default function CompletePage() {
               and we&apos;re glad you&apos;re here to be part of it.
             </p>
           </div>
-          <Link href="/newhire/welcome" className="complete-cta-btn">
-            Back to welcome
+          <Link href={FORMS_HOME} className="complete-cta-btn">
+            Back to my checklist
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ width: '14px', height: '14px' }}>
               <polyline points="9 18 15 12 9 6"/>
             </svg>

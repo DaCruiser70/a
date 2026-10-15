@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 import { requireRole } from '@/lib/roles'
+import { afterHireFormSaved } from '@/lib/submission-server'
 import { encrypt, decrypt } from '@/lib/encrypt'
 import { recomputeProfileStatus } from '@/lib/hire-status'
 import { extFromPath } from '@/lib/download-name'
@@ -128,7 +129,10 @@ export async function POST(request: Request) {
     })
   }
 
-  return NextResponse.json({ ok: true })
+  // Sent to HR on save; the save that completes every required form queues HR's notice once
+  const { complete, justCompleted } = await afterHireFormSaved(admin, user.id)
+
+  return NextResponse.json({ ok: true, complete, justCompleted })
 }
 
 export async function GET() {

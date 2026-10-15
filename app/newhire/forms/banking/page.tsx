@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useState, useRef, useEffect } from 'react'
 import '../../../../styles/pages/form-pages.css'
 import { createClient } from '@/lib/supabase/client'
-import { FORMS_HOME } from '@/lib/routes'
+import { FORMS_HOME, COMPLETE_PAGE } from '@/lib/routes'
 
 function ChequePreviewImage({ src }: { src: string }) {
   return <img src={src} alt="Void cheque preview" className="banking-cheque-preview-img" /> // eslint-disable-line @next/next/no-img-element
@@ -227,8 +227,10 @@ export default function BankingForm() {
       setSaving(false)
       return
     }
-    // replace, so the browser Back button doesn't return to the submitted form
-    router.replace(FORMS_HOME)
+    const saved = await res.json().catch(() => ({}))
+    // replace, so the browser Back button doesn't return to the submitted form;
+    // the save that sends the last required form goes to the confirmation page
+    router.replace(saved.justCompleted ? COMPLETE_PAGE : FORMS_HOME)
   }
 
   return (

@@ -6,7 +6,7 @@ import { useRef, useState, useEffect, useCallback } from 'react'
 import '../../../../styles/pages/form-pages.css'
 import { createClient } from '@/lib/supabase/client'
 import type { NewhireDocument } from '@/types'
-import { FORMS_HOME } from '@/lib/routes'
+import { FORMS_HOME, COMPLETE_PAGE } from '@/lib/routes'
 
 function getInitials(name: string) {
   return name.split(' ').filter(Boolean).map(n => n[0]).join('').toUpperCase().slice(0, 2)
@@ -392,6 +392,9 @@ export default function DocumentsPage() {
         const data = await res.json()
         throw new Error(data.error ?? 'Failed to save document')
       }
+      const saved = await res.json().catch(() => ({}))
+      // The upload that sends the last required item goes to the confirmation page
+      if (saved.justCompleted) { router.replace(COMPLETE_PAGE); return }
       await loadDocuments()
       updateUpload(docType, { ...EMPTY_UPLOAD })
     } catch (err) {
@@ -425,6 +428,9 @@ export default function DocumentsPage() {
         const data = await res.json()
         throw new Error(data.error ?? 'Failed to save document')
       }
+      const saved = await res.json().catch(() => ({}))
+      // The upload that sends the last required item goes to the confirmation page
+      if (saved.justCompleted) { router.replace(COMPLETE_PAGE); return }
       await loadDocuments()
       setForm({ ...EMPTY_MULTI })
     } catch (err) {
@@ -479,13 +485,13 @@ export default function DocumentsPage() {
           <div className="form-page-step-tag">Step 5 of 5</div>
           <h1 className="form-page-title">Your Documents</h1>
           <p className="form-page-sub">
-            Upload the required documents below. All files are encrypted and stored securely — only authorized HR staff can access them.
+            Upload the required documents below. Files are kept in private storage and opened only through short-lived links — only authorized HR staff can access them.
           </p>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', marginTop: '1rem', padding: '5px 13px', borderRadius: '100px', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', fontSize: '11px', color: 'rgba(255,255,255,0.65)', fontWeight: 600 }}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ width: 12, height: 12 }}>
               <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
             </svg>
-            AES-256 Encrypted Storage
+            Stored securely, private access only
           </div>
         </div>
       </div>

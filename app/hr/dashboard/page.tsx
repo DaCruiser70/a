@@ -8,7 +8,7 @@ import { esc, SafeMessage } from '@/lib/safe-html'
 import PortalSwitcher from '@/components/ui/PortalSwitcher'
 import { PortalIdentity } from '@/components/ui/PortalName'
 import ManagerSelect from '@/components/ui/ManagerSelect'
-import { PlanChipBadge } from '@/components/ui/PlanBadges'
+import { PlanChipBadge, ClearanceChipBadge } from '@/components/ui/PlanBadges'
 import Link from 'next/link'
 import type { NewHireRow } from '@/types'
 
@@ -128,6 +128,7 @@ function HireTable({
                 <div className="status-badge-row">
                   <span className={`hr-status ${hire.status}`}>{STATUS_LABELS[hire.status]}</span>
                   {hire.plan_chip && <PlanChipBadge chip={hire.plan_chip} />}
+                  {hire.clearance_chip && <ClearanceChipBadge status={hire.clearance_chip} />}
                 </div>
               </td>
               <td>
@@ -586,6 +587,7 @@ export default function HRDashboard() {
                             <div className="status-badge-row">
                               <span className={`hr-status ${hire.status}`}>{STATUS_LABELS[hire.status]}</span>
                               {hire.plan_chip && <PlanChipBadge chip={hire.plan_chip} />}
+                              {hire.clearance_chip && <ClearanceChipBadge status={hire.clearance_chip} />}
                             </div>
                           </td>
                           <td onClick={e => e.stopPropagation()}>
