@@ -5,11 +5,11 @@ import { rateLimit, rateLimitKey } from '@/lib/rate-limit'
 import { ownedPlan } from '@/lib/manager-access'
 import { queueNotification, hrNotifyEmails, appUrl } from '@/lib/notify'
 import {
-  PlanPutSchema, answersFromRow, fieldErrors, isPlanOverdue, todayIso,
-  PLAN_TEXT_FIELDS, PROJECT_TEXT_FIELDS,
+  PlanPutSchema, answersFromRow, fieldErrors, isPlanOverdue, todayIso, PLAN_TEXT_FIELDS,
 } from '@/lib/manager-plan'
 import { getClearanceRequirements } from '@/lib/clearance'
 import { syncPmRequest } from '@/lib/pm-server'
+import { syncClearancePackage } from '@/lib/clearance-package'
 import type { Database } from '@/types'
 
 type PlanUpdate = Database['public']['Tables']['manager_plans']['Update']
@@ -86,19 +86,20 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   }
 
   const update: PlanUpdate = {
-    status:            action === 'submit' ? 'submitted' : 'draft',
-    training_delivery: answers.training_delivery,
-    clearance_type:    answers.clearance_type,
-    updated_at:        new Date().toISOString(),
+    status:         action === 'submit' ? 'submitted' : 'draft',
+    training_items: answers.training_items,
+    // The schema has already emptied this when "Other" is unticked
+    training_other: answers.training_other || null,
+    clearance_type: answers.clearance_type,
+    updated_at:     new Date().toISOString(),
   }
   for (const field of PLAN_TEXT_FIELDS) update[field] = answers[field] || null
 
-  // Project details are written only under PSPC & RCMP. Switching to another clearance type
-  // leaves whatever was stored before untouched; nothing is deleted.
+  // Project number and region are written only under PSPC & RCMP. Switching to another clearance
+  // type leaves whatever was stored before untouched; nothing is deleted.
   if (answers.clearance_type === 'pspc_rcmp') {
-    for (const field of PROJECT_TEXT_FIELDS) update[field] = answers[field] || null
+    update.project_number = answers.project_number || null
     update.project_region = answers.project_region || null
-    update.project_branch = answers.project_branch || null
   }
 
   // manager_id in the filter: if HR reassigned the hire mid-request, nothing is written
@@ -170,6 +171,8 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
   // Regional project management: open, reopen or cancel the hire's request to match the plan
   await syncPmRequest(admin, id)
+  // The plan's project number and region are part of the PSPC & RCMP clearance package
+  await syncClearancePackage(admin, id, user.id)
 
   return NextResponse.json({ ok: true, status: saved[0].status, submitted_at: submittedAt })
 }

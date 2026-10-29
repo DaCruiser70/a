@@ -6,7 +6,7 @@ import Modal from '@/components/ui/Modal'
 import ManagerSelect from '@/components/ui/ManagerSelect'
 import { PlanStatusBadge, OverdueBadge, ClearanceBadge, formatPlanDate } from '@/components/ui/PlanBadges'
 import { PortalTag } from '@/components/ui/PortalName'
-import { TRAINING_DELIVERY_LABELS, type PlanAnswers } from '@/lib/manager-plan'
+import { SCHEDULE_FIELDS, SCHEDULE_LABELS, trainingSummary, type PlanAnswers } from '@/lib/manager-plan'
 import type { ManagerPlanStatus } from '@/types'
 
 type PlanView = {
@@ -69,15 +69,17 @@ function Row({ label, text, children }: { label: string; text?: string | null; c
 // "Manager Plan" card for the HR detail page. Collapsed by default: header, status, one summary row.
 // Once the plan is submitted, "View plan" expands every answer. Change manager is always in the header.
 export default function ManagerPlanCard({
-  hireId, onManagerChanged,
+  hireId, onManagerChanged, alwaysExpanded = false,
 }: {
   hireId: string
   onManagerChanged?: (manager: { name: string; email: string }) => void
+  alwaysExpanded?: boolean   // Plan & Project tab: answers always shown, no View / Hide toggle
 }) {
   const [data, setData]       = useState<Data | null>(null)
   const [status, setStatus]   = useState<'loading' | 'ready' | 'error'>('loading')
   const [attempt, setAttempt] = useState(0)
-  const [expanded, setExpanded] = useState(false)   // per card, not remembered
+  const [expandedState, setExpanded] = useState(false)   // per card, not remembered
+  const expanded = alwaysExpanded || expandedState
   const regionId = useId()
 
   const [modalOpen, setModalOpen] = useState(false)
@@ -131,7 +133,8 @@ export default function ManagerPlanCard({
   const manager     = data?.manager ?? null
   const managerName = manager?.name ?? 'the manager'
   const a           = plan?.status === 'submitted' ? plan.answers : null
-  const showProject = !!a && [a.project_number, a.project_name, a.project_region, a.project_location, a.project_branch].some(Boolean)
+  const showProject = !!a && [a.project_number, a.project_region].some(Boolean)
+  const training    = a ? trainingSummary(a) : []
 
   return (
     <div className="hrd-card">
@@ -146,7 +149,7 @@ export default function ManagerPlanCard({
             Manager Plan
             <PortalTag role="manager">Manager</PortalTag>
           </div>
-          <div className="hrd-card-sub">Training and first-weeks plan from the reporting manager</div>
+          <div className="hrd-card-sub">Safety training and first-months plan from the reporting manager</div>
         </div>
 
         {status === 'ready' && (
@@ -161,7 +164,7 @@ export default function ManagerPlanCard({
               <button type="button" className="mpc-action" onClick={openModal}>
                 {plan ? 'Change manager' : 'Choose manager'}
               </button>
-              {a && (
+              {a && !alwaysExpanded && (
                 <button
                   type="button"
                   className="mpc-action mpc-toggle"
@@ -232,15 +235,20 @@ export default function ManagerPlanCard({
         <div className={`mpc-collapse${expanded ? ' open' : ''}`}>
           <div id={regionId} className="mpc-collapse-inner" role="region" aria-label="Manager plan answers" inert={!expanded}>
             <div className="mpc-body">
-              <div className="mpc-group">Training</div>
-              <Row label="Training needed" text={a.training_needed} />
-              <Row label="How they will get it" text={a.training_delivery.map(d => TRAINING_DELIVERY_LABELS[d]).join(', ')} />
-              <Row label="Training notes" text={a.training_notes} />
+              {/* One heading only; the list sits under it without a repeated row label */}
+              <div className="mpc-group" id={`${regionId}-training`}>Safety training</div>
+              <div className="mpc-row single">
+                {training.length === 0
+                  ? <div className="mpc-value empty">None selected</div>
+                  : (
+                    <ul className="mpc-list" aria-labelledby={`${regionId}-training`}>
+                      {training.map(t => <li key={t} className="mpc-value">{t}</li>)}
+                    </ul>
+                  )}
+              </div>
 
-              <div className="mpc-group">First three weeks</div>
-              <Row label="Week 1" text={a.week1} />
-              <Row label="Week 2" text={a.week2} />
-              <Row label="Week 3" text={a.week3} />
+              <div className="mpc-group">First three months</div>
+              {SCHEDULE_FIELDS.map(f => <Row key={f} label={SCHEDULE_LABELS[f]} text={a[f]} />)}
 
               <div className="mpc-group">Day one</div>
               <Row label="Who will meet them" text={a.day_one_contact} />
@@ -254,10 +262,7 @@ export default function ManagerPlanCard({
                     <div className="mpc-note">Project details below were entered under an earlier PSPC &amp; RCMP answer and have been kept.</div>
                   )}
                   <Row label="Project number" text={a.project_number} />
-                  <Row label="Project name"   text={a.project_name} />
                   <Row label="Project region" text={a.project_region} />
-                  <Row label="Location"       text={a.project_location} />
-                  <Row label="Branch"         text={a.project_branch} />
                 </>
               )}
 

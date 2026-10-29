@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { FormStatus, HireStatus, Database } from '@/types'
-import { computeHireStatus } from './hire-status'
+import { computeHireStatus, loadHireStatusInputs } from './hire-status'
 import { esc } from './safe-html'
 
 const FORM_TABLES: Record<string, string> = {
@@ -35,19 +35,8 @@ export async function applyFormStatus(
     } as never)
     .eq('user_id', hireId)
 
-  const [pi, bi, si, po] = await Promise.all([
-    admin.from('personal_info').select('form_status').eq('user_id', hireId).maybeSingle(),
-    admin.from('banking_info').select('form_status').eq('user_id', hireId).maybeSingle(),
-    admin.from('sin_info').select('form_status').eq('user_id', hireId).maybeSingle(),
-    admin.from('policy_acknowledgements').select('form_status').eq('user_id', hireId).maybeSingle(),
-  ])
-
-  const computed = computeHireStatus([
-    pi.data?.form_status,
-    bi.data?.form_status,
-    si.data?.form_status,
-    po.data?.form_status,
-  ])
+  const { forms, docs } = await loadHireStatusInputs(admin, hireId)
+  const computed = computeHireStatus(forms, docs)
   const overallStatus: HireStatus = computed.status
 
   const now = new Date().toISOString()

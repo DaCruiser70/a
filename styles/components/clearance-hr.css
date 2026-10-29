@@ -80,3 +80,90 @@
 }
 .hire-region-edit:hover { background: rgba(200,146,10,0.16); }
 .hire-region-edit:focus-visible { outline: 2px solid #1B3A6B; outline-offset: 2px; }
+
+/* HR Project Management card: project details from the regional team (plain text) */
+.pm-hr-rows { margin: 0 0 0.5rem; }
+.pm-hr-row  {
+  display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 4px 12px;
+  padding: 7px 0; border-bottom: 1px solid rgba(0,0,0,0.04);
+}
+.pm-hr-row:last-child { border-bottom: none; }
+.pm-hr-row dt { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: #5F5E5A; }
+.pm-hr-row dd { margin: 0; font-size: 13px; color: #1a2e25; overflow-wrap: anywhere; white-space: pre-wrap; }
+.pm-hr-row dd.empty { color: #888780; font-style: italic; }
+@media (max-width: 560px) { .pm-hr-row { grid-template-columns: minmax(0, 1fr); } }
+
+/* Clearance Tracker: project management not done yet (warning only; icon and text, not colour alone) */
+.clr-hr-waiting {
+  display: flex; align-items: flex-start; gap: 8px; margin-bottom: 0.5rem; padding: 9px 12px; border-radius: 8px;
+  font-size: 12px; color: #6B4A06; background: rgba(200,146,10,0.08); border: 1px solid rgba(200,146,10,0.3);
+}
+.clr-hr-waiting svg { width: 15px; height: 15px; flex-shrink: 0; margin-top: 1px; }
+
+/* ══ Clearance package (HR tracker and the clearance reviewer's portal). Tokens only. ══ */
+.clr-pkg { margin-bottom: var(--s6); padding-bottom: var(--s5); border-bottom: 1px solid var(--color-border-warm); }
+.clr-pkg-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); flex-wrap: wrap; margin-bottom: var(--s3); }
+.clr-pkg-head .clr-hr-section-title { margin: 0; }
+.clr-pkg-meta { margin: var(--s2) 0 0; font-size: 14px; color: var(--color-text-3); }
+
+/* Stepper: numbered dots joined by a line; state is in text for screen readers, not colour alone */
+.clr-stepper { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--s2) 0; }
+.clr-step { display: flex; align-items: center; gap: var(--s2); padding-right: var(--s5); position: relative; font-size: 14px; font-weight: 600; color: var(--color-text-3); }
+.clr-step:not(:last-child)::after { content: ''; width: var(--s4); height: 2px; background: var(--color-border-md); margin-left: var(--s1); }
+.clr-step-dot {
+  width: 30px; height: 30px; border-radius: var(--r-pill); flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 700; border: 2px solid var(--color-border-md); background: var(--color-surface); color: var(--color-text-3);
+}
+.clr-step.done    { color: var(--color-green); }
+.clr-step.done .clr-step-dot    { background: var(--color-green); border-color: var(--color-green); color: var(--color-on-dark); }
+.clr-step.current { color: var(--color-navy); }
+.clr-step.current .clr-step-dot { background: var(--color-navy); border-color: var(--color-navy); color: var(--color-on-dark); }
+.clr-step.returned { color: var(--color-red); }
+.clr-step.returned .clr-step-dot { background: var(--color-red); border-color: var(--color-red); color: var(--color-on-dark); }
+.clr-stepper.big .clr-step { font-size: 16px; }
+.clr-stepper.big .clr-step-dot { width: 40px; height: 40px; font-size: 15px; }
+
+/* Returned to HR: solid red heading, the reviewer's note as plain text */
+.clr-returned {
+  margin-top: var(--s4); padding: var(--s4) var(--s5); border-radius: var(--r-md);
+  background: var(--color-red-faint); border: 1.5px solid var(--color-red);
+}
+.clr-returned-title { font-weight: 700; color: var(--color-red); margin-bottom: var(--s2); }
+.clr-returned-note  { margin: 0 0 var(--s2); padding: var(--s3); border-radius: var(--r-sm); background: var(--color-surface); font-size: 15px; color: var(--color-text); white-space: pre-wrap; overflow-wrap: anywhere; }
+.clr-returned-help  { margin: 0 0 var(--s3); font-size: 14px; color: var(--color-text-2); }
+
+/* "Waiting on:" checklist */
+.clr-waiting { margin-top: var(--s4); padding: var(--s4) var(--s5); border-radius: var(--r-md); background: var(--color-gold-faint); border: 1px solid var(--color-gold); }
+.clr-waiting-title { font-weight: 700; color: var(--color-text); margin-bottom: var(--s2); }
+.clr-waiting ul { margin: 0; padding-left: var(--s5); font-size: 15px; color: var(--color-text); }
+.clr-waiting li + li { margin-top: var(--s1); }
+
+.clr-history { margin-top: var(--s4); font-size: 14px; }
+.clr-history summary { cursor: pointer; font-weight: 600; color: var(--color-navy); min-height: 44px; display: flex; align-items: center; }
+.clr-history summary:focus-visible { outline: 3px solid var(--color-gold); outline-offset: 2px; border-radius: var(--r-sm); }
+.clr-history ol { list-style: none; margin: 0; padding: 0; }
+.clr-history li { padding: var(--s2) 0; border-top: 1px solid var(--color-border-warm); color: var(--color-text-2); }
+.clr-history-note { margin-top: var(--s1); color: var(--color-text); white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* Per-form review inside the clearance form rows */
+.clr-hr-review { flex-basis: 100%; display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap; margin-top: var(--s2); }
+.clr-hr-review-meta { font-size: 13px; color: var(--color-text-3); }
+.clr-hr-review-reason { flex-basis: 100%; font-size: 14px; color: var(--color-red); white-space: pre-wrap; overflow-wrap: anywhere; }
+.clr-hr-locked { margin: var(--s3) 0 0; padding: var(--s3) var(--s4); border-radius: var(--r-md); background: var(--color-navy-faint); font-size: 14px; color: var(--color-text-2); }
+
+/* RCMP only: Sent to BGIS */
+.clr-bgis {
+  display: flex; align-items: center; gap: var(--s3); margin-top: var(--s4); min-height: 56px; padding: var(--s3) var(--s4);
+  border-radius: var(--r-md); border: 1.5px solid var(--color-border-md); background: var(--color-surface); cursor: pointer;
+}
+.clr-bgis input { width: 22px; height: 22px; accent-color: var(--color-green); flex-shrink: 0; }
+.clr-bgis input:focus-visible { outline: 3px solid var(--color-gold); outline-offset: 2px; }
+.clr-bgis.disabled { cursor: not-allowed; background: var(--color-bg-warm); }
+.clr-bgis > span { display: flex; flex-direction: column; }
+.clr-bgis-label { font-weight: 700; color: var(--color-text); }
+.clr-bgis-meta  { font-size: 13px; color: var(--color-text-3); }
+
+@media (max-width: 560px) {
+  .clr-step { padding-right: var(--s3); }
+  .clr-step:not(:last-child)::after { width: var(--s2); }
+}

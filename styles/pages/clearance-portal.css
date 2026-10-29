@@ -1,0 +1,85 @@
+/* ══════════════════════════════════════════════
+   CLEARANCE REVIEW PORTAL (data-portal="clearance": deep blue-teal from portal-theme.css)
+   Uses the shared cards, buttons, pills and chips from hr-hire.css and the package stepper from
+   clearance-hr.css. Tokens only.
+══════════════════════════════════════════════ */
+
+.cp-page { min-height: 100vh; }
+
+.cp-container {
+  width: 100%; max-width: var(--container-wide); margin: 0 auto;
+  padding-left: var(--gutter-fluid); padding-right: var(--gutter-fluid);
+}
+
+/* Hero in the portal's own colour */
+.cp-hero {
+  background: linear-gradient(135deg, var(--portal-hero-from), var(--portal-hero-to));
+  border-bottom: 3px solid var(--color-gold);
+  color: var(--color-on-dark);
+  padding: var(--s8) 0 var(--s10);
+}
+.cp-hero-tag { font-size: 13px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-on-dark-2); }
+.cp-title { margin-top: var(--s2); font-family: var(--font-serif); font-size: 36px; font-weight: 700; line-height: 1.15; color: var(--color-on-dark); overflow-wrap: anywhere; }
+.cp-sub { margin-top: var(--s2); font-size: 16px; color: var(--color-on-dark-2); }
+
+.cp-body { padding-top: var(--s8); padding-bottom: var(--s12); display: flex; flex-direction: column; gap: var(--s6); }
+.cp-body > .hh-card { margin-bottom: 0; }
+.cp-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s6); align-items: start; }
+.cp-grid > .hh-card { margin-bottom: 0; }
+.cp-gap { margin-top: var(--s4); }
+
+/* The portal's accent on the shared buttons, chips and focus where it reads as "this portal" */
+.cp-page .hh-chip.active { background: var(--portal-accent); border-color: var(--portal-accent); }
+.cp-page .hh-btn:not(.secondary):not(.approve):not(.danger) { background: var(--portal-accent); border-color: var(--portal-accent); }
+.cp-page .hh-btn:not(.secondary):not(.approve):not(.danger):hover { background: var(--portal-hover); border-color: var(--portal-hover); }
+.cp-page .hh-btn.secondary { color: var(--portal-accent); border-color: var(--portal-accent); }
+.cp-page .hh-btn:disabled, .cp-page .hh-btn:disabled:hover {
+  background: var(--color-border-warm); border-color: var(--color-border-md); color: var(--color-text-3);
+}
+
+/* Stage tabs */
+.cp-tabs { display: flex; gap: var(--s3); flex-wrap: wrap; }
+.cp-tabs .hh-chip { display: inline-flex; align-items: center; gap: var(--s2); min-height: 44px; padding: 0 var(--s4); font-size: 15px; }
+.cp-count {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 24px; height: 22px; padding: 0 var(--s2);
+  border-radius: var(--r-pill); font-size: 13px; font-weight: 700; background: var(--color-grey-faint); color: var(--color-text-2);
+}
+.hh-chip.active .cp-count { background: var(--color-on-dark-faint); color: var(--color-on-dark); }
+
+/* Package list */
+.cp-table-wrap { overflow-x: auto; }
+.cp-table { width: 100%; min-width: 760px; border-collapse: collapse; }
+.cp-table th {
+  text-align: left; padding: var(--s4) var(--s5); font-size: 13px; font-weight: 700; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--color-text-3); background: var(--color-bg-warm); border-bottom: 1px solid var(--color-border-warm);
+}
+.cp-table td { padding: var(--s5); border-bottom: 1px solid var(--color-border-warm); font-size: 16px; vertical-align: middle; }
+.cp-table th:first-child, .cp-table td:first-child { padding-left: var(--s7); }
+.cp-table th:last-child,  .cp-table td:last-child  { padding-right: var(--s7); }
+.cp-table tbody tr:hover { background: var(--portal-soft); }
+.cp-table tbody tr:last-child td { border-bottom: none; }
+.cp-name { font-weight: 600; color: var(--color-text); }
+.cp-sub-cell { font-size: 14px; color: var(--color-text-3); }
+.cp-nowrap { white-space: nowrap; }
+.cp-action { text-align: right; width: 1%; }
+.cp-action .hh-btn { min-width: 110px; }
+
+/* Package page */
+.cp-notice {
+  padding: var(--s4) var(--s5); border-radius: var(--r-md); font-weight: 600;
+  background: var(--color-green-faint); color: var(--color-green); border: 1px solid var(--color-green);
+}
+.cp-done { margin: var(--s4) 0 0; font-weight: 600; color: var(--color-green); }
+.cp-empty-value { color: var(--color-text-3); font-style: italic; }
+
+@media (max-width: 900px) {
+  .cp-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 640px) {
+  .cp-hero { padding: var(--s6) 0 var(--s8); }
+  .cp-title { font-size: 28px; }
+  .cp-body { padding-top: var(--s6); }
+  .cp-table th:first-child, .cp-table td:first-child { padding-left: var(--s4); }
+  .cp-table th:last-child,  .cp-table td:last-child  { padding-right: var(--s4); }
+  .cp-page .hh-card-foot .hh-btn { flex: 1 1 auto; }
+}

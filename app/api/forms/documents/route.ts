@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 import { requireRole } from '@/lib/roles'
+import { recomputeProfileStatus } from '@/lib/hire-status'
+import { syncClearancePackage } from '@/lib/clearance-package'
 import { afterHireFormSaved } from '@/lib/submission-server'
 
 export async function GET() {
@@ -103,6 +105,11 @@ export async function POST(request: Request) {
 
   // Sent to HR on save; the save that completes every required form queues HR's notice once
   const { complete, justCompleted } = await afterHireFormSaved(admin, user.id)
+
+  // Documents are one of the 5 onboarding items: refresh the stored status (and payroll queueing)
+  await recomputeProfileStatus(admin, user.id)
+  // An ID document (driver's licence or alternate ID) is part of the clearance package
+  await syncClearancePackage(admin, user.id, user.id)
 
   return NextResponse.json({ ok: true, complete, justCompleted })
 }

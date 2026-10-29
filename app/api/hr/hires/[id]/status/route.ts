@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase/server'
 import { requireRole } from '@/lib/roles'
 import { applyFormStatus } from '@/lib/form-status'
 import { applyClearanceStatus } from '@/lib/clearance-server'
+import { syncClearancePackage } from '@/lib/clearance-package'
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireRole('hr')
@@ -23,6 +24,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (formId === 'clearance') {
     const result = await applyClearanceStatus(admin, id, status, reason, user.id)
     if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.httpStatus })
+    await syncClearancePackage(admin, id, user.id)
     return NextResponse.json({ ok: true, clearanceStatus: result.status })
   }
 

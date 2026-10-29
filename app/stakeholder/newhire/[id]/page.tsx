@@ -3,6 +3,8 @@
 import { useRouter, useParams } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import PortalHeader from '@/components/ui/PortalHeader'
+import VehicleTaskModal from '@/components/stakeholder/VehicleTaskModal'
+import { VEHICLE_TASK_KEYS, INSURANCE_TASK_KEY } from '@/lib/vehicle'
 
 type Task = {
   id: string
@@ -35,9 +37,12 @@ export default function StakeholderHireDetail() {
   const [confirming, setConfirming]       = useState(false)
   const [noteText, setNoteText]           = useState('')
   const [toast, setToast]                 = useState<string | null>(null)
+  // Company vehicle tasks open their own dialog (vehicle details / vehicle insurance)
+  const [vehicleOpen, setVehicleOpen]     = useState(false)
+  const [reload, setReload]               = useState(0)
 
   useEffect(() => {
-    fetch('/api/stakeholder/tasks')
+    fetch('/api/stakeholder/tasks', { cache: 'no-store' })
       .then(r => r.ok ? r.json() : Promise.reject())
       .then(data => {
         const group = (data.hires as HireGroup[]).find(h => h.hire_id === hireId)
@@ -46,7 +51,7 @@ export default function StakeholderHireDetail() {
       })
       .catch(() => setLoadError(true))
       .finally(() => setLoading(false))
-  }, [hireId])
+  }, [hireId, reload])
 
   function showToast(msg: string) {
     setToast(msg)
@@ -182,8 +187,9 @@ export default function StakeholderHireDetail() {
               </div>
 
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 600, fontSize: '14px', color: '#1A1916', marginBottom: '2px' }}>
+                <div style={{ fontWeight: 600, fontSize: '14px', color: '#1A1916', marginBottom: '2px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                   {task.task_name}
+                  {task.task_key === INSURANCE_TASK_KEY && <span className="vh-tag">Vehicle insurance</span>}
                 </div>
                 <div style={{ fontSize: '11px', color: '#B0ABA4' }}>
                   {task.status === 'confirmed' && task.confirmed_at
@@ -195,7 +201,7 @@ export default function StakeholderHireDetail() {
 
               {task.status === 'pending' ? (
                 <button
-                  onClick={() => setConfirmModal(task)}
+                  onClick={() => (VEHICLE_TASK_KEYS.includes(task.task_key) ? setVehicleOpen(true) : setConfirmModal(task))}
                   style={{
                     padding: '7px 14px', borderRadius: '8px',
                     background: '#1B3A6B', color: '#fff',
@@ -303,6 +309,15 @@ export default function StakeholderHireDetail() {
             </div>
           </div>
         </div>
+      )}
+
+      {vehicleOpen && hireGroup && (
+        <VehicleTaskModal
+          hireId={hireId}
+          hireName={hireGroup.hire_name}
+          onClose={() => setVehicleOpen(false)}
+          onDone={msg => { setVehicleOpen(false); showToast(msg); setReload(r => r + 1) }}
+        />
       )}
 
       {/* ── TOAST ── */}

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 import { requireRole } from '@/lib/roles'
+import { inPayrollQueue } from '@/lib/payroll-access'
 import { getDocumentSignedUrl } from '@/lib/document-view'
 import { esc } from '@/lib/safe-html'
 
@@ -18,8 +19,8 @@ export async function GET(
 
   const { id, documentId } = await params
 
-  const { data: hire } = await admin.from('profiles').select('status').eq('id', id).single()
-  if (!hire || hire.status !== 'approved') return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  const { data: hire } = await admin.from('profiles').select('status, entered_payroll_queue_at').eq('id', id).single()
+  if (!inPayrollQueue(hire)) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   const download = new URL(request.url).searchParams.get('download') === '1'
 

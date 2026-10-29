@@ -2,8 +2,9 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database, DocStatus, ClearanceInfo } from '@/types'
 import { encrypt, decrypt, isEncrypted } from '@/lib/encrypt'
 import { esc } from '@/lib/safe-html'
+import { loadProjectBlock } from '@/lib/pm-server'
 import {
-  getClearanceRequirements, clearancePath, CLEARANCE_FILE_TYPES, CLEARANCE_FILES_BUCKET,
+  getClearanceRequirements, clearancePath, CLEARANCE_FILE_TYPES, CLEARANCE_FILES_BUCKET, packageLocked,
   CLEARANCE_MAX_BYTES, CLEARANCE_ID_DOC_TYPES, type ClearanceKind, type ClearanceRequirements,
 } from '@/lib/clearance'
 
@@ -36,12 +37,27 @@ export async function applyClearanceStatus(
   const req = await loadClearanceRequirements(admin, hireId)
   if (!req.required) return { ok: false, error: 'Not found', httpStatus: 404 }
 
+  // Locked while the PSPC & RCMP package is with the clearance reviewer
+  const { data: tracking } = await admin.from('clearance_tracking').select('package_stage').eq('newhire_id', hireId).maybeSingle()
+  if (packageLocked(tracking?.package_stage)) {
+    return { ok: false, error: 'The package is with the clearance reviewer. The forms can be changed only if they send it back to HR.', httpStatus: 409 }
+  }
+
+  // Whole-form decision: every required form takes the same review (per-form review is
+  // POST /api/hr/hires/[id]/clearance/review)
+  const now = new Date().toISOString()
+  const fileReview = status === 'approved' ? 'approved' as const : 'rejected' as const
+  const fileReason = status === 'flagged' ? reasonText : null
   const { data: updated, error } = await admin
     .from('clearance_info')
     .update({
       form_status: status,
       flag_reason: status === 'flagged' ? reasonText : null,
-      updated_at:  new Date().toISOString(),
+      rcmp_review: fileReview, rcmp_reject_reason: fileReason, rcmp_reviewed_at: now, rcmp_reviewed_by: performedBy,
+      ...(req.fingerprint
+        ? { fingerprint_review: fileReview, fingerprint_reject_reason: fileReason, fingerprint_reviewed_at: now, fingerprint_reviewed_by: performedBy }
+        : {}),
+      updated_at:  now,
     })
     .eq('user_id', hireId)
     .not('submitted_at', 'is', null)
@@ -181,18 +197,22 @@ export async function loadHrClearanceView(admin: Admin, hireId: string) {
   const req = await loadClearanceRequirements(admin, hireId)
   if (!req.required) return { required: false as const }
 
-  const [{ data: row }, { data: profile }, { data: plan }, { data: tracking }, id] = await Promise.all([
+  const [{ data: row }, { data: profile }, project, { data: tracking }, id, { data: history }] = await Promise.all([
     admin.from('clearance_info').select('*').eq('user_id', hireId).maybeSingle(),
     admin.from('profiles').select('office_location').eq('id', hireId).maybeSingle(),
-    admin.from('manager_plans')
-      .select('project_number, project_name, project_region, project_location, project_branch')
-      .eq('newhire_id', hireId).maybeSingle(),
+    loadProjectBlock(admin, hireId),
     admin.from('clearance_tracking').select('*').eq('newhire_id', hireId).maybeSingle(),
     clearanceIdOnFile(admin, hireId),
+    admin.from('clearance_stage_history')
+      .select('id, from_stage, to_stage, actor_id, note, created_at')
+      .eq('newhire_id', hireId).order('created_at', { ascending: false }).limit(20),
   ])
 
-  // Names of the HR users who marked each step
-  const actorIds = [tracking?.pspc_sent_by, tracking?.rcmp_sent_by, tracking?.cleared_by].filter((v): v is string => !!v)
+  // Names of everyone who reviewed a form, marked a step or moved the package
+  const actorIds = [
+    tracking?.pspc_sent_by, tracking?.rcmp_sent_by, tracking?.cleared_by, tracking?.stage_updated_by, tracking?.sent_to_bgis_by,
+    row?.rcmp_reviewed_by, row?.fingerprint_reviewed_by, ...(history ?? []).map(h => h.actor_id),
+  ].filter((v): v is string => !!v)
   const { data: actors } = actorIds.length
     ? await admin.from('profiles').select('id, full_name').in('id', actorIds)
     : { data: [] }
@@ -220,13 +240,10 @@ export async function loadHrClearanceView(admin: Admin, hireId: string) {
     rcmp_ext:           extOf(row?.rcmp_path),
     id,
     office_location:    office,
-    project: req.fingerprint ? {
-      number:   plan?.project_number   ?? null,
-      name:     plan?.project_name     ?? null,
-      region:   plan?.project_region   ?? null,
-      location: plan?.project_location ?? null,
-      branch:   plan?.project_branch   ?? null,
-    } : null,
+    // PSPC & RCMP only: plan number and region plus the project-management details. pm_done false
+    // shows "Waiting on project management" in the tracker; it never blocks the tracker buttons.
+    project: req.fingerprint ? project.block : null,
+    pm_done: req.fingerprint ? project.done : null,
     tracking: {
       pspc_sent_at:      tracking?.pspc_sent_at ?? null,
       pspc_sent_by_name: actorName(tracking?.pspc_sent_by),
@@ -236,6 +253,40 @@ export async function loadHrClearanceView(admin: Admin, hireId: string) {
       cleared_at:        tracking?.cleared_at ?? null,
       cleared_by_name:   actorName(tracking?.cleared_by),
     },
+    // Per-form review
+    reviews: {
+      rcmp: {
+        status:      row?.rcmp_review ?? 'pending',
+        reason:      row?.rcmp_reject_reason ?? null,
+        reviewed_at: row?.rcmp_reviewed_at ?? null,
+        by_name:     actorName(row?.rcmp_reviewed_by),
+      },
+      fingerprint: req.fingerprint ? {
+        status:      row?.fingerprint_review ?? 'pending',
+        reason:      row?.fingerprint_reject_reason ?? null,
+        reviewed_at: row?.fingerprint_reviewed_at ?? null,
+        by_name:     actorName(row?.fingerprint_reviewed_by),
+      } : null,
+    },
+    // PSPC & RCMP package (stage null until sent); HR sees it but cannot move it
+    package: req.fingerprint ? {
+      stage:            tracking?.package_stage ?? null,
+      sent_at:          tracking?.package_sent_at ?? null,
+      stage_updated_at: tracking?.stage_updated_at ?? null,
+      stage_by_name:    actorName(tracking?.stage_updated_by),
+      returned_note:    tracking?.returned_note ?? null,
+      returned_at:      tracking?.returned_at ?? null,
+      done_at:          tracking?.done_at ?? null,
+      history: (history ?? []).map(h => ({
+        id: h.id, from: h.from_stage, to: h.to_stage, at: h.created_at, by_name: actorName(h.actor_id), note: h.note,
+      })),
+    } : null,
+    // RCMP only: "Sent to BGIS"
+    bgis: req.type === 'rcmp' ? {
+      sent:    tracking?.sent_to_bgis ?? false,
+      at:      tracking?.sent_to_bgis_at ?? null,
+      by_name: actorName(tracking?.sent_to_bgis_by),
+    } : null,
   }
 }
 

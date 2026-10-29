@@ -16,6 +16,13 @@ type PayloadByTemplate = {
   onboarding_complete:    { newhireId: string; hireName: string; link: string }
   pm_request_created:     { newhireId: string; hireName: string; link: string }
   pm_request_done:        { newhireId: string; hireName: string; link: string }
+  clearance_package_sent:     { newhireId: string; hireName: string; link: string }
+  clearance_package_returned: { newhireId: string; hireName: string; link: string }
+  clearance_package_done:     { newhireId: string; hireName: string; link: string }
+  vehicle_rob_task:           { newhireId: string; hireName: string; link: string }
+  vehicle_heather_task:       { newhireId: string; hireName: string; link: string }
+  vehicle_insurance_task:     { newhireId: string; hireName: string; link: string }
+  vehicle_complete:           { newhireId: string; hireName: string; link: string }
 }
 
 export function appUrl(path: string): string {

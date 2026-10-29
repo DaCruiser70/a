@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 import { requireRole } from '@/lib/roles'
+import { RETIRED_TASK_KEYS } from '@/lib/stakeholder-mapping'
 
 export async function GET() {
   const auth = await requireRole('stakeholder')
@@ -16,6 +17,7 @@ export async function GET() {
     .select('id, newhire_id, task_key, task_name, status, confirmed_at, created_at')
     .eq('assigned_to', user.id)
     .eq('hidden_from_stakeholder', false)
+    .not('task_key', 'in', `(${RETIRED_TASK_KEYS.join(',')})`)
     .order('created_at', { ascending: true })
 
   if (!tasks || tasks.length === 0) {

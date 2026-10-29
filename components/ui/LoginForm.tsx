@@ -3,11 +3,25 @@
 import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { isRole, type Role } from '@/lib/portals'
+import { themeForRole } from '@/lib/portal-theme'
+import PortalIcon from '@/components/ui/PortalIcon'
 
 const OTP_EXPIRY = 300
 
 // A shared regional project-management account lists its team (names, masked emails only)
 type TeamMember = { id: string; name: string; email: string }
+
+// Portals the server says this account can open (only sent when there are two or more)
+type PortalChoice = { role: Role; label: string; href: string }
+
+// Only same-site paths from the server's list are followed; anything else is dropped
+function parsePortalChoices(value: unknown): PortalChoice[] {
+  if (!Array.isArray(value)) return []
+  return value.filter((p): p is PortalChoice =>
+    !!p && typeof p === 'object' && isRole(p.role) && typeof p.label === 'string'
+    && typeof p.href === 'string' && p.href.startsWith('/') && !p.href.startsWith('//'))
+}
 
 // Error bodies are JSON from our routes, but a proxy or crash page may not be
 async function readJson(res: Response): Promise<{ error?: string; [key: string]: unknown }> {
@@ -22,7 +36,10 @@ export default function LoginForm({ otpRequired = false }: { otpRequired?: boole
   const [password, setPassword]     = useState('')
   const [error, setError]           = useState('')
   const [loading, setLoading]       = useState(false)
-  const [stage, setStage]           = useState<'login' | 'member' | 'otp'>('login')
+  const [stage, setStage]           = useState<'login' | 'member' | 'otp' | 'portal'>('login')
+  const [portals, setPortals]       = useState<PortalChoice[]>([])
+  const [leaving, setLeaving]       = useState<string | null>(null)
+  const portalTitleRef = useRef<HTMLDivElement>(null)
   const [members, setMembers]       = useState<TeamMember[]>([])
   const [memberId, setMemberId]     = useState('')
   const [memberError, setMemberError] = useState('')
@@ -199,10 +216,29 @@ export default function LoginForm({ otpRequired = false }: { otpRequired?: boole
       return
     }
 
+    // More than one portal: let the person choose where to go (the session is already set)
+    const choices = parsePortalChoices(data.portals)
+    if (choices.length > 1) {
+      setPortals(choices)
+      setStage('portal')
+      setOtpLoading(false)
+      return
+    }
+
     // Session was set server-side by the OTP route; give the browser 100ms to
     // receive the Set-Cookie headers before navigating to the account's landing portal.
     const landing = typeof data.landing === 'string' && data.landing.startsWith('/') ? data.landing : '/'
     setTimeout(() => { window.location.href = landing }, 100)
+  }
+
+  // The chooser replaces the code screen: move focus to its heading so it is announced
+  useEffect(() => {
+    if (stage === 'portal') portalTitleRef.current?.focus()
+  }, [stage])
+
+  async function handleSignOut() {
+    await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {})
+    window.location.href = '/login'
   }
 
   async function handleResend() {
@@ -250,6 +286,48 @@ export default function LoginForm({ otpRequired = false }: { otpRequired?: boole
     setMembers([])
     setMemberId('')
     setMemberError('')
+  }
+
+  /* ── WHERE WOULD YOU LIKE TO GO? (accounts that can open two or more portals) ── */
+  if (stage === 'portal') {
+    return (
+      <>
+        <div className="login-card-body">
+          <div className="login-card-title" tabIndex={-1} ref={portalTitleRef} id="login-portal-title">Where would you like to go?</div>
+          <div className="login-card-sub" id="login-portal-sub">
+            Your account can open more than one area. Pick one to continue.<br />
+            You can switch any time from the header.
+          </div>
+
+          <nav aria-labelledby="login-portal-title" aria-describedby="login-portal-sub">
+            <ul className="login-portal-list">
+              {portals.map(p => {
+                const t = themeForRole(p.role)
+                return (
+                  <li key={p.role}>
+                    <a
+                      href={p.href}
+                      className="login-portal"
+                      style={{ '--portal-accent': t.accent } as React.CSSProperties}
+                      aria-busy={leaving === p.role || undefined}
+                      onClick={() => setLeaving(p.role)}
+                    >
+                      <span className="login-portal-icon" aria-hidden="true"><PortalIcon role={p.role} /></span>
+                      <span className="login-portal-name">{p.label}</span>
+                      <span className="login-portal-arrow" aria-hidden="true">{leaving === p.role ? '...' : '→'}</span>
+                    </a>
+                  </li>
+                )
+              })}
+            </ul>
+          </nav>
+        </div>
+
+        <div className="login-card-foot">
+          <button type="button" className="login-back-link" onClick={handleSignOut}>Sign out</button>
+        </div>
+      </>
+    )
   }
 
   /* ── WHO IS SIGNING IN (shared regional project-management account) ── */

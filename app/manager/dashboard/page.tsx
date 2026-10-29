@@ -50,7 +50,7 @@ function HireCard({ hire }: { hire: ManagerHire }) {
           </div>
         </div>
 
-        <div className="mgr-progress" aria-label={`Onboarding forms ${hire.progress}% approved`}>
+        <div className="mgr-progress" aria-label={`Onboarding items ${hire.progress}% approved`}>
           <div className="mgr-progress-bar" aria-hidden="true">
             <div className="mgr-progress-fill" style={{ width: `${hire.progress}%` }} />
           </div>

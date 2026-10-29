@@ -17,7 +17,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const [{ data: hire }, { data: plan }, { data: req }] = await Promise.all([
     admin.from('profiles').select('id, region').eq('id', id).maybeSingle(),
     admin.from('manager_plans').select('status, clearance_type').eq('newhire_id', id).maybeSingle(),
-    admin.from('pm_requests').select('status, region, claimed_by, claimed_at, completed_by, completed_at').eq('newhire_id', id).maybeSingle(),
+    admin.from('pm_requests')
+      .select('status, region, claimed_by, claimed_at, completed_by, completed_at, dcc, standing_offer, project_name, project_location')
+      .eq('newhire_id', id).maybeSingle(),
   ])
   if (!hire) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
@@ -33,5 +35,12 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     claimed_at:        req?.claimed_at ?? null,
     completed_by_name: req?.completed_by ? names[req.completed_by] ?? null : null,
     completed_at:      req?.completed_at ?? null,
+    // Project details from project management (HR and project_mgmt only)
+    details: {
+      dcc:              req?.dcc ?? null,
+      standing_offer:   req?.standing_offer ?? null,
+      project_name:     req?.project_name ?? null,
+      project_location: req?.project_location ?? null,
+    },
   })
 }

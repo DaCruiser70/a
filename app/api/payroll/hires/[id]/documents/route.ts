@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 import { requireRole } from '@/lib/roles'
+import { recomputeProfileStatus } from '@/lib/hire-status'
 import { esc } from '@/lib/safe-html'
 
 const ALLOWED_DOC_TYPES = new Set(['td1_federal', 'td1_provincial', 'direct_deposit'])
@@ -54,6 +55,10 @@ export async function PATCH(
     message:      `<strong>Payroll</strong> marked ${esc(doc.document_label)} as <strong>${action === 'approve' ? 'approved' : 'rejected'}</strong>${reasonNote}`,
     performed_by: user.id,
   })
+
+  // Documents are one of the 5 onboarding items: refresh the stored status (and payroll queueing)
+  // (a hire already in the payroll queue stays visible to payroll: lib/payroll-access.ts)
+  await recomputeProfileStatus(admin, id)
 
   return NextResponse.json({ ok: true })
 }

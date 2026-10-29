@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@/types'
+import { PLAN_COLUMNS } from '@/lib/manager-plan'
 
 // A manager account owns the plans whose manager_id is a managers row linked to it (managers.user_id)
 export async function managerIdsFor(admin: SupabaseClient<Database>, userId: string): Promise<string[]> {
@@ -22,7 +23,7 @@ export async function ownedPlan(admin: SupabaseClient<Database>, userId: string,
 
   const { data, error } = await admin
     .from('manager_plans')
-    .select('*')
+    .select(PLAN_COLUMNS)
     .eq('newhire_id', newhireId)
     .in('manager_id', ids)
     .maybeSingle()

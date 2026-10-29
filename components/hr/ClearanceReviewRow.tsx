@@ -3,29 +3,38 @@
 import { useState } from 'react'
 import '../../styles/components/clearance-hr.css'
 import { timeAgo } from '@/lib/time-ago'
-import { CLEARANCE_STATUS_LABELS, formatDcn } from '@/lib/clearance'
-import type { HrClearanceView } from '@/lib/clearance-server'
+import Modal from '@/components/ui/Modal'
+import { CLEARANCE_STATUS_LABELS, FILE_REVIEW_LABELS, formatDcn, packageLocked, type FileReview } from '@/lib/clearance'
+import type { HrClearanceFullView as HrClearanceView } from '@/lib/clearance-package'
 
 type View = Extract<HrClearanceView, { required: true }>
 type RevealField = 'place_of_birth' | 'dcn'
+type Kind = 'rcmp' | 'fingerprint'
+
+const REVIEW_TONE: Record<FileReview, string> = { pending: 'amber', approved: 'green', rejected: 'red' }
+const KIND_LABEL: Record<Kind, string> = { rcmp: 'RCMP form', fingerprint: 'PSPC fingerprint form' }
 
 const DOC_STATUS_LABELS: Record<string, string> = {
   pending: 'Uploaded', review: 'Under review', approved: 'Approved', rejected: 'Rejected',
 }
 
-// "Security Clearance" row in the HR Form Review card. Tracked separately: it is never counted in
-// the 4/4 form total and never changes the hire's status. Approve and Flag go through the page's
-// existing handlers and flag-reason modal (formId 'clearance').
+// The hire's clearance form on the HR Clearance tab. Tracked separately: it is never counted in
+// the 4/4 form total and never changes the hire's status. HR approves or rejects each form (RCMP,
+// and the PSPC fingerprint form for PSPC & RCMP). Locked while the package is with the reviewer.
 export default function ClearanceReviewRow({
-  hireId, view, onApprove, onFlag, onToast,
+  hireId, view, onReviewed, onToast,
 }: {
-  hireId:    string
-  view:      View
-  onApprove: () => void
-  onFlag:    () => void
-  onToast:   (msg: string) => void
+  hireId:     string
+  view:       View
+  onReviewed: () => void
+  onToast:    (msg: string) => void
 }) {
-  const [open, setOpen]         = useState(false)
+  const [open, setOpen]         = useState(true)
+  const [rejecting, setRejecting] = useState<Kind | null>(null)
+  const [reason, setReason]     = useState('')
+  const [saving, setSaving]     = useState<string | null>(null)
+  const [reviewError, setReviewError] = useState('')
+  const locked = packageLocked(view.package?.stage)
   const [revealed, setRevealed] = useState<Partial<Record<RevealField, string>>>({})
   const [busy, setBusy]         = useState<string | null>(null)
 
@@ -70,6 +79,62 @@ export default function ClearanceReviewRow({
     }
   }
 
+  async function review(kind: Kind, action: 'approve' | 'reject', why?: string) {
+    setSaving(`${kind}-${action}`)
+    setReviewError('')
+    try {
+      const res = await fetch(`/api/hr/hires/${hireId}/clearance/review`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(action === 'reject' ? { kind, action, reason: why } : { kind, action }),
+      })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        if (action === 'reject') setReviewError(body.error ?? 'Could not save. Please try again.')
+        else onToast(body.error ?? 'Could not save. Please try again.')
+        return
+      }
+      setRejecting(null)
+      setReason('')
+      onToast(`${KIND_LABEL[kind]} ${action === 'approve' ? 'approved' : 'rejected'}`)
+      onReviewed()
+    } catch {
+      onToast('Could not reach the server. Check your connection and try again.')
+    } finally {
+      setSaving(null)
+    }
+  }
+
+  // Review status and Approve / Reject for one form
+  function reviewControls(kind: Kind) {
+    const r = kind === 'rcmp' ? view.reviews.rcmp : view.reviews.fingerprint
+    if (!r) return null
+    const st = r.status as FileReview
+    return (
+      <div className="clr-hr-review">
+        <span className={`hh-pill ${REVIEW_TONE[st]}`}>{FILE_REVIEW_LABELS[st]}</span>
+        {r.reviewed_at && r.by_name && st !== 'pending' && (
+          <span className="clr-hr-review-meta">{st === 'approved' ? 'Approved' : 'Rejected'} by {r.by_name} {timeAgo(r.reviewed_at)}</span>
+        )}
+        {submitted && !locked && (
+          <span className="clr-hr-btns">
+            {st !== 'approved' && (
+              <button type="button" className="hh-btn approve" disabled={!!saving} onClick={() => review(kind, 'approve')}>
+                {saving === `${kind}-approve` ? 'Saving…' : 'Approve'}
+              </button>
+            )}
+            {st !== 'rejected' && (
+              <button type="button" className="hh-btn danger" disabled={!!saving} onClick={() => { setReason(''); setReviewError(''); setRejecting(kind) }}>
+                Reject
+              </button>
+            )}
+          </span>
+        )}
+        {st === 'rejected' && r.reason && <div className="clr-hr-review-reason"><strong>Reason:</strong> {r.reason}</div>}
+      </div>
+    )
+  }
+
   const stepClass = status === 'approved' ? 'approved' : status === 'flagged' ? 'flagged' : status === 'review' ? 'review' : 'pending'
   const rcmpIsSheet = view.rcmp_ext === 'xlsx'
 
@@ -93,7 +158,7 @@ export default function ClearanceReviewRow({
         <span className={`hrd-form-status ${status}`}>{CLEARANCE_STATUS_LABELS[status]}</span>
         {submitted && (
           <div className="hrd-form-inline-actions">
-            <button className="hrd-inline-btn expand" aria-expanded={open} onClick={() => setOpen(v => !v)}>
+            <button className={`hrd-inline-btn expand${open ? ' quiet' : ''}`} aria-expanded={open} onClick={() => setOpen(v => !v)}>
               {open ? 'Hide' : 'View'}
             </button>
           </div>
@@ -112,7 +177,7 @@ export default function ClearanceReviewRow({
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
               Place of birth — encrypted
             </div>
-            <button className="hrd-sensitive-btn" disabled={!view.has_place_of_birth || busy === 'place_of_birth'} onClick={() => reveal('place_of_birth')}>
+            <button className={`hrd-sensitive-btn${revealed.place_of_birth !== undefined ? ' quiet' : ''}`} disabled={!view.has_place_of_birth || busy === 'place_of_birth'} onClick={() => reveal('place_of_birth')}>
               {busy === 'place_of_birth' ? 'Loading…' : revealed.place_of_birth !== undefined ? 'Hide' : 'Reveal'}
             </button>
           </div>
@@ -128,7 +193,7 @@ export default function ClearanceReviewRow({
                   DCN — encrypted{view.has_dcn ? '' : ' · not provided'}
                 </div>
                 {view.has_dcn && (
-                  <button className="hrd-sensitive-btn" disabled={busy === 'dcn'} onClick={() => reveal('dcn')}>
+                  <button className={`hrd-sensitive-btn${revealed.dcn !== undefined ? ' quiet' : ''}`} disabled={busy === 'dcn'} onClick={() => reveal('dcn')}>
                     {busy === 'dcn' ? 'Loading…' : revealed.dcn !== undefined ? 'Hide' : 'Reveal'}
                   </button>
                 )}
@@ -138,7 +203,7 @@ export default function ClearanceReviewRow({
               )}
 
               <div className="hrd-sensitive-row hrd-data-full">
-                <div className="hrd-sensitive-label">Fingerprint form{view.fingerprint_name ? ` · ${view.fingerprint_name}` : ' · not uploaded'}</div>
+                <div className="hrd-sensitive-label">PSPC fingerprint form{view.fingerprint_name ? ` · ${view.fingerprint_name}` : ' · not uploaded'}</div>
                 {view.has_fingerprint && (
                   <div className="clr-hr-btns">
                     <button className="hrd-sensitive-btn" disabled={busy === 'fingerprint-view'} onClick={() => openFile('fingerprint', false)}>View</button>
@@ -147,6 +212,7 @@ export default function ClearanceReviewRow({
                     </button>
                   </div>
                 )}
+                {view.has_fingerprint && reviewControls('fingerprint')}
               </div>
             </>
           )}
@@ -167,6 +233,7 @@ export default function ClearanceReviewRow({
                 </button>
               </div>
             )}
+            {view.has_rcmp && reviewControls('rcmp')}
           </div>
 
           <div className="hrd-data-full">
@@ -177,24 +244,38 @@ export default function ClearanceReviewRow({
           </div>
         </div>
 
-        {status === 'flagged' && view.flag_reason && (
-          <div className="clr-hr-flag">
-            <div className="clr-hr-flag-title">Flag Reason</div>
-            <div className="clr-hr-flag-text">{view.flag_reason}</div>
-          </div>
-        )}
-
-        {status !== 'approved' && (
-          <div className="hrd-expanded-actions">
-            {(status === 'review' || status === 'flagged') && (
-              <button className="hrd-inline-btn approve" onClick={onApprove}>✓ Approve this form</button>
-            )}
-            {status !== 'flagged' && (
-              <button className="hrd-inline-btn flag" onClick={onFlag}>Flag this form</button>
-            )}
-          </div>
+        {locked && submitted && (
+          <p className="clr-hr-locked" role="note">
+            The package is with the clearance reviewer, so these forms can’t be rejected or changed. If they send it back to HR, you can review them again.
+          </p>
         )}
       </div>
+
+      {rejecting && (
+        <Modal
+          title={`Reject the ${KIND_LABEL[rejecting]}?`}
+          description="The hire sees this reason and uploads a corrected form."
+          onClose={() => setRejecting(null)}
+          busy={!!saving}
+        >
+          <label htmlFor="clr-reject-reason" className="hh-label">Reason (at least 10 characters)</label>
+          <textarea
+            id="clr-reject-reason"
+            className="hh-textarea"
+            rows={4}
+            maxLength={2000}
+            value={reason}
+            onChange={e => setReason(e.target.value)}
+          />
+          {reviewError && <div className="ui-modal-error" role="alert">{reviewError}</div>}
+          <div className="ui-modal-actions">
+            <button type="button" className="ui-btn-cancel" disabled={!!saving} onClick={() => setRejecting(null)}>Cancel</button>
+            <button type="button" className="hh-btn danger" disabled={!!saving || reason.trim().length < 10} onClick={() => review(rejecting, 'reject', reason.trim())}>
+              {saving ? 'Saving…' : 'Reject form'}
+            </button>
+          </div>
+        </Modal>
+      )}
     </div>
   )
 }

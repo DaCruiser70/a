@@ -10,6 +10,31 @@
   --color-amber-light:    #EF9F27;
   --color-amber-faint:    #FAEEDA;
 
+  /* Portal palette (values already used across the HR, manager and project pages) */
+  --color-navy:           #1B3A6B;
+  --color-navy-dark:      #0f2348;
+  --color-navy-faint:     rgba(27, 58, 107, 0.08);
+  --color-gold:           #C8920A;
+  --color-gold-light:     #E8B84B;
+  --color-gold-text:      #8A6206;
+  --color-gold-faint:     rgba(200, 146, 10, 0.12);
+  --color-violet:         #4C2A85;
+  --color-violet-faint:   #F1ECF9;
+  --color-copper:         #9A4F1D;
+  --color-copper-faint:   #F6EDE5;
+  --color-green:          #0D5C46;
+  --color-green-faint:    rgba(13, 92, 70, 0.10);
+  --color-red:            #B03A2E;
+  --color-red-dark:       #8E2E24;
+  --color-red-faint:      rgba(231, 76, 60, 0.10);
+  --color-green-dark:     #0a4a38;
+  --color-grey-faint:     rgba(0, 0, 0, 0.05);
+  --color-bg-warm:        #F4F2EE;
+  --color-border-warm:    #E8E3DA;
+  --color-on-dark:        #ffffff;
+  --color-on-dark-2:      rgba(255, 255, 255, 0.78);
+  --color-on-dark-faint:  rgba(255, 255, 255, 0.14);
+
   /* Neutrals */
   --color-bg:             #F0F4F2;
   --color-surface:        #ffffff;
@@ -37,12 +62,17 @@
 
   /* Spacing */
   --s1:  4px;  --s2:  8px;  --s3: 12px;
-  --s4: 16px;  --s5: 20px;  --s6: 24px;
+  --s4: 16px;  --s5: 20px;  --s6: 24px;  --s7: 28px;
   --s8: 32px; --s10: 40px; --s12: 48px;
+
+  /* Wide page layout (HR hire page): content width and fluid side gutter */
+  --container-wide: 1600px;
+  --gutter-fluid:   clamp(16px, 3vw, 48px);
 
   /* Border Radius */
   --r-sm: 6px; --r-md: 10px; --r-lg: 14px;
   --r-xl: 20px; --r-pill: 999px;
+  --r-card: 16px;   /* dashboard cards */
 
   /* Shadows */
   --shadow-sm: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);

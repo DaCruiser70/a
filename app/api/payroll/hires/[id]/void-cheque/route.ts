@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 import { requireRole } from '@/lib/roles'
+import { inPayrollQueue } from '@/lib/payroll-access'
 import { getVoidChequeSignedUrl } from '@/lib/void-cheque'
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -13,8 +14,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const { id } = await params
 
   // Enforce the same hard boundary as the rest of the payroll portal
-  const { data: hire } = await admin.from('profiles').select('status').eq('id', id).single()
-  if (!hire || hire.status !== 'approved') return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  const { data: hire } = await admin.from('profiles').select('status, entered_payroll_queue_at').eq('id', id).single()
+  if (!inPayrollQueue(hire)) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   const download = new URL(request.url).searchParams.get('download') === '1'
 

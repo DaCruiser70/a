@@ -1,6 +1,6 @@
 import type { Region } from './regions'
 
-// Placeholder branch list for manager plans (project_branch). Replace with the real list when it is confirmed.
+// Placeholder branch list. The manager plan no longer asks for a branch (Prompt M1); kept for now.
 export const BRANCHES = ['Dartmouth NS', 'Moncton NB', 'Oakville ON', 'Toronto ON'] as const
 export type Branch = typeof BRANCHES[number]
 

@@ -6,6 +6,11 @@ import { useState, useEffect } from 'react'
 import '../../../../styles/pages/form-pages.css'
 import { createClient } from '@/lib/supabase/client'
 import { FORMS_HOME, COMPLETE_PAGE } from '@/lib/routes'
+import {
+  PROVINCES, EMERGENCY_RELATIONSHIPS, PHONE_CHOICES, PHONE_CHOICE_LABELS, WORK_PHONE_PLATFORMS,
+  WORK_PHONE_PLATFORM_LABELS, PHONE_MAX, DOB_EARLIEST, DOB_MIN_AGE, dobLatest, dobError, phoneError,
+  type PhoneChoice, type WorkPhonePlatform,
+} from '@/lib/personal-info'
 
 const FlaggedBanner = ({ reason, source }: { reason?: string | null; source?: string | null }) => (
   <div style={{
@@ -32,6 +37,9 @@ const FlaggedBanner = ({ reason, source }: { reason?: string | null; source?: st
   </div>
 )
 
+const FieldError = ({ id, message }: { id: string; message?: string }) =>
+  message ? <span id={id} className="form-field-error" role="alert">{message}</span> : null
+
 function getInitials(name: string) {
   return name.split(' ').filter(Boolean).map(n => n[0]).join('').toUpperCase().slice(0, 2)
 }
@@ -44,6 +52,11 @@ export default function PersonalInfoForm() {
     street: '', city: '', province: '', postalCode: '',
     emergencyName: '', emergencyRelationship: '', emergencyPhone: '',
   })
+  // Phone setup: only the chosen branch keeps an answer
+  const [phoneChoice, setPhoneChoice]     = useState<PhoneChoice | ''>('')
+  const [workPlatform, setWorkPlatform]   = useState<WorkPhonePlatform | ''>('')
+  const [personalPhone, setPersonalPhone] = useState('')
+  const [fieldErrors, setFieldErrors]     = useState<Record<string, string>>({})
   const [formStatus, setFormStatus] = useState('')
   const [flagReason, setFlagReason] = useState<string | null>(null)
   const [flagSource, setFlagSource] = useState<string | null>(null)
@@ -79,26 +92,77 @@ export default function PersonalInfoForm() {
         emergencyRelationship: data.emergencyRelationship ?? '',
         emergencyPhone:        data.emergencyPhone        ?? '',
       })
+      setPhoneChoice(data.phoneChoice ?? '')
+      setWorkPlatform(data.workPhonePlatform ?? '')
+      setPersonalPhone(data.personalPhone ?? '')
       setFormStatus(data.formStatus ?? '')
       setFlagReason(data.flagReason ?? null)
     }).catch(() => {})
   }, [])
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) {
-    setForm(prev => ({ ...prev, [e.target.name]: e.target.value }))
+    const { name, value } = e.target
+    setForm(prev => ({ ...prev, [name]: value }))
+    setFieldErrors(prev => (prev[name] ? { ...prev, [name]: '' } : prev))
+  }
+
+  // Switching clears the other branch's answer; the personal number starts from Phone
+  function choosePhone(choice: PhoneChoice) {
+    if (choice === phoneChoice) return
+    setPhoneChoice(choice)
+    setWorkPlatform('')
+    setPersonalPhone(choice === 'personal' ? form.phone : '')
+    setFieldErrors(prev => ({ ...prev, phoneChoice: '', workPhonePlatform: '', personalPhone: '' }))
+  }
+
+  function validate(): Record<string, string> {
+    const errors: Record<string, string> = {}
+    const dob = dobError(form.dateOfBirth)
+    if (dob) errors.dateOfBirth = dob
+    const phone = form.phone.trim() && phoneError(form.phone)
+    if (phone) errors.phone = phone
+    const emergency = form.emergencyPhone.trim() && phoneError(form.emergencyPhone)
+    if (emergency) errors.emergencyPhone = emergency
+    if (!phoneChoice) errors.phoneChoice = 'Choose a company work phone or your personal phone.'
+    if (phoneChoice === 'work' && !workPlatform) errors.workPhonePlatform = 'Choose Apple or Android.'
+    if (phoneChoice === 'personal') {
+      const personal = phoneError(personalPhone)
+      if (personal) errors.personalPhone = personal
+    }
+    return errors
   }
 
   async function handleSubmit(e: React.SyntheticEvent<HTMLFormElement>) {
     e.preventDefault()
+    const errors = validate()
+    setFieldErrors(errors)
+    const first = Object.keys(errors)[0]
+    if (first) {
+      setSaveError('Please fix the highlighted answers.')
+      // Radio groups focus their first option
+      const target = first === 'phoneChoice' ? 'pi-phone-work' : first === 'workPhonePlatform' ? 'pi-platform-apple' : `pi-${first}`
+      document.getElementById(target)?.focus()
+      return
+    }
     setSaving(true)
     setSaveError('')
     const res = await fetch('/api/forms/personal', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form),
-    })
+      body: JSON.stringify({
+        ...form,
+        phoneChoice,
+        workPhonePlatform: phoneChoice === 'work' ? workPlatform || null : null,
+        personalPhone:     phoneChoice === 'personal' ? personalPhone : null,
+      }),
+    }).catch(() => null)
+    if (!res) {
+      setSaveError('Could not reach the server. Check your connection and try again.')
+      setSaving(false)
+      return
+    }
     if (!res.ok) {
-      const data = await res.json()
+      const data = await res.json().catch(() => ({}))
       setSaveError(data.error ?? 'Failed to save. Please try again.')
       setSaving(false)
       return
@@ -171,8 +235,18 @@ export default function PersonalInfoForm() {
               <input className="form-input" name="lastName" value={form.lastName} onChange={handleChange} placeholder="Smith" required />
             </div>
             <div className="form-field">
-              <label className="form-label">Date of Birth <span className="form-label-required">*</span></label>
-              <input className="form-input" type="date" name="dateOfBirth" value={form.dateOfBirth} onChange={handleChange} required />
+              <label className="form-label" htmlFor="pi-dateOfBirth">
+                Date of Birth <span className="form-label-required">*</span><span className="form-label-encrypted">Encrypted</span>
+              </label>
+              <input
+                id="pi-dateOfBirth" className="form-input" type="date" name="dateOfBirth"
+                value={form.dateOfBirth} onChange={handleChange} required
+                min={DOB_EARLIEST} max={dobLatest()} suppressHydrationWarning
+                aria-invalid={!!fieldErrors.dateOfBirth || undefined}
+                aria-describedby={fieldErrors.dateOfBirth ? 'pi-dateOfBirth-error pi-dateOfBirth-hint' : 'pi-dateOfBirth-hint'}
+              />
+              <span id="pi-dateOfBirth-hint" className="form-input-hint">You must be at least {DOB_MIN_AGE}. HR sees it only after a security check.</span>
+              <FieldError id="pi-dateOfBirth-error" message={fieldErrors.dateOfBirth} />
             </div>
             <div className="form-field">
               <label className="form-label">Personal Email <span className="form-label-required">*</span></label>
@@ -180,9 +254,84 @@ export default function PersonalInfoForm() {
               <span className="form-input-hint">Your personal email — not your AEM address</span>
             </div>
             <div className="form-field">
-              <label className="form-label">Phone Number <span className="form-label-required">*</span></label>
-              <input className="form-input" type="tel" name="phone" value={form.phone} onChange={handleChange} placeholder="(905) 555-0100" required />
+              <label className="form-label" htmlFor="pi-phone">Phone Number <span className="form-label-required">*</span></label>
+              <input
+                id="pi-phone" className="form-input" type="tel" name="phone" value={form.phone} onChange={handleChange}
+                placeholder="(905) 555-0100" required maxLength={PHONE_MAX} autoComplete="tel"
+                aria-invalid={!!fieldErrors.phone || undefined} aria-describedby={fieldErrors.phone ? 'pi-phone-error' : undefined}
+              />
+              <FieldError id="pi-phone-error" message={fieldErrors.phone} />
             </div>
+          </div>
+        </div>
+
+        {/* ── PHONE SETUP ── */}
+        <div className="form-section-card">
+          <div className="form-section-header">
+            <div className="form-section-icon navy">
+              <svg viewBox="0 0 24 24" fill="none" stroke="#1B3A6B" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
+                <rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/>
+              </svg>
+            </div>
+            <div>
+              <div className="form-section-heading">Phone</div>
+              <div className="form-section-heading-sub">The phone you will use for work</div>
+            </div>
+          </div>
+          <div className="form-section-body single-col">
+            <fieldset className="form-choice-fieldset" aria-describedby={fieldErrors.phoneChoice ? 'pi-phoneChoice-error' : undefined}>
+              <legend className="form-label">
+                Do you want a company work phone, or will you use your personal phone? <span className="form-label-required">*</span>
+              </legend>
+              <div className="form-choice-group">
+                {PHONE_CHOICES.map(c => (
+                  <label key={c} className={`form-choice${phoneChoice === c ? ' selected' : ''}`} htmlFor={`pi-phone-${c}`}>
+                    <input
+                      id={`pi-phone-${c}`} type="radio" name="phoneChoice" value={c}
+                      checked={phoneChoice === c} onChange={() => choosePhone(c)}
+                    />
+                    {PHONE_CHOICE_LABELS[c]}
+                  </label>
+                ))}
+              </div>
+              <FieldError id="pi-phoneChoice-error" message={fieldErrors.phoneChoice} />
+            </fieldset>
+
+            {phoneChoice === 'work' && (
+              <fieldset className="form-choice-fieldset" aria-describedby={fieldErrors.workPhonePlatform ? 'pi-workPhonePlatform-error' : undefined}>
+                <legend className="form-label">Apple or Android? <span className="form-label-required">*</span></legend>
+                <div className="form-choice-group">
+                  {WORK_PHONE_PLATFORMS.map(p => (
+                    <label key={p} className={`form-choice${workPlatform === p ? ' selected' : ''}`} htmlFor={`pi-platform-${p}`}>
+                      <input
+                        id={`pi-platform-${p}`} type="radio" name="workPhonePlatform" value={p}
+                        checked={workPlatform === p}
+                        onChange={() => { setWorkPlatform(p); setFieldErrors(prev => ({ ...prev, workPhonePlatform: '' })) }}
+                      />
+                      {WORK_PHONE_PLATFORM_LABELS[p]}
+                    </label>
+                  ))}
+                </div>
+                <FieldError id="pi-workPhonePlatform-error" message={fieldErrors.workPhonePlatform} />
+              </fieldset>
+            )}
+
+            {phoneChoice === 'personal' && (
+              <div className="form-field">
+                <label className="form-label" htmlFor="pi-personalPhone">
+                  Personal phone number <span className="form-label-required">*</span><span className="form-label-encrypted">Encrypted</span>
+                </label>
+                <input
+                  id="pi-personalPhone" className="form-input" type="tel" value={personalPhone}
+                  onChange={e => { setPersonalPhone(e.target.value); setFieldErrors(prev => ({ ...prev, personalPhone: '' })) }}
+                  placeholder="(905) 555-0100" required maxLength={PHONE_MAX} autoComplete="tel"
+                  aria-invalid={!!fieldErrors.personalPhone || undefined}
+                  aria-describedby={fieldErrors.personalPhone ? 'pi-personalPhone-error pi-personalPhone-hint' : 'pi-personalPhone-hint'}
+                />
+                <span id="pi-personalPhone-hint" className="form-input-hint">Filled in from your phone number above. Change it if you use a different phone for work.</span>
+                <FieldError id="pi-personalPhone-error" message={fieldErrors.personalPhone} />
+              </div>
+            )}
           </div>
         </div>
 
@@ -212,16 +361,7 @@ export default function PersonalInfoForm() {
               <label className="form-label">Province <span className="form-label-required">*</span></label>
               <select className="form-input" name="province" value={form.province} onChange={handleChange} required>
                 <option value="">Select province</option>
-                <option>Ontario</option>
-                <option>British Columbia</option>
-                <option>Alberta</option>
-                <option>Quebec</option>
-                <option>Nova Scotia</option>
-                <option>New Brunswick</option>
-                <option>Manitoba</option>
-                <option>Saskatchewan</option>
-                <option>Newfoundland and Labrador</option>
-                <option>Prince Edward Island</option>
+                {PROVINCES.map(p => <option key={p}>{p}</option>)}
               </select>
             </div>
             <div className="form-field">
@@ -253,17 +393,17 @@ export default function PersonalInfoForm() {
               <label className="form-label">Relationship <span className="form-label-required">*</span></label>
               <select className="form-input" name="emergencyRelationship" value={form.emergencyRelationship} onChange={handleChange} required>
                 <option value="">Select relationship</option>
-                <option>Spouse / Partner</option>
-                <option>Parent</option>
-                <option>Sibling</option>
-                <option>Child</option>
-                <option>Friend</option>
-                <option>Other</option>
+                {EMERGENCY_RELATIONSHIPS.map(r => <option key={r}>{r}</option>)}
               </select>
             </div>
             <div className="form-field">
-              <label className="form-label">Phone Number <span className="form-label-required">*</span></label>
-              <input className="form-input" type="tel" name="emergencyPhone" value={form.emergencyPhone} onChange={handleChange} placeholder="(905) 555-0199" required />
+              <label className="form-label" htmlFor="pi-emergencyPhone">Phone Number <span className="form-label-required">*</span></label>
+              <input
+                id="pi-emergencyPhone" className="form-input" type="tel" name="emergencyPhone" value={form.emergencyPhone} onChange={handleChange}
+                placeholder="(905) 555-0199" required maxLength={PHONE_MAX}
+                aria-invalid={!!fieldErrors.emergencyPhone || undefined} aria-describedby={fieldErrors.emergencyPhone ? 'pi-emergencyPhone-error' : undefined}
+              />
+              <FieldError id="pi-emergencyPhone-error" message={fieldErrors.emergencyPhone} />
             </div>
           </div>
 
@@ -275,7 +415,7 @@ export default function PersonalInfoForm() {
               Progress saved automatically
             </div>
             <div className="form-action-btns">
-              {saveError && <div className="login-error" style={{ marginBottom: 0 }}>{saveError}</div>}
+              {saveError && <div className="login-error" role="alert" style={{ marginBottom: 0 }}>{saveError}</div>}
               <button type="button" className="form-btn-secondary" onClick={() => router.push(FORMS_HOME)}>
                 ← Back
               </button>

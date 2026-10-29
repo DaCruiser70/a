@@ -1,13 +1,16 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 import { requireRole } from '@/lib/roles'
-import { decrypt, decryptFields } from '@/lib/encrypt'
+import { decryptFields } from '@/lib/encrypt'
+import { esc } from '@/lib/safe-html'
+import { rateLimit, rateLimitKey } from '@/lib/rate-limit'
 import { computeHireStatus } from '@/lib/hire-status'
 import type { NewHireDetail, FormStatus } from '@/types'
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireRole('hr')
   if (auth instanceof NextResponse) return auth
+  const { user } = auth
 
   const admin = createServiceClient()
 
@@ -23,22 +26,34 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     { data: equipment },
     { data: notes },
     { data: auditLog },
+    { data: docs },
   ] = await Promise.all([
     admin.from('profiles').select('*').eq('id', id).single(),
     admin.from('personal_info')
-      .select('phone, street, city, province, emergency_name, emergency_phone, form_status, flag_reason, submitted_at')
+      .select('phone, street, city, province, emergency_name, emergency_phone, form_status, flag_reason, submitted_at, phone_choice, work_phone_platform, date_of_birth, personal_phone')
       .eq('user_id', id).maybeSingle(),
-    admin.from('banking_info').select('*').eq('user_id', id).maybeSingle(),
+    // Ciphertext columns are read only to know whether a value exists; nothing is decrypted here.
+    // The SIN and banking numbers are only ever returned by POST .../reveal/verify.
+    admin.from('banking_info')
+      .select('bank_name, account_type, void_cheque_path, form_status, flag_reason, submitted_at, account_number_enc')
+      .eq('user_id', id).maybeSingle(),
     admin.from('sin_info').select('form_status, sin_enc, flag_reason, submitted_at').eq('user_id', id).maybeSingle(),
     admin.from('policy_acknowledgements').select('*').eq('user_id', id).maybeSingle(),
     admin.from('equipment_provisioning').select('*').eq('user_id', id).maybeSingle(),
     admin.from('hr_notes').select('*').eq('user_id', id).order('created_at', { ascending: false }),
     admin.from('audit_log').select('*').eq('user_id', id).order('created_at', { ascending: false }).limit(30),
+    admin.from('newhire_documents').select('document_type, form_status').eq('user_id', id),
   ])
 
   if (!profile) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  const personal = personalRaw ? decryptFields(personalRaw) : null
+  // Date of birth and personal phone are never sent on load: only whether they are on file.
+  // Their values come only through the 'personal' reveal (POST .../reveal/verify).
+  const hasDateOfBirth   = !!personalRaw?.date_of_birth
+  const hasPersonalPhone = !!personalRaw?.personal_phone
+  const personal = personalRaw
+    ? decryptFields({ ...personalRaw, date_of_birth: null, personal_phone: null })
+    : null
 
   const submittedDate = profile.start_date ?? profile.created_at.slice(0, 10)
   const days = Math.max(0, Math.floor((Date.now() - new Date(submittedDate).getTime()) / 86_400_000))
@@ -61,7 +76,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     policy:   (policy?.form_status   ?? 'pending') as FormStatus,
   }
 
-  const computed = computeHireStatus(Object.values(formStatuses))
+  const computed = computeHireStatus(
+    [formStatuses.personal, formStatuses.banking, formStatuses.sin, formStatuses.policy], docs ?? [])
 
   const flagReasons: Record<string, string | null> = {
     personal: personal?.flag_reason ?? null,
@@ -70,30 +86,28 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     policy:   policy?.flag_reason   ?? null,
   }
 
-  // Decrypt banking details for HR (audit-logged by the client when viewed)
-  let bankDetails: Record<string, string> = {}
-  if (banking) {
-    try {
-      bankDetails = {
-        institution_number: decrypt(banking.institution_number_enc),
-        transit_number:     decrypt(banking.transit_number_enc),
-        account_number:     decrypt(banking.account_number_enc),
-      }
-    } catch { /* decryption failed — bad key or corrupted data */ }
+  // "HR record opened": once per page visit. The page fetches this record once; a 30-second
+  // window per HR user and hire absorbs React's development double-run and fast reloads.
+  const opened = await rateLimit(await rateLimitKey('hr:record-opened', `${user.id}:${id}`), 1, 30)
+  if (opened.allowed) {
+    const { data: caller } = await admin.from('profiles').select('full_name').eq('id', user.id).maybeSingle()
+    await admin.from('audit_log').insert({
+      user_id:      id,
+      action_type:  'navy',
+      message:      `<strong>${esc(caller?.full_name ?? 'HR')}</strong> opened the HR record for <strong>${esc(profile.full_name)}</strong>`,
+      performed_by: user.id,
+    })
   }
 
-  let sinDecrypted: string | undefined
-  if (sin?.sin_enc) {
-    try { sinDecrypted = decrypt(sin.sin_enc) } catch { /* bad key or corrupted */ }
-  }
-
-  const detail: NewHireDetail & { bank_details?: Record<string, string>; sin?: string; policy_signature?: string } = {
+  const detail: NewHireDetail & { policy_signature?: string } = {
     id:                      profile.id,
     name:                    profile.full_name,
     email:                   profile.aem_email,
     role:                    profile.position ?? '—',
     status:                  computed.status,
     progress:                computed.progressPct,
+    approved_items:          computed.approvedCount,
+    total_items:             computed.totalItems,
     submitted:               submittedDate,
     days,
     office_location:         profile.office_location          ?? null,
@@ -107,8 +121,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     emergency_phone:         personal?.emergency_phone        ?? '—',
     bank_name:               banking?.bank_name               ?? '—',
     account_type:            banking?.account_type            ?? '—',
-    bank_details:            bankDetails,
-    sin:                     sinDecrypted,
+    has_banking:             !!banking?.account_number_enc,
+    has_sin:                 !!sin?.sin_enc,
+    has_date_of_birth:       hasDateOfBirth,
+    has_personal_phone:      hasPersonalPhone,
+    phone_choice:            personal?.phone_choice           ?? null,
+    work_phone_platform:     personal?.work_phone_platform    ?? null,
     policy_signature:        policy?.signature,
     form_statuses:           formStatuses,
     flag_reasons:            flagReasons,

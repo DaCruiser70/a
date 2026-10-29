@@ -37,6 +37,9 @@ export const PORTAL_THEMES: Record<Role, PortalTheme> = {
   manager:      theme('manager',      { short: 'Manager',     accent: '#4C2A85', hover: '#3B1F69', soft: '#F1ECF9',              heroFrom: '#4C2A85', heroTo: '#2E1A52' }),
   // Copper: the regional project management portal
   project_mgmt: theme('project_mgmt', { short: 'Projects',    accent: '#9A4F1D', hover: '#7A3E16', soft: '#F6EDE5',              heroFrom: '#9A4F1D', heroTo: '#5E2F10' }),
+  // Deep blue-teal: the clearance reviewer's portal (bluer than payroll's green-teal).
+  // White on #0E5A6E is 7.4:1; #0E5A6E on its tint #E3F0F3 is 6.6:1.
+  clearance:    theme('clearance',    { short: 'Clearance',   accent: '#0E5A6E', hover: '#0A4453', soft: '#E3F0F3',              heroFrom: '#0E5A6E', heroTo: '#073340' }),
 }
 
 export function themeForRole(role: Role): PortalTheme {

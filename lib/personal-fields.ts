@@ -8,6 +8,7 @@ export const ENCRYPTED_PERSONAL_FIELDS = [
   'postal_code',
   'emergency_name',
   'emergency_phone',
+  'personal_phone',
 ] as const
 
 export type EncryptedPersonalField = typeof ENCRYPTED_PERSONAL_FIELDS[number]

@@ -77,6 +77,12 @@
   background: rgba(27,58,107,0.04); border: 1px solid rgba(27,58,107,0.1);
 }
 
+/* Safety training list: one item per line, plain text */
+.mpc-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+/* Bullet is a CSS escape (U+2022), kept ASCII in the source so no tool can mangle it */
+.mpc-list li::before { content: "\2022"; color: #C8920A; margin-right: 8px; }
+.mpc-row.single { grid-template-columns: minmax(0, 1fr); }
+
 .mpc-skeleton {
   height: 13px; border-radius: 6px;
   background: linear-gradient(90deg, #F0EEEA 25%, #E6E3DD 50%, #F0EEEA 75%);

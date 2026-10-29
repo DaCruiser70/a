@@ -16,7 +16,7 @@ type PmCard = {
   name:            string
   start_date:      string | null
   region:          string
-  branch:          string | null
+  project_number:  string | null
   manager:         string | null
   status:          PmRequestStatus
   claimed_by_name: string | null
@@ -42,7 +42,7 @@ function RequestCard({ item }: { item: PmCard }) {
         <div className="mgr-card-top">
           <div style={{ minWidth: 0 }}>
             <div className="mgr-card-name">{item.name}</div>
-            <div className="mgr-card-role">{item.branch ?? 'Branch not set'}</div>
+            <div className="mgr-card-role">{item.project_number ? `Project ${item.project_number}` : 'Project number not set'}</div>
           </div>
           <span className={`pm-status ${item.status}`}>{PM_STATUS_LABELS[item.status]}</span>
         </div>

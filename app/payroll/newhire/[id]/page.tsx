@@ -23,12 +23,12 @@ type PersonalData = {
 
 type BankingData = {
   bank_name: string; account_type: string; has_void_cheque: boolean
-  institution_number: string; transit_number: string; account_number: string
+  has_numbers: boolean   // values are fetched on an explicit Reveal click, never with the page
   form_status: FormStatus; flag_reason: string | null; submitted_at: string | null
 }
 
 type SinData = {
-  sin: string | null; form_status: FormStatus; flag_reason: string | null; submitted_at: string | null
+  has_sin: boolean; form_status: FormStatus; flag_reason: string | null; submitted_at: string | null
 }
 
 type DocumentData = {
@@ -180,25 +180,46 @@ function ApproveRejectButtons({
   )
 }
 
-function RevealField({ label, value }: { label: string; value: string | null | undefined }) {
+// Masked until Reveal is clicked. The value is fetched for this one hire at that moment
+// (POST /api/payroll/hires/[id]/reveal, audited); it is not part of the page data.
+function RevealField({ label, has, value, onReveal }: {
+  label: string
+  has: boolean
+  value: string | undefined
+  onReveal: () => Promise<boolean>
+}) {
   const [revealed, setRevealed] = useState(false)
-  if (!value) return <Field label={label} value="—" />
+  const [busy, setBusy]         = useState(false)
+  if (!has) return <Field label={label} value="—" />
+
+  async function toggle() {
+    if (revealed) { setRevealed(false); return }
+    if (value === undefined) {
+      setBusy(true)
+      const ok = await onReveal()
+      setBusy(false)
+      if (!ok) return
+    }
+    setRevealed(true)
+  }
+
   return (
     <div style={{ marginBottom: '10px' }}>
       <div style={{ fontSize: '11px', fontWeight: 600, color: '#888780', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '2px' }}>{label}</div>
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
         <div style={{ fontSize: '14px', color: '#1A1916', fontFamily: revealed ? 'monospace' : 'inherit' }}>
-          {revealed ? value : '•'.repeat(Math.min(value.length, 9))}
+          {revealed && value !== undefined ? value : '•••••••'}
         </div>
         <button
-          onClick={() => setRevealed(r => !r)}
+          onClick={toggle}
+          disabled={busy}
           style={{
             fontSize: '11px', fontWeight: 600, color: TEAL, background: TEAL_LIGHT,
             border: `1px solid ${TEAL_BORDER}`, borderRadius: '5px', padding: '2px 8px',
             cursor: 'pointer', fontFamily: 'inherit',
           }}
         >
-          {revealed ? 'Hide' : 'Reveal'}
+          {busy ? 'Loading…' : revealed ? 'Hide' : 'Reveal'}
         </button>
       </div>
     </div>
@@ -219,10 +240,32 @@ export default function PayrollNewHireDetail({ params }: { params: Promise<{ id:
   const [assignError, setAssignError]         = useState('')
   const [toast, setToast]                     = useState('')
   const [downloading, setDownloading]         = useState<string | null>(null)
+  // Revealed on request only (one hire, one group per click)
+  const [bankingNumbers, setBankingNumbers]   = useState<{ institution_number: string; transit_number: string; account_number: string } | null>(null)
+  const [sinValue, setSinValue]               = useState<string | null>(null)
 
   function showToast(msg: string) {
     setToast(msg)
     setTimeout(() => setToast(''), 3500)
+  }
+
+  async function reveal(group: 'banking' | 'sin'): Promise<boolean> {
+    try {
+      const res = await fetch(`/api/payroll/hires/${id}/reveal`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ group }),
+        cache: 'no-store',
+      })
+      if (!res.ok) { showToast('Could not reveal this value'); return false }
+      const { values } = await res.json()
+      if (group === 'banking') setBankingNumbers({ institution_number: values.institution_number, transit_number: values.transit_number, account_number: values.account_number })
+      else setSinValue(values.sin)
+      return true
+    } catch {
+      showToast('Could not reveal this value')
+      return false
+    }
   }
 
   useEffect(() => {
@@ -508,9 +551,9 @@ export default function PayrollNewHireDetail({ params }: { params: Promise<{ id:
                 <div style={{ borderTop: '1px solid rgba(0,0,0,0.06)', marginTop: '10px', paddingTop: '10px' }}>
                   <div style={{ fontSize: '12px', fontWeight: 600, color: '#888780', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Account Details</div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 1.5rem' }}>
-                    <RevealField label="Institution #" value={hire.banking.institution_number} />
-                    <RevealField label="Transit #"     value={hire.banking.transit_number} />
-                    <RevealField label="Account #"     value={hire.banking.account_number} />
+                    <RevealField label="Institution #" has={hire.banking.has_numbers} value={bankingNumbers?.institution_number} onReveal={() => reveal('banking')} />
+                    <RevealField label="Transit #"     has={hire.banking.has_numbers} value={bankingNumbers?.transit_number}     onReveal={() => reveal('banking')} />
+                    <RevealField label="Account #"     has={hire.banking.has_numbers} value={bankingNumbers?.account_number}     onReveal={() => reveal('banking')} />
                   </div>
                 </div>
                 <div style={{ borderTop: '1px solid rgba(0,0,0,0.06)', marginTop: '10px', paddingTop: '10px' }}>
@@ -587,7 +630,7 @@ export default function PayrollNewHireDetail({ params }: { params: Promise<{ id:
                     <strong>Flagged:</strong> {hire.sin.flag_reason}
                   </div>
                 )}
-                <RevealField label="SIN" value={hire.sin.sin} />
+                <RevealField label="SIN" has={hire.sin.has_sin} value={sinValue ?? undefined} onReveal={() => reveal('sin')} />
               </>
             )}
           </SectionCard>

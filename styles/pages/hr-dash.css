@@ -1,0 +1,192 @@
+/* ══════════════════════════════════════════════
+   HR DASHBOARD (app/hr/dashboard). Builds on hr-dashboard.css (sidebar, Add New Hire modal) and
+   the shared buttons, pills, chips and bars in hr-hire.css. Tokens only.
+══════════════════════════════════════════════ */
+
+.hd { background: var(--color-bg-warm); color: var(--color-text); }
+
+/* Sidebar items are buttons and links now; keep the old look */
+.hd .hd-nav-item {
+  width: 100%; border-top: 0; border-right: 0; border-bottom: 0; background-color: transparent;
+  text-align: left; font-family: var(--font-sans); text-decoration: none; min-height: 44px;
+}
+/* The reset above outranks hr-dashboard.css, so its hover and active states are restated here */
+.hd .hd-nav-item:hover  { background-color: var(--color-on-dark-faint); color: var(--color-on-dark); }
+.hd .hd-nav-item.active { background-color: var(--color-gold-faint); color: var(--color-gold-light); border-left-color: var(--color-gold); font-weight: 600; }
+.hd .hd-nav-item:focus-visible { outline: 3px solid var(--color-gold); outline-offset: -3px; }
+
+/* ── Main column: fills the space beside the sidebar, capped only on very wide screens ── */
+.hd-main { flex: 1; min-width: 0; }
+.hd-container {
+  width: 100%; max-width: var(--container-wide); margin: 0 auto;
+  padding: var(--s10) var(--gutter-fluid) var(--s12);
+  display: flex; flex-direction: column; gap: var(--s8);
+}
+
+/* ── Header: title block left, actions right, one row ── */
+.hd-header { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--s4) var(--s6); flex-wrap: wrap; }
+.hd-header-text { min-width: 0; }
+.hd-title { font-family: var(--font-serif); font-size: 36px; font-weight: 700; line-height: 1.15; color: var(--color-navy); }
+.hd-date  { margin-top: var(--s1); font-size: 16px; color: var(--color-text-3); }
+.hd-header-actions { display: flex; gap: var(--s3); flex-wrap: wrap; }
+/* Mobile sidebar toggle: hidden on desktop. Two classes plus .hd so it outranks .hh-btn.secondary. */
+.hd .hd-menu-btn.hh-btn { display: none; }
+
+/* ── Cards ── */
+.hd-card {
+  background: var(--color-surface); border: 1px solid var(--color-border-warm); border-radius: var(--r-card);
+  box-shadow: var(--shadow-sm); overflow: hidden;
+}
+.hd-card-pad { padding: var(--s6) var(--s7); }
+.hd-card-head {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--s4); flex-wrap: wrap;
+  padding: var(--s6) var(--s7); border-bottom: 1px solid var(--color-border-warm);
+}
+.hd-card-title { font-family: var(--font-serif); font-size: 22px; font-weight: 600; color: var(--color-navy); }
+.hd-muted { font-size: 15px; color: var(--color-text-3); }
+.hd-empty { padding: var(--s10) var(--s7); text-align: center; font-size: 16px; color: var(--color-text-3); }
+
+/* ── Tiles ── */
+.hd-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--s6); }
+.hd-tile {
+  background: var(--color-surface); border: 1px solid var(--color-border-warm); border-left-width: 6px;
+  border-radius: var(--r-card); box-shadow: var(--shadow-sm); padding: var(--s7);
+}
+.hd-tile.navy  { border-left-color: var(--color-navy); }
+.hd-tile.amber { border-left-color: var(--color-gold); }
+.hd-tile.green { border-left-color: var(--color-green); }
+.hd-tile.red   { background: var(--color-red); border-color: var(--color-red); color: var(--color-on-dark); }
+.hd-tile-num   { font-family: var(--font-serif); font-size: 48px; font-weight: 700; line-height: 1.05; color: var(--color-navy); min-height: var(--s12); }
+.hd-tile-label { margin-top: var(--s2); font-size: 14px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-text-2); }
+.hd-tile-note  { margin-top: var(--s1); font-size: 14px; color: var(--color-text-3); min-height: 1.4em; }
+.hd-tile.red .hd-tile-num, .hd-tile.red .hd-tile-label, .hd-tile.red .hd-tile-note { color: var(--color-on-dark); }
+.hd-tile-skeleton { display: inline-block; width: var(--s12); height: var(--s10); border-radius: var(--r-sm); background: var(--color-grey-faint); }
+
+/* ── Attention banner ── */
+.hd-banner {
+  display: flex; align-items: center; gap: var(--s4); flex-wrap: wrap;
+  padding: var(--s5) var(--s6); border-radius: var(--r-card);
+  background: var(--color-gold-faint); border: 1.5px solid var(--color-gold);
+}
+.hd-banner svg { width: 24px; height: 24px; flex-shrink: 0; color: var(--color-gold-text); }
+.hd-banner-text { flex: 1; min-width: 220px; font-size: 16px; color: var(--color-text); }
+
+/* ── Search and chips ── */
+.hd-search {
+  display: flex; align-items: center; gap: var(--s2); min-height: 44px; padding: 0 var(--s3);
+  width: min(100%, 360px); border: 1.5px solid var(--color-border-md); border-radius: var(--r-md); background: var(--color-surface);
+}
+.hd-search:focus-within { outline: 3px solid var(--color-gold); outline-offset: 1px; border-color: var(--color-navy); }
+.hd-search svg { width: 16px; height: 16px; flex-shrink: 0; color: var(--color-text-3); }
+.hd-search input { flex: 1; min-width: 0; border: none; outline: none; background: none; font-family: var(--font-sans); font-size: 16px; color: var(--color-text); }
+.hd .hd-chips { padding: var(--s5) var(--s7); gap: var(--s3); }
+.hd-chips .hh-chip { display: inline-flex; align-items: center; gap: var(--s2); min-height: 44px; padding: 0 var(--s4); font-size: 15px; }
+.hd-chip-count {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 24px; padding: 0 var(--s2); height: 22px;
+  border-radius: var(--r-pill); font-size: 13px; font-weight: 700; background: var(--color-grey-faint); color: var(--color-text-2);
+}
+.hh-chip.active .hd-chip-count { background: var(--color-on-dark-faint); color: var(--color-on-dark); }
+
+/* ── Table (scrolls sideways inside its card on small screens) ── */
+.hd-table-wrap { overflow-x: auto; }
+.hd-table { width: 100%; min-width: 960px; border-collapse: collapse; }
+.hd-table th {
+  text-align: left; padding: var(--s4) var(--s5); font-size: 13px; font-weight: 700; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--color-text-3); background: var(--color-bg-warm);
+  border-bottom: 1px solid var(--color-border-warm); white-space: nowrap;
+}
+.hd-table th:first-child, .hd-table td:first-child { padding-left: var(--s7); }
+.hd-table th:last-child,  .hd-table td:last-child  { padding-right: var(--s7); }
+.hd-table td { padding: var(--s5); border-bottom: 1px solid var(--color-border-warm); vertical-align: middle; font-size: 16px; }
+.hd-table tbody tr { cursor: pointer; transition: background var(--t-fast); }
+.hd-table tbody tr:hover { background: var(--color-navy-faint); }
+.hd-table tbody tr:last-child td { border-bottom: none; }
+.hd-table tbody tr:focus-within { background: var(--color-navy-faint); }
+.hd-nowrap { white-space: nowrap; }
+.hd-action { text-align: right; width: 1%; }
+.hd-action .hh-btn { min-width: 110px; }
+.hd-person { display: flex; align-items: center; gap: var(--s4); }
+.hd-avatar {
+  width: 44px; height: 44px; flex-shrink: 0; border-radius: var(--r-pill);
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--color-navy); color: var(--color-on-dark); font-weight: 700; font-size: 15px;
+}
+.hd-avatar.small { width: 38px; height: 38px; font-size: 14px; }
+.hd-person-text { display: flex; flex-direction: column; min-width: 0; }
+.hd-person-name  { font-weight: 600; color: var(--color-text); overflow-wrap: anywhere; }
+.hd-person-email { font-size: 14px; color: var(--color-text-3); overflow-wrap: anywhere; }
+.hd-cell-main { color: var(--color-text); }
+.hd-cell-sub  { font-size: 14px; color: var(--color-text-3); margin-top: 2px; }
+.hd-forms { display: flex; align-items: center; gap: var(--s3); min-width: 220px; }
+.hd .hd-forms-bar { flex: 1; min-width: 160px; height: 10px; }
+.hd-forms-text { font-size: 14px; font-weight: 600; color: var(--color-text-2); white-space: nowrap; }
+.hd .hh-bar-fill.flagged      { background: var(--color-red); }
+.hd .hh-bar-fill.needs-review { background: var(--color-gold); }
+.hd .hh-bar-fill.in-progress  { background: var(--color-navy); }
+.hd .hh-bar-fill.approved     { background: var(--color-green); }
+.hd .hh-bar-fill.not-started  { background: var(--color-text-4); }
+.hd-next { margin-top: var(--s2); font-size: 14px; color: var(--color-text-3); }
+
+/* ── Pagination ── */
+.hd-pagination {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--s3); flex-wrap: wrap;
+  padding: var(--s5) var(--s7); border-top: 1px solid var(--color-border-warm);
+}
+
+/* ── Starting soon / Recent activity: equal height; an empty card centres its message ── */
+.hd-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s6); align-items: stretch; }
+.hd-pair > .hd-card { display: flex; flex-direction: column; }
+.hd-pair > .hd-card > .hd-empty { flex: 1; display: flex; align-items: center; justify-content: center; }
+.hd-list { list-style: none; margin: 0; padding: 0; }
+.hd-list li + li { border-top: 1px solid var(--color-border-warm); }
+.hd-list-row {
+  display: flex; align-items: center; gap: var(--s4); min-height: 68px; padding: var(--s4) var(--s7);
+  text-decoration: none; color: inherit; font-size: 16px;
+}
+a.hd-list-row:hover { background: var(--color-navy-faint); }
+a.hd-list-row:focus-visible { outline: 3px solid var(--color-gold); outline-offset: -3px; }
+.hd-list-row .hd-person-text { flex: 1; }
+.hd-list-row .hh-dot { margin-top: 0; }
+.hd-list-date { font-size: 15px; font-weight: 600; color: var(--color-navy); white-space: nowrap; }
+.hd-activity-text { color: var(--color-text); overflow-wrap: anywhere; }
+
+/* ── Tablet ── */
+.hd-backdrop { display: none; }
+@media (max-width: 1200px) {
+  .hd-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 1000px) {
+  .hd-pair  { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ── Phone: sidebar becomes a drawer behind the Menu button, everything stacks ── */
+@media (max-width: 768px) {
+  .hd .hd-menu-btn.hh-btn { display: inline-flex; }
+  .hd .hd-sidebar.open {
+    display: flex; position: fixed; top: 0; left: 0; bottom: 0; height: 100vh; overflow-y: auto;
+    z-index: 200; box-shadow: var(--shadow-lg);
+  }
+  .hd-backdrop { display: block; position: fixed; inset: 0; z-index: 150; background: var(--color-text); opacity: 0.45; }
+  .hd-container { padding-top: var(--s6); gap: var(--s6); }
+  .hd-header { align-items: flex-start; }
+  .hd-header-text { flex: 1 1 100%; order: 2; }
+  .hd-menu-btn { order: 1; }
+  .hd-header-actions { order: 3; width: 100%; }
+  .hd-header-actions .hh-btn { flex: 1 1 auto; }
+  .hd-title { font-size: 30px; }
+  .hd-tiles { gap: var(--s4); }
+  .hd-tile { padding: var(--s5); }
+  .hd-tile-num { font-size: 40px; }
+  .hd-card-head, .hd-pagination, .hd-list-row, .hd-card-pad { padding-left: var(--s4); padding-right: var(--s4); }
+  .hd .hd-chips { padding: var(--s4); }
+  .hd-table th:first-child, .hd-table td:first-child { padding-left: var(--s4); }
+  .hd-table th:last-child,  .hd-table td:last-child  { padding-right: var(--s4); }
+  .hd-search { width: 100%; }
+  .hd-banner { padding: var(--s4); }
+}
+@media (max-width: 480px) {
+  .hd-tiles { grid-template-columns: minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hd-table tbody tr { transition: none; }
+}

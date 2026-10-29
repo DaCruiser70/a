@@ -370,6 +370,31 @@
 .login-back-link:hover { color: #E8B84B; }
 .login-back-link:focus-visible { outline: 2px solid #E8B84B; outline-offset: 2px; border-radius: 4px; }
 
+/* Portal chooser: "Where would you like to go?" (same card language as the member list) */
+.login-card-title:focus { outline: none; }
+.login-card-title:focus-visible { outline: 2px solid #E8B84B; outline-offset: 4px; border-radius: 4px; }
+.login-portal-list { list-style: none; margin: 20px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.login-portal {
+  display: flex; align-items: center; gap: 12px; min-height: 56px;
+  padding: 10px 14px; border-radius: 10px; text-decoration: none;
+  background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.14);
+  transition: border-color 0.2s, background 0.2s;
+}
+.login-portal:hover { border-color: #C8920A; background: rgba(200,146,10,0.08); }
+.login-portal:focus-visible { outline: 2px solid #E8B84B; outline-offset: 2px; }
+/* Each portal's own accent from lib/portal-theme.ts, with a white icon (contrast >= 5.98:1) */
+.login-portal-icon {
+  width: 34px; height: 34px; border-radius: 9px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--portal-accent, #1B3A6B); color: #fff;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.18);
+}
+.login-portal-icon svg { width: 17px; height: 17px; }
+.login-portal-name  { flex: 1; min-width: 0; font-size: 13.5px; font-weight: 600; color: #fff; overflow-wrap: anywhere; }
+.login-portal-arrow { color: #C8920A; font-weight: 700; }
+.login-portal:hover .login-portal-arrow { color: #E8B84B; }
+@media (prefers-reduced-motion: reduce) { .login-portal { transition: none; } }
+
 .login-btn:disabled {
   opacity: 0.7;
   cursor: not-allowed;

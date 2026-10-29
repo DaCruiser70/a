@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 import { requireRole } from '@/lib/roles'
 import { encrypt } from '@/lib/encrypt'
+import { VEHICLE_TASK_KEYS } from '@/lib/vehicle'
+import { RETIRED_TASK_KEYS } from '@/lib/stakeholder-mapping'
 
 export async function PATCH(
   request: Request,
@@ -31,7 +33,7 @@ export async function PATCH(
   // Verify task exists and belongs to this stakeholder
   const { data: task } = await admin
     .from('stakeholder_tasks')
-    .select('id, assigned_to, status')
+    .select('id, assigned_to, status, task_key, newhire_id')
     .eq('id', taskId)
     .maybeSingle()
 
@@ -39,6 +41,15 @@ export async function PATCH(
   if (task.assigned_to !== user.id) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   if (task.status === 'confirmed') {
     return NextResponse.json({ error: 'Task is already confirmed' }, { status: 409 })
+  }
+  if (RETIRED_TASK_KEYS.includes(task.task_key)) {
+    return NextResponse.json({ error: 'This item is no longer part of onboarding.' }, { status: 409 })
+  }
+  // A vehicle task that belongs to a vehicle request is completed only through the ordered vehicle
+  // route (Rob → Heather → Marley). Old three-person vehicle tasks (no request) keep working as before.
+  if (VEHICLE_TASK_KEYS.includes(task.task_key)) {
+    const { data: request } = await admin.from('vehicle_requests').select('id').eq('newhire_id', task.newhire_id).maybeSingle()
+    if (request) return NextResponse.json({ error: 'Use the vehicle form to complete this task.' }, { status: 409 })
   }
 
   const now       = new Date().toISOString()

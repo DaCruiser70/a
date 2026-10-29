@@ -9,22 +9,36 @@ import '../../../../styles/pages/pm.css'
 import PortalHeader from '@/components/ui/PortalHeader'
 import Modal from '@/components/ui/Modal'
 import { formatPlanDate } from '@/components/ui/PlanBadges'
-import { PM_STATUS_LABELS } from '@/lib/pm'
+import {
+  PM_STATUS_LABELS, PM_DETAIL_FIELDS, PM_DETAIL_LABELS, PM_DETAIL_MAX,
+  isPmFieldRequired, type PmDetailField, type PmDetails,
+} from '@/lib/pm'
 import type { PmRequestStatus } from '@/types'
 
 type Detail = {
   request: {
     hire_id: string; name: string; start_date: string | null; region: string
-    branch: string | null; manager: string | null; status: PmRequestStatus
+    manager: string | null; status: PmRequestStatus
     claimed_by_name: string | null; claimed_at: string | null
     completed_by_name: string | null; completed_at: string | null
     mine: boolean
   }
-  project: { number: string | null; name: string | null; region: string | null; location: string | null; branch: string | null }
+  project: { number: string | null; region: string | null }
+  details: PmDetails
+  missing: PmDetailField[]
   me: { id: string; name: string }
 }
 
 type Action = 'claim' | 'release' | 'done'
+type Draft = Record<PmDetailField, string>
+
+const EMPTY_DRAFT: Draft = { dcc: '', standing_offer: '', project_name: '', project_location: '' }
+const toDraft = (d: PmDetails): Draft => ({
+  dcc:              d.dcc ?? '',
+  standing_offer:   d.standing_offer ?? '',
+  project_name:     d.project_name ?? '',
+  project_location: d.project_location ?? '',
+})
 
 function Row({ label, value }: { label: string; value: string | null }) {
   return (
@@ -35,8 +49,8 @@ function Row({ label, value }: { label: string; value: string | null }) {
   )
 }
 
-// One request in the member's region. Shows the hire's name, region, branch, start date, manager
-// and the project block from the manager plan — nothing else about the hire.
+// One request in the member's region. Shows the hire's name, region, start date, manager, the
+// project number and region from the manager plan, and the project details the team enters here.
 export default function PmRequestPage() {
   const params = useParams()
   const hireId = params?.id as string
@@ -49,6 +63,13 @@ export default function PmRequestPage() {
   const [notice, setNotice]   = useState('')
   const [confirmDone, setConfirmDone] = useState(false)
 
+  // Project details form (editable only by the claimer, until done)
+  const [draft, setDraft]           = useState<Draft>(EMPTY_DRAFT)
+  const [fieldErrs, setFieldErrs]   = useState<Partial<Record<PmDetailField, string>>>({})
+  const [saving, setSaving]         = useState(false)
+  const [saveError, setSaveError]   = useState('')
+  const [saveNotice, setSaveNotice] = useState('')
+
   useEffect(() => {
     let cancelled = false
     fetch(`/api/pm/requests/${hireId}`, { cache: 'no-store' })
@@ -56,7 +77,10 @@ export default function PmRequestPage() {
         if (cancelled) return
         if (r.status === 404) { setLoad('notfound'); return }
         if (!r.ok) { setLoad('error'); return }
-        setData(await r.json())
+        const d: Detail = await r.json()
+        setData(d)
+        setDraft(toDraft(d.details))
+        setFieldErrs({})
         setLoad('ready')
       })
       .catch(() => { if (!cancelled) setLoad('error') })
@@ -75,9 +99,16 @@ export default function PmRequestPage() {
       })
       const body = await res.json().catch(() => ({}))
       if (res.status === 404) { setLoad('notfound'); return }
-      if (!res.ok) { setError(body.error ?? 'Could not save. Please try again.'); setAttempt(a => a + 1); return }
+      if (!res.ok) {
+        setError(body.error ?? 'Could not save. Please try again.')
+        setConfirmDone(false)
+        setAttempt(a => a + 1)
+        return
+      }
       setConfirmDone(false)
-      setNotice(action === 'claim' ? 'You claimed this request.' : action === 'release' ? 'Released. It is back in the Open list.' : 'Marked as done. HR has been notified.')
+      setNotice(action === 'claim' ? 'You claimed this request. You can now fill in the project details.'
+        : action === 'release' ? 'Released. It is back in the Open list.'
+        : 'Marked as done. HR has been notified.')
       setAttempt(a => a + 1)
     } catch {
       setError('Could not reach the server. Check your connection and try again.')
@@ -86,7 +117,48 @@ export default function PmRequestPage() {
     }
   }
 
-  const r = data?.request
+  async function saveDetails(e: React.SyntheticEvent<HTMLFormElement>) {
+    e.preventDefault()
+    setSaveError('')
+    setSaveNotice('')
+    const errs: Partial<Record<PmDetailField, string>> = {}
+    for (const f of PM_DETAIL_FIELDS) {
+      if (draft[f].trim().length > PM_DETAIL_MAX[f]) errs[f] = `Please keep this under ${PM_DETAIL_MAX[f]} characters.`
+    }
+    setFieldErrs(errs)
+    if (Object.keys(errs).length > 0) return
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/pm/requests/${hireId}/details`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(draft),
+      })
+      const body = await res.json().catch(() => ({}))
+      if (res.status === 404) { setLoad('notfound'); return }
+      if (!res.ok) {
+        if (body.fields) setFieldErrs(body.fields)
+        setSaveError(body.error ?? 'Could not save the details. Please try again.')
+        if (res.status === 409) setAttempt(a => a + 1)
+        return
+      }
+      setData(d => d ? { ...d, details: body.details, missing: body.missing } : d)
+      setDraft(toDraft(body.details))
+      setSaveNotice(body.missing?.length ? 'Details saved. You can finish the rest later.' : 'Details saved.')
+    } catch {
+      setSaveError('Could not reach the server. Check your connection and try again.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const r           = data?.request
+  const editable    = !!r && r.status === 'claimed' && r.mine
+  const saved       = data ? toDraft(data.details) : EMPTY_DRAFT
+  const dirty       = PM_DETAIL_FIELDS.some(f => draft[f].trim() !== saved[f])
+  const missing     = data?.missing ?? []
+  const doneBlocked = missing.length > 0 || dirty
+  const missingText = missing.map(f => PM_DETAIL_LABELS[f]).join(' and ')
 
   return (
     <div className="mgr-page" data-portal="project_mgmt">
@@ -99,7 +171,7 @@ export default function PmRequestPage() {
           <h1>{load === 'ready' && r ? r.name : 'Project request'}</h1>
           <p>
             {load === 'ready' && r
-              ? [r.region, r.branch, r.start_date && `Starts ${formatPlanDate(r.start_date)}`].filter(Boolean).join(' · ')
+              ? [r.region, r.start_date && `Starts ${formatPlanDate(r.start_date)}`].filter(Boolean).join(' · ')
               : 'PSPC & RCMP clearance project details'}
           </p>
         </div>
@@ -108,7 +180,7 @@ export default function PmRequestPage() {
       <main className="mgr-body">
         {load === 'loading' && (
           <div aria-busy="true" aria-label="Loading request">
-            <div className="mgr-skeleton block" /><div className="mgr-skeleton block" />
+            <div className="mgr-skeleton block" /><div className="mgr-skeleton block" /><div className="mgr-skeleton block" />
           </div>
         )}
 
@@ -142,31 +214,118 @@ export default function PmRequestPage() {
               </div>
               <div className="pm-panel-body">
                 <p className="pm-note" style={{ margin: 0 }}>
-                  {r.status === 'open' && 'Nobody has claimed this yet.'}
+                  {r.status === 'open' && 'Nobody has claimed this yet. Claim it to fill in the project details.'}
                   {r.status === 'claimed' && (r.mine
                     ? `You claimed this${r.claimed_at ? ` on ${formatPlanDate(r.claimed_at)}` : ''}.`
                     : `Claimed by ${r.claimed_by_name ?? 'a team member'}${r.claimed_at ? ` on ${formatPlanDate(r.claimed_at)}` : ''}.`)}
                   {r.status === 'done' && `Done${r.completed_by_name ? ` by ${r.completed_by_name}` : ''}${r.completed_at ? ` on ${formatPlanDate(r.completed_at)}` : ''}.`}
                 </p>
+                {editable && doneBlocked && (
+                  <div id="pm-done-blocked" className="pm-missing">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                      <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                    </svg>
+                    <span>
+                      {missing.length > 0
+                        ? <>To mark this done, add <strong>{missingText}</strong> in Project details below and save.</>
+                        : 'Save your project details before marking this done.'}
+                    </span>
+                  </div>
+                )}
                 {error && <div className="mgr-error" role="alert" style={{ marginTop: 12 }}>{error}</div>}
               </div>
-              {(r.status === 'open' || (r.status === 'claimed' && r.mine)) && (
+              {(r.status === 'open' || editable) && (
                 <div className="pm-actions">
                   {r.status === 'open' && (
                     <button type="button" className="pm-btn primary" disabled={!!busy} onClick={() => act('claim')}>
                       {busy === 'claim' ? 'Claiming…' : 'Claim'}
                     </button>
                   )}
-                  {r.status === 'claimed' && r.mine && (
+                  {editable && (
                     <>
                       <button type="button" className="pm-btn" disabled={!!busy} onClick={() => act('release')}>
                         {busy === 'release' ? 'Releasing…' : 'Release'}
                       </button>
-                      <button type="button" className="pm-btn primary" disabled={!!busy} onClick={() => { setError(''); setConfirmDone(true) }}>
+                      <button
+                        type="button" className="pm-btn primary"
+                        disabled={!!busy || doneBlocked}
+                        aria-describedby={doneBlocked ? 'pm-done-blocked' : undefined}
+                        onClick={() => { setError(''); setConfirmDone(true) }}
+                      >
                         Mark done
                       </button>
                     </>
                   )}
+                </div>
+              )}
+            </section>
+
+            {/* ── Project details: entered by the member who claimed the request ── */}
+            <section className="pm-panel" aria-labelledby="pm-details-title">
+              <div className="pm-panel-head">
+                <h2 id="pm-details-title" className="pm-panel-title">Project details</h2>
+                <div className="pm-panel-sub">
+                  {editable ? 'Save as you go. Fields marked (optional) can stay empty.'
+                    : r.status === 'done' ? 'Locked: this request is done.'
+                    : r.status === 'open' ? 'Claim this request to fill these in.'
+                    : 'Only the person who claimed this request can edit these.'}
+                </div>
+              </div>
+
+              {editable ? (
+                <form onSubmit={saveDetails} noValidate>
+                  <div className="pm-panel-body pm-fields">
+                    {PM_DETAIL_FIELDS.map(f => {
+                      const id  = `pm-detail-${f}`
+                      const err = fieldErrs[f]
+                      const common = {
+                        id,
+                        value:              draft[f],
+                        maxLength:          PM_DETAIL_MAX[f],
+                        className:          `pm-input${err ? ' invalid' : ''}`,
+                        disabled:           saving,
+                        'aria-invalid':     err ? true : undefined,
+                        'aria-describedby': [`${id}-count`, err ? `${id}-error` : ''].filter(Boolean).join(' '),
+                      }
+                      const onChange = (v: string) => {
+                        setDraft(d => ({ ...d, [f]: v }))
+                        setSaveNotice('')
+                        if (err) setFieldErrs(e => { const n = { ...e }; delete n[f]; return n })
+                      }
+                      return (
+                        <div key={f} className={`pm-field${f === 'project_location' ? ' wide' : ''}`}>
+                          <label className="pm-label" htmlFor={id}>
+                            {f === 'project_location' ? 'Location (full street address)' : PM_DETAIL_LABELS[f]}
+                            {isPmFieldRequired(f)
+                              ? <span className="pm-required"><span aria-hidden="true"> *</span><span className="pm-sr-only"> (required to mark done)</span></span>
+                              : <span className="pm-optional"> (optional)</span>}
+                          </label>
+                          {f === 'project_location'
+                            ? <textarea {...common} rows={2} onChange={e => onChange(e.target.value)} />
+                            : <input {...common} onChange={e => onChange(e.target.value)} />}
+                          <span id={`${id}-count`} className="pm-count">{draft[f].length}/{PM_DETAIL_MAX[f]} characters</span>
+                          {err && <span id={`${id}-error`} className="pm-field-error">{err}</span>}
+                        </div>
+                      )
+                    })}
+                    <p className="pm-legend"><span aria-hidden="true">*</span> Required before Mark done.</p>
+                    {saveError  && <div className="mgr-error" role="alert">{saveError}</div>}
+                    {saveNotice && <div className="plan-saved" role="status" style={{ margin: 0 }}>{saveNotice}</div>}
+                  </div>
+                  <div className="pm-actions">
+                    <button type="button" className="pm-btn" disabled={saving || !dirty} onClick={() => { setDraft(saved); setFieldErrs({}); setSaveError('') }}>
+                      Undo changes
+                    </button>
+                    <button type="submit" className="pm-btn primary" disabled={saving || !dirty}>
+                      {saving ? 'Saving…' : 'Save details'}
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <div className="pm-panel-body">
+                  <dl className="pm-rows">
+                    {PM_DETAIL_FIELDS.map(f => <Row key={f} label={PM_DETAIL_LABELS[f]} value={data.details[f]} />)}
+                  </dl>
                 </div>
               )}
             </section>
@@ -177,7 +336,6 @@ export default function PmRequestPage() {
                 <dl className="pm-rows">
                   <Row label="Name"       value={r.name} />
                   <Row label="Region"     value={r.region} />
-                  <Row label="Branch"     value={r.branch} />
                   <Row label="Start date" value={r.start_date ? formatPlanDate(r.start_date) : null} />
                   <Row label="Manager"    value={r.manager} />
                 </dl>
@@ -186,16 +344,13 @@ export default function PmRequestPage() {
 
             <section className="pm-panel" aria-labelledby="pm-project-title">
               <div className="pm-panel-head">
-                <h2 id="pm-project-title" className="pm-panel-title">Project</h2>
-                <div className="pm-panel-sub">From the manager&apos;s onboarding plan</div>
+                <h2 id="pm-project-title" className="pm-panel-title">From the manager&apos;s plan</h2>
+                <div className="pm-panel-sub">PSPC &amp; RCMP clearance</div>
               </div>
               <div className="pm-panel-body">
                 <dl className="pm-rows">
                   <Row label="Project number" value={data.project.number} />
-                  <Row label="Project name"   value={data.project.name} />
                   <Row label="Project region" value={data.project.region} />
-                  <Row label="Location"       value={data.project.location} />
-                  <Row label="Branch"         value={data.project.branch} />
                 </dl>
               </div>
             </section>
@@ -206,14 +361,14 @@ export default function PmRequestPage() {
       {confirmDone && (
         <Modal
           title="Mark this request done?"
-          description="HR will be told the project setup is complete. This can't be undone from the portal."
+          description="HR will be told the project setup is complete. The project details are locked after this."
           onClose={() => setConfirmDone(false)}
           busy={busy === 'done'}
         >
           {error && <div className="ui-modal-error" role="alert">{error}</div>}
           <div className="ui-modal-actions">
             <button type="button" className="ui-btn-cancel" disabled={busy === 'done'} onClick={() => setConfirmDone(false)}>Cancel</button>
-            <button type="button" className="ui-btn-primary" disabled={busy === 'done'} onClick={() => act('done')}>
+            <button type="button" className="ui-btn-primary" disabled={busy === 'done' || doneBlocked} onClick={() => act('done')}>
               {busy === 'done' ? 'Saving…' : 'Mark done'}
             </button>
           </div>

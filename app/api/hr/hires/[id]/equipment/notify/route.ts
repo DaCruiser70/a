@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 import { requireRole } from '@/lib/roles'
 import { STAKEHOLDER_MAP, EQUIPMENT_LABELS } from '@/lib/stakeholder-mapping'
+import { startVehicleRequest } from '@/lib/vehicle-server'
 
 export async function POST(
   request: Request,
@@ -9,6 +10,7 @@ export async function POST(
 ) {
   const auth = await requireRole('hr')
   if (auth instanceof NextResponse) return auth
+  const { user } = auth
 
   const admin = createServiceClient()
 
@@ -26,6 +28,11 @@ export async function POST(
   let tasksCreated = 0
 
   for (const key of newlyCheckedItems as string[]) {
+    // Company Vehicle is a sequence: only Rob's task now; Heather and Marley follow in turn
+    if (key === 'vehicle') {
+      if ((await startVehicleRequest(admin, hireId, user.id)) === 'started') tasksCreated++
+      continue
+    }
     const emails = STAKEHOLDER_MAP[key]
     if (!emails || emails.length === 0) continue
 

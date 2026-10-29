@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 import { requireRole } from '@/lib/roles'
+import { RETIRED_TASK_KEYS } from '@/lib/stakeholder-mapping'
 
 export async function GET(
   _request: Request,
@@ -19,10 +20,14 @@ export async function GET(
     .from('stakeholder_tasks')
     .select('id, newhire_id, assigned_to, task_key, task_name, task_details, status, confirmed_at, completion_note_enc, created_at')
     .eq('newhire_id', hireId)
+    .not('task_key', 'in', `(${RETIRED_TASK_KEYS.join(',')})`)
     .order('created_at', { ascending: true })
 
+  // Company vehicle request (step only here; the details come from the HR vehicle route on expand)
+  const { data: vehicle } = await admin.from('vehicle_requests').select('step').eq('newhire_id', hireId).maybeSingle()
+
   if (!tasks || tasks.length === 0) {
-    return NextResponse.json({ tasks: [] })
+    return NextResponse.json({ tasks: [], vehicle: vehicle ? { step: vehicle.step } : null })
   }
 
   // Enrich with stakeholder display names (safe — no hire PII)
@@ -51,5 +56,5 @@ export async function GET(
     stakeholder_name: nameMap[t.assigned_to] ?? '—',
   }))
 
-  return NextResponse.json({ tasks: enriched })
+  return NextResponse.json({ tasks: enriched, vehicle: vehicle ? { step: vehicle.step } : null })
 }

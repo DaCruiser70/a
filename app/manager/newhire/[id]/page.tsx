@@ -9,25 +9,32 @@ import '../../../../styles/pages/manager.css'
 import PortalHeader from '@/components/ui/PortalHeader'
 import { PlanStatusBadge, OverdueBadge, formatPlanDate } from '@/components/ui/PlanBadges'
 import { REGIONS } from '@/lib/regions'
-import { BRANCHES } from '@/lib/branches'
+import { TRAINING_KEYS, TRAINING_LABELS, TRAINING_OTHER_MAX, type TrainingKey } from '@/lib/training-options'
 import {
   EMPTY_PLAN, MAX_PLAN_TEXT, PlanDraftSchema, PlanSubmitSchema, fieldErrors,
-  CLEARANCE_TYPES, CLEARANCE_LABELS, TRAINING_DELIVERY, TRAINING_DELIVERY_LABELS,
-  type PlanAnswers, type TrainingDelivery,
+  CLEARANCE_TYPES, CLEARANCE_LABELS, SCHEDULE_FIELDS, SCHEDULE_LABELS,
+  type PlanAnswers,
 } from '@/lib/manager-plan'
 import type { ManagerPlanStatus } from '@/types'
 
 type Hire = { id: string; name: string; position: string | null; start_date: string | null; office_location: string | null }
 type PlanMeta = { status: ManagerPlanStatus; due_date: string | null; submitted_at: string | null; overdue: boolean }
 type Errors = Partial<Record<keyof PlanAnswers, string>>
-type TextKey = Exclude<keyof PlanAnswers, 'training_delivery' | 'clearance_type'>
+type TextKey = Exclude<keyof PlanAnswers, 'training_items' | 'training_other_selected' | 'training_other' | 'clearance_type'>
 
 const FIELD_LABELS: Partial<Record<keyof PlanAnswers, string>> = {
-  training_needed:   'Training needed',
-  training_delivery: 'How they will get it',
-  week1: 'Week 1', week2: 'Week 2', week3: 'Week 3',
-  project_number: 'Project number', project_name: 'Project name', project_region: 'Project region',
-  project_location: 'Location', project_branch: 'Branch',
+  training_items: 'Safety training',
+  training_other: 'Other training',
+  ...SCHEDULE_LABELS,
+  project_number: 'Project number', project_region: 'Project region',
+}
+
+// Where each error in the summary links to
+function errorAnchor(k: keyof PlanAnswers): string {
+  if (k === 'training_items') return `plan-training_items-${TRAINING_KEYS[0]}`
+  if (k === 'training_other_selected') return 'plan-training_other_selected'
+  if (k === 'clearance_type') return 'plan-clearance_type-none'
+  return `plan-${k}`
 }
 
 function ErrorText({ id, message }: { id: string; message?: string }) {
@@ -111,6 +118,7 @@ export default function ManagerPlanPage() {
   const [saveError, setSaveError] = useState('')
   const [notice, setNotice]   = useState('')
   const summaryRef = useRef<HTMLDivElement>(null)
+  const otherRef   = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -135,11 +143,19 @@ export default function ManagerPlanPage() {
     if (errors[field]) setErrors(e => { const next = { ...e }; delete next[field]; return next })
   }
 
-  function toggleDelivery(option: TrainingDelivery) {
-    const has = answers.training_delivery.includes(option)
-    set('training_delivery', has
-      ? answers.training_delivery.filter(d => d !== option)
-      : TRAINING_DELIVERY.filter(d => d === option || answers.training_delivery.includes(d)))
+  // Kept in list order so the stored array is stable
+  function toggleTraining(option: TrainingKey) {
+    const has = answers.training_items.includes(option)
+    set('training_items', has
+      ? answers.training_items.filter(k => k !== option)
+      : TRAINING_KEYS.filter(k => k === option || answers.training_items.includes(k)))
+  }
+
+  // Unticking "Other" clears its text; ticking it moves focus to the text box
+  function toggleOther(checked: boolean) {
+    set('training_other_selected', checked)
+    if (!checked) set('training_other', '')
+    else requestAnimationFrame(() => otherRef.current?.focus())
   }
 
   async function save(action: 'draft' | 'submit') {
@@ -204,7 +220,7 @@ export default function ManagerPlanPage() {
           <p className="form-page-sub">
             {load === 'ready' && hire
               ? [hire.position, hire.start_date && `Starts ${formatPlanDate(hire.start_date)}`, hire.office_location].filter(Boolean).join(' · ')
-              : 'Tell HR how this person will be trained and supported in their first three weeks.'}
+              : 'Tell HR how this person will be trained and supported in their first three months.'}
           </p>
           {load === 'ready' && meta && (
             <div className="plan-header-badges">
@@ -259,7 +275,7 @@ export default function ManagerPlanPage() {
                 <strong>{errorList.length === 1 ? 'One answer needs attention' : `${errorList.length} answers need attention`}</strong>
                 <ul>
                   {errorList.map(k => (
-                    <li key={k}><a href={`#plan-${k === 'training_delivery' ? 'training_delivery-on_the_job' : k === 'clearance_type' ? 'clearance_type-none' : k}`}>{FIELD_LABELS[k] ?? k}: {errors[k]}</a></li>
+                    <li key={k}><a href={`#${errorAnchor(k)}`}>{FIELD_LABELS[k] ?? k}: {errors[k]}</a></li>
                   ))}
                 </ul>
               </div>
@@ -273,58 +289,89 @@ export default function ManagerPlanPage() {
             </div>
           )}
 
-          {/* ── TRAINING ── */}
+          {/* ── SAFETY TRAINING ── */}
           <SectionCard
-            tone="amber" title="Training" sub="What they need to learn and how they will learn it"
-            icon={<svg viewBox="0 0 24 24" fill="none" stroke="#C8920A" strokeWidth="1.8" strokeLinecap="round"><path d="M22 10L12 5 2 10l10 5 10-5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>}
+            tone="amber" title="Safety training" sub="Tick every safety training this person needs. Leave it empty if none."
+            icon={<svg viewBox="0 0 24 24" fill="none" stroke="#C8920A" strokeWidth="1.8" strokeLinecap="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>}
           >
-            <TextAreaField
-              field="training_needed" label="What training does this person need?" required
-              value={answers.training_needed} error={errors.training_needed}
-              onChange={v => set('training_needed', v)}
-              placeholder="e.g. Site safety orientation, Jonas time entry, equipment certification"
-            />
-
-            <fieldset className="plan-fieldset span-2" aria-describedby={errors.training_delivery ? 'plan-training_delivery-error' : undefined}>
-              <legend className="form-label">How will they get it? <span className="form-label-required" aria-hidden="true">*</span></legend>
+            <fieldset className="plan-fieldset span-2" aria-describedby={errors.training_items ? 'plan-training_items-error' : undefined}>
+              <legend className="form-label">Safety training needed</legend>
               <div className="plan-options">
-                {TRAINING_DELIVERY.map(option => (
-                  <label key={option} className={`plan-option${errors.training_delivery ? ' invalid' : ''}`}>
+                {TRAINING_KEYS.map(option => (
+                  <label key={option} className={`plan-option${errors.training_items ? ' invalid' : ''}`}>
                     <input
-                      id={`plan-training_delivery-${option}`}
+                      id={`plan-training_items-${option}`}
                       type="checkbox"
-                      checked={answers.training_delivery.includes(option)}
-                      onChange={() => toggleDelivery(option)}
+                      checked={answers.training_items.includes(option)}
+                      onChange={() => toggleTraining(option)}
                     />
                     <span>
                       <span className="plan-mark box" aria-hidden="true">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg>
                       </span>
-                      {TRAINING_DELIVERY_LABELS[option]}
+                      {TRAINING_LABELS[option]}
                     </span>
                   </label>
                 ))}
+                <label className="plan-option">
+                  <input
+                    id="plan-training_other_selected"
+                    type="checkbox"
+                    checked={answers.training_other_selected}
+                    aria-controls="plan-training_other-reveal"
+                    aria-expanded={answers.training_other_selected}
+                    onChange={e => toggleOther(e.target.checked)}
+                  />
+                  <span>
+                    <span className="plan-mark box" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+                    </span>
+                    Other
+                  </span>
+                </label>
               </div>
-              <ErrorText id="plan-training_delivery-error" message={errors.training_delivery} />
+              <ErrorText id="plan-training_items-error" message={errors.training_items} />
             </fieldset>
 
-            <TextAreaField
-              field="training_notes" label="Training notes" rows={3}
-              hint="Optional: course names, who delivers it, timing"
-              value={answers.training_notes} error={errors.training_notes}
-              onChange={v => set('training_notes', v)}
-            />
+            <div id="plan-training_other-reveal" className="form-field span-2" hidden={!answers.training_other_selected}>
+              {answers.training_other_selected && (
+                <>
+                  <label className="form-label" htmlFor="plan-training_other">
+                    Other training <span className="form-label-required" aria-hidden="true">*</span>
+                  </label>
+                  <input
+                    id="plan-training_other"
+                    ref={otherRef}
+                    className={`form-input${errors.training_other ? ' invalid' : ''}`}
+                    value={answers.training_other}
+                    maxLength={TRAINING_OTHER_MAX}
+                    placeholder="A training that is not in the list"
+                    aria-required="true"
+                    aria-invalid={!!errors.training_other || undefined}
+                    aria-describedby={errors.training_other ? 'plan-training_other-error' : 'plan-training_other-hint'}
+                    onChange={e => set('training_other', e.target.value)}
+                  />
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
+                    <span id="plan-training_other-hint" className="form-input-hint">One training, up to {TRAINING_OTHER_MAX} characters</span>
+                    <span className={`plan-counter${answers.training_other.length > TRAINING_OTHER_MAX - 20 ? ' near' : ''}`} aria-hidden="true">
+                      {answers.training_other.length}/{TRAINING_OTHER_MAX}
+                    </span>
+                  </div>
+                  <ErrorText id="plan-training_other-error" message={errors.training_other} />
+                </>
+              )}
+            </div>
           </SectionCard>
 
-          {/* ── FIRST THREE WEEKS ── */}
+          {/* ── SCHEDULE ── */}
           <SectionCard
-            tone="navy" title="First three weeks" sub="What they will be doing each week"
+            tone="navy" title="First three months" sub="What they will be doing in each period"
             icon={<svg viewBox="0 0 24 24" fill="none" stroke="#1B3A6B" strokeWidth="1.8" strokeLinecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>}
           >
-            {(['week1', 'week2', 'week3'] as const).map((w, i) => (
+            {SCHEDULE_FIELDS.map(f => (
               <TextAreaField
-                key={w} field={w} label={`Week ${i + 1}`} required rows={3}
-                value={answers[w]} error={errors[w]} onChange={v => set(w, v)}
+                key={f} field={f} label={SCHEDULE_LABELS[f]} required rows={3}
+                value={answers[f]} error={errors[f]} onChange={v => set(f, v)}
               />
             ))}
           </SectionCard>
@@ -376,21 +423,19 @@ export default function ManagerPlanPage() {
             {answers.clearance_type === 'pspc_rcmp' && (
               <div className="plan-reveal">
                 <div className="plan-reveal-title">Project details for the PSPC &amp; RCMP clearance</div>
-                {(['project_number', 'project_name'] as const).map(f => (
-                  <div key={f} className="form-field">
-                    <label className="form-label" htmlFor={`plan-${f}`}>
-                      {FIELD_LABELS[f]} <span className="form-label-required" aria-hidden="true">*</span>
-                    </label>
-                    <input
-                      id={`plan-${f}`} className={`form-input${errors[f] ? ' invalid' : ''}`}
-                      value={answers[f]} maxLength={MAX_PLAN_TEXT}
-                      aria-required="true" aria-invalid={!!errors[f] || undefined}
-                      aria-describedby={errors[f] ? `plan-${f}-error` : undefined}
-                      onChange={e => set(f, e.target.value)}
-                    />
-                    <ErrorText id={`plan-${f}-error`} message={errors[f]} />
-                  </div>
-                ))}
+                <div className="form-field">
+                  <label className="form-label" htmlFor="plan-project_number">
+                    Project number <span className="form-label-required" aria-hidden="true">*</span>
+                  </label>
+                  <input
+                    id="plan-project_number" className={`form-input${errors.project_number ? ' invalid' : ''}`}
+                    value={answers.project_number} maxLength={MAX_PLAN_TEXT}
+                    aria-required="true" aria-invalid={!!errors.project_number || undefined}
+                    aria-describedby={errors.project_number ? 'plan-project_number-error' : undefined}
+                    onChange={e => set('project_number', e.target.value)}
+                  />
+                  <ErrorText id="plan-project_number-error" message={errors.project_number} />
+                </div>
 
                 <div className="form-field">
                   <label className="form-label" htmlFor="plan-project_region">
@@ -407,38 +452,6 @@ export default function ManagerPlanPage() {
                     {REGIONS.map(r => <option key={r} value={r}>{r}</option>)}
                   </select>
                   <ErrorText id="plan-project_region-error" message={errors.project_region} />
-                </div>
-
-                <div className="form-field">
-                  <label className="form-label" htmlFor="plan-project_branch">
-                    Branch <span className="form-label-required" aria-hidden="true">*</span>
-                  </label>
-                  <select
-                    id="plan-project_branch" className={`form-input${errors.project_branch ? ' invalid' : ''}`}
-                    value={answers.project_branch}
-                    aria-required="true" aria-invalid={!!errors.project_branch || undefined}
-                    aria-describedby={errors.project_branch ? 'plan-project_branch-error' : undefined}
-                    onChange={e => set('project_branch', e.target.value)}
-                  >
-                    <option value="">Select a branch</option>
-                    {BRANCHES.map(b => <option key={b} value={b}>{b}</option>)}
-                  </select>
-                  <ErrorText id="plan-project_branch-error" message={errors.project_branch} />
-                </div>
-
-                <div className="form-field span-2">
-                  <label className="form-label" htmlFor="plan-project_location">
-                    Location <span className="form-label-required" aria-hidden="true">*</span>
-                  </label>
-                  <input
-                    id="plan-project_location" className={`form-input${errors.project_location ? ' invalid' : ''}`}
-                    value={answers.project_location} maxLength={MAX_PLAN_TEXT}
-                    placeholder="Site or building"
-                    aria-required="true" aria-invalid={!!errors.project_location || undefined}
-                    aria-describedby={errors.project_location ? 'plan-project_location-error' : undefined}
-                    onChange={e => set('project_location', e.target.value)}
-                  />
-                  <ErrorText id="plan-project_location-error" message={errors.project_location} />
                 </div>
               </div>
             )}

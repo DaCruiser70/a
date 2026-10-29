@@ -109,7 +109,7 @@ export default function HireRegionRow({ hireId, region, editing, onEditingChange
             </div>
             {error && <div id="hire-region-error" className="clr-hr-error" role="alert" style={{ margin: '8px 0 0' }}>{error}</div>}
             <div className="clr-hr-btns" style={{ marginTop: 8 }}>
-              <button type="button" className="clr-hr-btn" disabled={busy} onClick={cancel}>Cancel</button>
+              <button type="button" className="clr-hr-btn secondary" disabled={busy} onClick={cancel}>Cancel</button>
               <button type="submit" className="clr-hr-btn primary" disabled={busy}>{busy ? 'Saving…' : 'Save region'}</button>
             </div>
           </form>

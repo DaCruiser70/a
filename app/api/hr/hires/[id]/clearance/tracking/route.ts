@@ -4,7 +4,10 @@ import { createServiceClient } from '@/lib/supabase/server'
 import { requireRole } from '@/lib/roles'
 import { rateLimit, rateLimitKey } from '@/lib/rate-limit'
 import { RCMP_RECIPIENTS, rcmpRecipientForOffice, type RcmpRecipientKey } from '@/lib/clearance'
-import { loadClearanceRequirements, decryptClearanceField, loadHrClearanceView } from '@/lib/clearance-server'
+import { loadClearanceRequirements, decryptClearanceField } from '@/lib/clearance-server'
+import { loadHrClearanceFull } from '@/lib/clearance-package'
+import { loadProjectBlock } from '@/lib/pm-server'
+import { projectBlockRows } from '@/lib/pm'
 import type { Database } from '@/types'
 
 type TrackingUpsert = Database['public']['Tables']['clearance_tracking']['Insert']
@@ -60,16 +63,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   // ── Copy PSPC email details: project block, legal name, place of birth. Never ID files or the DCN. ──
   if (action === 'copy_pspc_details') {
     if (!req.fingerprint) return NextResponse.json({ error: 'Only PSPC & RCMP clearances have a PSPC package.' }, { status: 409 })
-    const { data: plan } = await admin
-      .from('manager_plans')
-      .select('project_number, project_name, project_region, project_location, project_branch')
-      .eq('newhire_id', id).maybeSingle()
+    // Same "Label: value" lines as before, in the order from projectBlockRows; an empty optional
+    // field (DCC, Standing Offer) is left out rather than printed with a blank value
+    const { block } = await loadProjectBlock(admin, id)
     const text = [
-      `Project number: ${plan?.project_number ?? ''}`,
-      `Project name: ${plan?.project_name ?? ''}`,
-      `Project region: ${plan?.project_region ?? ''}`,
-      `Location: ${plan?.project_location ?? ''}`,
-      `Branch: ${plan?.project_branch ?? ''}`,
+      ...projectBlockRows(block).map(r => `${r.label}: ${r.value ?? ''}`),
       '',
       `Legal name: ${decryptClearanceField(info, 'legal_name_enc') ?? ''}`,
       `Place of birth: ${decryptClearanceField(info, 'place_of_birth_enc') ?? ''}`,
@@ -96,7 +94,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     (action === 'pspc_sent' && existing?.pspc_sent_at) ||
     (action === 'rcmp_sent' && existing?.rcmp_sent_at) ||
     (action === 'cleared'   && existing?.cleared_at)
-  if (already) return NextResponse.json({ ok: true, view: await loadHrClearanceView(admin, id) })
+  if (already) return NextResponse.json({ ok: true, view: await loadHrClearanceFull(admin, id) })
 
   const now = new Date().toISOString()
   const row: TrackingUpsert = { newhire_id: id, updated_at: now }
@@ -122,5 +120,5 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     user_id: id, action_type: 'green', message: AUDIT[action], performed_by: user.id,
   })
 
-  return NextResponse.json({ ok: true, view: await loadHrClearanceView(admin, id) })
+  return NextResponse.json({ ok: true, view: await loadHrClearanceFull(admin, id) })
 }

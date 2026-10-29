@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 import { requireRole } from '@/lib/roles'
-import { decrypt, decryptFields } from '@/lib/encrypt'
+import { inPayrollQueue } from '@/lib/payroll-access'
+import { decryptFields } from '@/lib/encrypt'
 
 // Only these document types are visible in the payroll portal
 const PAYROLL_DOC_TYPES = new Set(['td1_federal', 'td1_provincial', 'direct_deposit'])
@@ -24,8 +25,8 @@ export async function GET(
     .single()
 
   if (!profile) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  // Payroll only processes approved hires
-  if (profile.status !== 'approved') return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  // Fully approved hires, plus any hire already in the payroll queue (lib/payroll-access.ts)
+  if (!inPayrollQueue(profile)) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   const [
     { data: personalRaw },
@@ -46,22 +47,8 @@ export async function GET(
 
   const personal = personalRaw ? decryptFields(personalRaw) : null
 
-  // Decrypt banking fields server-side — never logged or returned raw
-  let bankingDecrypted: Record<string, string> = {}
-  if (banking) {
-    try {
-      bankingDecrypted = {
-        institution_number: decrypt(banking.institution_number_enc),
-        transit_number:     decrypt(banking.transit_number_enc),
-        account_number:     decrypt(banking.account_number_enc),
-      }
-    } catch { /* decryption failed */ }
-  }
-
-  let sinDecrypted: string | undefined
-  if (sin?.sin_enc) {
-    try { sinDecrypted = decrypt(sin.sin_enc) } catch { /* decryption failed */ }
-  }
+  // The banking numbers and the SIN are not decrypted here. They are fetched one hire at a time,
+  // on an explicit View click, from POST /api/payroll/hires/[id]/reveal (audited, no-store).
 
   // Filter documents to only payroll-relevant types
   const documents = (allDocs ?? []).filter(d => PAYROLL_DOC_TYPES.has(d.document_type))
@@ -103,11 +90,11 @@ export async function GET(
         form_status:      banking.form_status,
         flag_reason:      banking.flag_reason ?? null,
         submitted_at:     banking.submitted_at ?? null,
-        ...bankingDecrypted,
+        has_numbers:      !!banking.account_number_enc,
       } : null,
 
       sin: sin ? {
-        sin:          sinDecrypted ?? null,
+        has_sin:      !!sin.sin_enc,
         form_status:  sin.form_status,
         flag_reason:  sin.flag_reason ?? null,
         submitted_at: sin.submitted_at ?? null,

@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database, RegionName, RegionTeamMember } from '@/types'
-import { isRegion, needsPmRequest } from '@/lib/pm'
+import { isRegion, needsPmRequest, type PmProjectBlock } from '@/lib/pm'
 import { queueNotification, hrNotifyEmails, appUrl } from '@/lib/notify'
 
 // Server-only helpers for regional project management.
@@ -132,6 +132,28 @@ export async function syncPmRequest(admin: Admin, hireId: string): Promise<PmSyn
   return 'open'
 }
 
+// Project block for HR: number and region from the manager plan, the four details from the
+// project-management request. done is false while the request is open, claimed or missing.
+export async function loadProjectBlock(admin: Admin, hireId: string): Promise<{ block: PmProjectBlock; done: boolean }> {
+  const [{ data: plan }, { data: req }] = await Promise.all([
+    admin.from('manager_plans').select('project_number, project_region').eq('newhire_id', hireId).maybeSingle(),
+    admin.from('pm_requests')
+      .select('status, dcc, standing_offer, project_name, project_location')
+      .eq('newhire_id', hireId).maybeSingle(),
+  ])
+  return {
+    block: {
+      project_number:   plan?.project_number ?? null,
+      project_region:   plan?.project_region ?? null,
+      dcc:              req?.dcc ?? null,
+      standing_offer:   req?.standing_offer ?? null,
+      project_name:     req?.project_name ?? null,
+      project_location: req?.project_location ?? null,
+    },
+    done: req?.status === 'done',
+  }
+}
+
 // Queued once when a request is marked done
 export async function queuePmDone(admin: Admin, hireId: string): Promise<void> {
   const { data: hire } = await admin.from('profiles').select('full_name').eq('id', hireId).maybeSingle()
@@ -143,8 +165,8 @@ export async function queuePmDone(admin: Admin, hireId: string): Promise<void> {
   })
 }
 
-// Card fields for a set of requests: hire name and start date, branch and manager from the plan,
-// claimer name. Deliberately narrow: no clearance, payroll, banking, SIN or document data.
+// Card fields for a set of requests: hire name and start date, project number and manager from
+// the plan, claimer name. Deliberately narrow: no clearance, payroll, banking, SIN or document data.
 export async function describePmRequests(
   admin: Admin,
   requests: Pick<Database['public']['Tables']['pm_requests']['Row'], 'newhire_id' | 'status' | 'claimed_by' | 'claimed_at' | 'completed_at' | 'region'>[],
@@ -154,7 +176,7 @@ export async function describePmRequests(
 
   const [{ data: hires }, { data: plans }] = await Promise.all([
     admin.from('profiles').select('id, full_name, start_date').in('id', hireIds),
-    admin.from('manager_plans').select('newhire_id, manager_id, project_branch').in('newhire_id', hireIds),
+    admin.from('manager_plans').select('newhire_id, manager_id, project_number').in('newhire_id', hireIds),
   ])
   const managerIds = [...new Set((plans ?? []).map(p => p.manager_id).filter(Boolean))]
   const [{ data: managers }, claimers] = await Promise.all([
@@ -173,7 +195,7 @@ export async function describePmRequests(
       name:            hireMap[r.newhire_id]?.full_name ?? '—',
       start_date:      hireMap[r.newhire_id]?.start_date ?? null,
       region:          r.region,
-      branch:          plan?.project_branch ?? null,
+      project_number:  plan?.project_number ?? null,
       manager:         plan ? managerMap[plan.manager_id] ?? null : null,
       status:          r.status,
       claimed_by:      r.claimed_by,

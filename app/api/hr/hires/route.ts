@@ -50,14 +50,17 @@ export async function GET() {
 
   const hireIds = (profiles ?? []).map(p => p.id)
 
-  const [piRows, biRows, siRows, poRows] = hireIds.length
+  const [piRows, biRows, siRows, poRows, docRows] = hireIds.length
     ? await Promise.all([
         admin.from('personal_info').select('user_id, form_status, submitted_at').in('user_id', hireIds),
         admin.from('banking_info').select('user_id, form_status, submitted_at').in('user_id', hireIds),
         admin.from('sin_info').select('user_id, form_status, submitted_at').in('user_id', hireIds),
         admin.from('policy_acknowledgements').select('user_id, form_status, submitted_at').in('user_id', hireIds),
+        admin.from('newhire_documents').select('user_id, document_type, form_status').in('user_id', hireIds),
       ])
-    : [{ data: [] }, { data: [] }, { data: [] }, { data: [] }]
+    : [{ data: [] }, { data: [] }, { data: [] }, { data: [] }, { data: [] }]
+  const docsByUser: Record<string, { document_type: string; form_status: string }[]> = {}
+  for (const d of docRows.data ?? []) (docsByUser[d.user_id] ??= []).push(d)
 
   // Batched queries for every listed hire's manager plan, clearance form and project-management
   // request (no per-row lookups)
@@ -85,7 +88,7 @@ export async function GET() {
     const computed = computeHireStatus([
       piMap[p.id]?.form_status, biMap[p.id]?.form_status,
       siMap[p.id]?.form_status, poMap[p.id]?.form_status,
-    ])
+    ], docsByUser[p.id] ?? [])
     const timestamps = [
       piMap[p.id]?.submitted_at, biMap[p.id]?.submitted_at,
       siMap[p.id]?.submitted_at, poMap[p.id]?.submitted_at,
@@ -100,6 +103,8 @@ export async function GET() {
       role:              p.position ?? '—',
       status:            computed.status,
       progress:          computed.progressPct,
+      approved_items:    computed.approvedCount,
+      total_items:       computed.totalItems,
       submitted:         submittedDate,
       days:              Math.max(0, days),
       last_submitted_at,
@@ -119,6 +124,18 @@ export async function GET() {
   })
 
   return NextResponse.json({ hires })
+}
+
+// app_metadata must hold role 'newhire' and roles ['newhire'] (parseRoles in lib/portals.ts)
+async function ensureNewhireAppMetadata(admin: ReturnType<typeof createServiceClient>, userId: string): Promise<boolean> {
+  const has = (meta: Record<string, unknown> | undefined) =>
+    meta?.role === 'newhire' && Array.isArray(meta?.roles) && (meta.roles as unknown[]).includes('newhire')
+  const { data: first } = await admin.auth.admin.getUserById(userId)
+  if (has(first.user?.app_metadata)) return true
+  const { error } = await admin.auth.admin.updateUserById(userId, { app_metadata: { role: 'newhire', roles: ['newhire'] } })
+  if (error) return false
+  const { data: again } = await admin.auth.admin.getUserById(userId)
+  return has(again.user?.app_metadata)
 }
 
 const OFFICE_LOCATIONS = ['Dartmouth NS', 'Moncton NB', 'Oakville ON', REMOTE_OFFICE] as const
@@ -201,7 +218,8 @@ export async function POST(request: Request) {
     email:         aemEmail,
     password:      tempPassword,
     email_confirm: true,
-    app_metadata:  { role: 'newhire' },
+    // Both keys: the middleware and requireRole read app_metadata.roles, not role
+    app_metadata:  { role: 'newhire', roles: ['newhire'] },
     user_metadata: { full_name: name },
   })
 
@@ -216,6 +234,11 @@ export async function POST(request: Request) {
   const { error: updateError } = await admin
     .from('profiles')
     .update({
+      // Set explicitly: the signup trigger can run before GoTrue applies app_metadata, and GoTrue's
+      // own write can replace what the roles trigger mirrored. Naming role/roles here fires
+      // sync_roles_to_auth again, after the user exists.
+      role:                    'newhire',
+      roles:                   ['newhire'],
       position,
       start_date:              startDate,
       preferred_name:          preferredName || null,
@@ -238,6 +261,14 @@ export async function POST(request: Request) {
     // Clean up orphaned auth user if profile update fails
     await admin.auth.admin.deleteUser(newUser.user.id)
     return NextResponse.json({ error: 'Failed to set up profile. Please try again.' }, { status: 500 })
+  }
+
+  // The new hire can only enter the portal if the session's app_metadata carries the role list.
+  // Check it, set it directly if it is missing, and refuse to finish if it still is not there.
+  if (!(await ensureNewhireAppMetadata(admin, newUser.user.id))) {
+    console.error('[hires] app_metadata roles could not be set')
+    await admin.auth.admin.deleteUser(newUser.user.id)
+    return NextResponse.json({ error: 'Failed to set up the account. Please try again.' }, { status: 500 })
   }
 
   // Ask the reporting manager for an onboarding plan, due on the hire's form deadline

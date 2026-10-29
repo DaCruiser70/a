@@ -48,8 +48,8 @@ const FORMS = [
   {
     id: 'documents',
     step: 5,
-    title: 'Document Uploads',
-    desc: 'Upload required tax forms and optional certifications, licences, and ID.',
+    title: 'Documents',
+    desc: 'Your TD1 Federal and TD1 Provincial tax forms, and one ID: a Driver’s License or an Alternative ID.',
     time: '10 min',
     tags: ['required'],
     href: '/newhire/forms/documents',
@@ -262,9 +262,21 @@ export default function FormsPage() {
                     </div>
                     {form.tags.includes('required') && <span className="form-card-required">Required</span>}
                     {form.tags.includes('sensitive') && <span className="form-card-sensitive">Encrypted</span>}
-                    {isApproved && <span className="form-card-completed-badge">Approved</span>}
-                    {isReview   && <span className="form-card-review-badge">Under Review</span>}
-                    {isFlagged  && <span className="form-card-flagged-badge">Action Required</span>}
+                    {form.id === 'documents' ? (
+                      // Documents item wording: Not started, Waiting on HR, Approved, Needs changes
+                      <>
+                        {status === 'pending' && <span className="form-card-pending-badge">Not started</span>}
+                        {isReview   && <span className="form-card-review-badge">Waiting on HR</span>}
+                        {isApproved && <span className="form-card-completed-badge">Approved</span>}
+                        {isFlagged  && <span className="form-card-flagged-badge">Needs changes</span>}
+                      </>
+                    ) : (
+                      <>
+                        {isApproved && <span className="form-card-completed-badge">Approved</span>}
+                        {isReview   && <span className="form-card-review-badge">Under Review</span>}
+                        {isFlagged  && <span className="form-card-flagged-badge">Action Required</span>}
+                      </>
+                    )}
                   </div>
                 </div>
 

@@ -5,6 +5,7 @@ import '../../styles/components/clearance-hr.css'
 import Modal from '@/components/ui/Modal'
 import { PmChipBadge, formatPlanDate } from '@/components/ui/PlanBadges'
 import { PortalTag } from '@/components/ui/PortalName'
+import { PM_DETAIL_FIELDS, PM_DETAIL_LABELS, type PmDetails } from '@/lib/pm'
 import type { PmChip } from '@/types'
 
 type Data =
@@ -13,6 +14,7 @@ type Data =
       needed: true; state: PmChip; region: string | null
       claimed_by_name: string | null; claimed_at: string | null
       completed_by_name: string | null; completed_at: string | null
+      details: PmDetails
     }
 
 // Regional project management on the HR hire page: status, who has it, and HR's release action.
@@ -97,6 +99,20 @@ export default function PmRequestCard({ hireId, onToast, onSetRegion }: {
           </div>
         )}
       </div>
+
+      {data.state !== 'needs_region' && (
+        <div className="clr-hr-body" style={{ paddingTop: 0 }}>
+          <div className="clr-hr-section-title">Project details</div>
+          <dl className="pm-hr-rows">
+            {PM_DETAIL_FIELDS.map(f => (
+              <div key={f} className="pm-hr-row">
+                <dt>{PM_DETAIL_LABELS[f]}</dt>
+                <dd className={data.details[f] ? '' : 'empty'}>{data.details[f] || 'Not provided'}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      )}
 
       {data.state === 'needs_region' && (
         <div className="clr-hr-actions">

@@ -6,6 +6,8 @@ import { useRef, useState, useEffect, useCallback } from 'react'
 import '../../../../styles/pages/form-pages.css'
 import { createClient } from '@/lib/supabase/client'
 import type { NewhireDocument } from '@/types'
+import { REQUIRED_DOCUMENT_SLOTS } from '@/lib/required-documents'
+import { computeDocumentsItem } from '@/lib/hire-status'
 import { FORMS_HOME, COMPLETE_PAGE } from '@/lib/routes'
 
 function getInitials(name: string) {
@@ -183,13 +185,15 @@ function SectionHead({ title, icon }: { title: string; icon: React.ReactNode }) 
 
 // ── Single document card ──────────────────────────────────────────────────────
 function DocCard({
-  docType, docLabel, description, required, needsExpiry, extra,
+  docType, docLabel, description, required, oneOf, notNeeded, needsExpiry, extra,
   doc, uploadState, onUploadChange, onUpload,
 }: {
   docType: string
   docLabel: string
   description: string
   required: boolean
+  oneOf?: boolean       // one of two accepted documents (the ID): either satisfies the requirement
+  notNeeded?: boolean   // the other accepted document is already approved or waiting on HR
   needsExpiry: boolean
   extra?: React.ReactNode
   doc: NewhireDocument | undefined
@@ -214,14 +218,18 @@ function DocCard({
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '3px' }}>
             <div className="form-section-heading">{docLabel}</div>
-            {required
-              ? <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 7px', borderRadius: '100px', background: 'rgba(200,146,10,0.1)', color: '#C8920A', border: '1px solid rgba(200,146,10,0.2)', letterSpacing: '0.04em' }}>REQUIRED</span>
-              : <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 7px', borderRadius: '100px', background: 'rgba(136,135,128,0.1)', color: '#888780', border: '1px solid rgba(136,135,128,0.15)', letterSpacing: '0.04em' }}>OPTIONAL</span>
+            {oneOf
+              ? <span className="doc-req-badge">REQUIRED (ONE OF THE TWO)</span>
+              : required
+                ? <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 7px', borderRadius: '100px', background: 'rgba(200,146,10,0.1)', color: '#C8920A', border: '1px solid rgba(200,146,10,0.2)', letterSpacing: '0.04em' }}>REQUIRED</span>
+                : <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 7px', borderRadius: '100px', background: 'rgba(136,135,128,0.1)', color: '#888780', border: '1px solid rgba(136,135,128,0.15)', letterSpacing: '0.04em' }}>OPTIONAL</span>
             }
           </div>
           <div className="form-section-heading-sub" style={{ lineHeight: 1.5 }}>{description}</div>
         </div>
-        <StatusBadge status={doc?.form_status} />
+        {notNeeded && !doc
+          ? <span className="doc-not-needed">Not needed</span>
+          : <StatusBadge status={doc?.form_status} />}
       </div>
 
       {/* Body */}
@@ -444,17 +452,18 @@ export default function DocumentsPage() {
   }
 
   // ── Summary ────────────────────────────────────────────────────────────────
-  const REQUIRED_TYPES = ['td1_federal', 'td1_provincial']
-  const requiredDocs   = REQUIRED_TYPES.map(t => getDoc(t))
-  const requiredCount  = requiredDocs.filter(d => d && d.form_status !== 'pending').length
-  const anyRejected    = documents.some(d => d.form_status === 'rejected')
-  const allApproved    = requiredDocs.every(d => d?.form_status === 'approved')
-  const allUploaded    = requiredDocs.every(d => !!d)
+  const docsItem       = computeDocumentsItem(documents)
+  const requiredCount  = docsItem.slots.filter(sl => sl.state !== 'missing').length
+  const REQUIRED_TOTAL = REQUIRED_DOCUMENT_SLOTS.length
 
-  const summaryStatus = anyRejected ? 'rejected'
-    : allApproved ? 'approved'
-    : allUploaded ? 'review'
+  const summaryStatus = docsItem.status === 'flagged' ? 'rejected'
+    : docsItem.status === 'approved' ? 'approved'
+    : docsItem.missing.length === 0 ? 'review'
     : 'pending'
+
+  // ID: either accepted type satisfies it. Once one is approved or waiting on HR, the other is not needed.
+  const idState      = docsItem.slots.find(sl => sl.key === 'id')?.state ?? 'missing'
+  const idCovered    = idState === 'approved' || idState === 'review'
 
   return (
     <div className="form-page">
@@ -541,11 +550,17 @@ export default function DocumentsPage() {
             </svg>
           } />
 
+          <div className="doc-id-notice" role="note">
+            <strong>ID required:</strong> upload your Driver&apos;s License <strong>or</strong> an Alternative ID (you only need one).
+          </div>
+
           <DocCard
             docType="drivers_license"
             docLabel="Driver's License"
             description="Required if you will be driving a company vehicle. Also accepted as primary ID for PSPC and RCMP security clearances."
             required={false}
+            oneOf
+            notNeeded={idCovered && getDoc('drivers_license')?.form_status !== 'approved' && getDoc('drivers_license')?.form_status !== 'review'}
             needsExpiry={true}
             doc={getDoc('drivers_license')}
             uploadState={uploadStates['drivers_license']}
@@ -558,6 +573,8 @@ export default function DocumentsPage() {
             docLabel="Alternative ID"
             description="If you do not have a driver's license, please upload a passport or other government-issued photo ID. Required for security clearance purposes."
             required={false}
+            oneOf
+            notNeeded={idCovered && getDoc('alternative_id')?.form_status !== 'approved' && getDoc('alternative_id')?.form_status !== 'review'}
             needsExpiry={false}
             doc={getDoc('alternative_id')}
             uploadState={uploadStates['alternative_id']}
@@ -834,7 +851,7 @@ export default function DocumentsPage() {
             </div>
             <div>
               <div className="form-section-heading">Document Summary</div>
-              <div className="form-section-heading-sub">{requiredCount} of {REQUIRED_TYPES.length} required documents uploaded</div>
+              <div className="form-section-heading-sub">{requiredCount} of {REQUIRED_TOTAL} required documents uploaded</div>
             </div>
             <div style={{ marginLeft: 'auto' }}>
               {summaryStatus === 'rejected' && <StatusBadge status="rejected" />}
@@ -844,10 +861,12 @@ export default function DocumentsPage() {
             </div>
           </div>
           <div style={{ padding: '1.25rem 1.75rem', fontSize: '13px', color: '#5F5E5A', lineHeight: 1.6 }}>
-            {anyRejected
-              ? 'One or more documents have been rejected. Please re-upload the corrected documents above.'
-              : allApproved
+            {docsItem.flagged.length > 0
+              ? `HR asked for changes to ${docsItem.flagged.join(' and ')}. Please upload a corrected copy above.`
+              : docsItem.status === 'approved'
               ? 'All required documents have been approved by HR.'
+              : docsItem.missing.length > 0
+              ? `Still needed: ${docsItem.missing.join(', ')}.`
               : 'HR will review your documents and notify you if anything needs to be corrected. You can still upload optional documents at any time.'}
             <div style={{ marginTop: '0.75rem' }}>
               <button className="form-btn-secondary" onClick={() => router.push(FORMS_HOME)}>

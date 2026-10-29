@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createServiceClient } from '@/lib/supabase/server'
 import { requireRole } from '@/lib/roles'
-import { answersFromRow, isPlanOverdue, todayIso } from '@/lib/manager-plan'
+import { PLAN_COLUMNS, answersFromRow, isPlanOverdue, todayIso } from '@/lib/manager-plan'
 
 const NOT_FOUND = () => NextResponse.json({ error: 'Not found' }, { status: 404 })
 
@@ -17,7 +17,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const admin = createServiceClient()
   const [{ data: hire }, { data: plan }] = await Promise.all([
     admin.from('profiles').select('id, reporting_manager_id').eq('id', id).maybeSingle(),
-    admin.from('manager_plans').select('*').eq('newhire_id', id).maybeSingle(),
+    admin.from('manager_plans').select(PLAN_COLUMNS).eq('newhire_id', id).maybeSingle(),
   ])
   if (!hire) return NOT_FOUND()
 

@@ -1,6 +1,8 @@
+import type { PhoneChoice, WorkPhonePlatform } from '@/lib/personal-info'
+
 // ── Database row types ────────────────────────────────────────────────────────
 
-export type UserRole   = 'hr' | 'newhire' | 'stakeholder' | 'payroll' | 'manager' | 'project_mgmt'
+export type UserRole   = 'hr' | 'newhire' | 'stakeholder' | 'payroll' | 'manager' | 'project_mgmt' | 'clearance'
 export type HireStatus = 'not-started' | 'in-progress' | 'needs-review' | 'approved' | 'flagged'
 export type FormStatus = 'pending' | 'review' | 'approved' | 'flagged'
 export type DocStatus  = 'pending' | 'review' | 'approved' | 'rejected'
@@ -54,21 +56,20 @@ export type ManagerPlan = {
   status:            ManagerPlanStatus
   due_date:          string | null
   assignment_seq:    number               // +1 on every change of manager; part of the request dedupe key
-  training_needed:   string | null
-  training_delivery: string[] | null
-  training_notes:    string | null
-  week1:             string | null
-  week2:             string | null
-  week3:             string | null
+  // Safety training (keys from lib/training-options.ts) and the five schedule boxes
+  training_items:    string[]
+  training_other:    string | null
+  schedule_wk1_2:    string | null
+  schedule_wk2_3:    string | null
+  schedule_wk3_4:    string | null
+  schedule_month2:   string | null
+  schedule_month3:   string | null
   day_one_contact:   string | null
   first_day_gear:    string | null
   anything_else:     string | null
   clearance_type:    ClearanceType | null
   project_number:    string | null
-  project_name:      string | null
   project_region:    'Ontario' | 'New Brunswick' | 'Nova Scotia' | null
-  project_location:  string | null
-  project_branch:    string | null
   submitted_at:      string | null
   created_at:        string
   updated_at:        string
@@ -88,6 +89,15 @@ export type ClearanceInfo = {
   flag_reason:        string | null
   submitted_at:       string | null
   updated_at:         string
+  // Per-form review (20261024_clearance_packages.sql)
+  rcmp_review:               'pending' | 'approved' | 'rejected'
+  rcmp_reject_reason:        string | null
+  rcmp_reviewed_at:          string | null
+  rcmp_reviewed_by:          string | null
+  fingerprint_review:        'pending' | 'approved' | 'rejected'
+  fingerprint_reject_reason: string | null
+  fingerprint_reviewed_at:   string | null
+  fingerprint_reviewed_by:   string | null
 }
 
 export type ClearanceTracking = {
@@ -100,8 +110,29 @@ export type ClearanceTracking = {
   rcmp_recipient: string | null
   cleared_at:     string | null
   cleared_by:     string | null
+  // PSPC & RCMP package (null stage until sent) and RCMP-only "Sent to BGIS"
+  package_stage:    'needs_review' | 'in_process' | 'done' | 'returned' | null
+  package_sent_at:  string | null
+  stage_updated_at: string | null
+  stage_updated_by: string | null
+  returned_note:    string | null
+  returned_at:      string | null
+  done_at:          string | null
+  sent_to_bgis:     boolean
+  sent_to_bgis_at:  string | null
+  sent_to_bgis_by:  string | null
   created_at:     string
   updated_at:     string
+}
+
+export type ClearanceStageHistory = {
+  id:         string
+  newhire_id: string
+  from_stage: 'needs_review' | 'in_process' | 'done' | 'returned' | null
+  to_stage:   'needs_review' | 'in_process' | 'done' | 'returned'
+  actor_id:   string | null
+  note:       string | null
+  created_at: string
 }
 
 // Clearance form state as shown in chips and badges ('pending' = not submitted yet)
@@ -129,6 +160,11 @@ export type PmRequest = {
   claimed_at:   string | null
   completed_by: string | null   // region_teams.id
   completed_at: string | null
+  // Project details entered by project management; read only by project_mgmt and HR routes
+  dcc:              string | null
+  standing_offer:   string | null
+  project_name:     string | null
+  project_location: string | null
   created_at:   string
   updated_at:   string
 }
@@ -167,6 +203,10 @@ export type PersonalInfo = {
   emergency_name:         string
   emergency_relationship: string
   emergency_phone:        string
+  // Phone setup (null on forms submitted before the question was added)
+  phone_choice:           PhoneChoice | null
+  work_phone_platform:    WorkPhonePlatform | null   // only with phone_choice 'work'
+  personal_phone:         string | null              // encrypted; only with phone_choice 'personal'
   form_status:            FormStatus
   flag_reason:            string | null
   submitted_at:           string
@@ -247,6 +287,23 @@ export type StakeholderTask = {
   created_at:              string
 }
 
+// Company vehicle request (20261028_vehicle_requests.sql). details_enc is one encrypted JSON blob.
+export type VehicleRequest = {
+  id:                   string
+  newhire_id:           string
+  step:                 'rob' | 'heather' | 'marley' | 'complete'
+  details_enc:          string | null
+  gas_card_acquired:    boolean | null
+  rob_completed_by:     string | null
+  rob_completed_at:     string | null
+  heather_completed_by: string | null
+  heather_completed_at: string | null
+  marley_confirmed_by:  string | null
+  marley_confirmed_at:  string | null
+  created_at:           string
+  updated_at:           string
+}
+
 export type EquipmentProvisioning = {
   id:       string
   user_id:  string
@@ -311,6 +368,12 @@ export type Database = {
         Row:           ClearanceInfo
         Insert:        Pick<ClearanceInfo, 'user_id'> & Partial<Omit<ClearanceInfo, 'id' | 'user_id'>>
         Update:        Partial<Omit<ClearanceInfo, 'id' | 'user_id'>>
+        Relationships: []
+      }
+      clearance_stage_history: {
+        Row:           ClearanceStageHistory
+        Insert:        Pick<ClearanceStageHistory, 'newhire_id' | 'to_stage'> & Partial<Omit<ClearanceStageHistory, 'id' | 'newhire_id' | 'to_stage'>>
+        Update:        never
         Relationships: []
       }
       clearance_tracking: {
@@ -394,6 +457,12 @@ export type Database = {
         Update:        Partial<Omit<NewhireDocument, 'id' | 'user_id'>>
         Relationships: []
       }
+      vehicle_requests: {
+        Row:           VehicleRequest
+        Insert:        Pick<VehicleRequest, 'newhire_id'> & Partial<Omit<VehicleRequest, 'id' | 'newhire_id'>>
+        Update:        Partial<Omit<VehicleRequest, 'id' | 'newhire_id' | 'created_at'>>
+        Relationships: []
+      }
       stakeholder_tasks: {
         Row:    StakeholderTask
         Insert: Omit<StakeholderTask, 'id' | 'created_at' | 'completion_note_enc' | 'hidden_from_stakeholder'> & {
@@ -414,6 +483,33 @@ export type Database = {
         Args:    { p_user_id: string; p_code_hash: string }
         Returns: 'ok' | 'bad' | 'locked' | 'none'
       }
+      // Reveal codes (20261023_reveal_codes.sql; 'clearance' group from 20261024_clearance_packages.sql)
+      issue_reveal_code: {
+        Args:    { p_hr_user_id: string; p_hire_id: string; p_group: 'banking' | 'sin' | 'clearance' | 'personal'; p_code_hash: string; p_ttl_seconds: number }
+        Returns: boolean
+      }
+      verify_reveal_code: {
+        Args:    { p_hr_user_id: string; p_hire_id: string; p_group: 'banking' | 'sin' | 'clearance' | 'personal'; p_code_hash: string }
+        Returns: 'ok' | 'bad' | 'locked' | 'none'
+      }
+      // 20261028_vehicle_requests.sql
+      start_vehicle_request: {
+        Args:    { p_newhire_id: string; p_rob_id: string; p_task_name: string }
+        Returns: boolean
+      }
+      advance_vehicle_request: {
+        Args:    {
+          p_newhire_id: string; p_expected: 'rob' | 'heather' | 'marley'; p_actor_id: string
+          p_details_enc: string | null; p_gas_card: boolean | null
+          p_next_assignee: string | null; p_next_task_key: string | null; p_next_task_name: string | null
+        }
+        Returns: 'ok' | 'conflict' | 'invalid'
+      }
+      // 20261024_clearance_packages.sql: one conditional stage move plus its history row
+      move_clearance_stage: {
+        Args:    { p_newhire_id: string; p_expected: 'unsent' | 'needs_review' | 'in_process' | 'done' | 'returned'; p_to: 'needs_review' | 'in_process' | 'done' | 'returned'; p_actor_id: string | null; p_note: string | null }
+        Returns: 'ok' | 'conflict' | 'invalid' | 'note_required'
+      }
       reassign_manager_plan: {
         Args:    { p_newhire_id: string; p_manager_id: string }
         Returns: Array<{ outcome: 'ok' | 'unchanged' | 'no_hire' | 'no_manager'; assignment_seq: number | null }>
@@ -431,7 +527,9 @@ export type NewHireRow = {
   email:               string
   role:                string
   status:              HireStatus
-  progress:            number
+  progress:            number       // approved items of 5 (four forms + Documents), as a percentage
+  approved_items?:     number       // of total_items, from computeHireStatus
+  total_items?:        number
   submitted:           string
   days:                number
   last_submitted_at:   string | null
@@ -456,6 +554,12 @@ export type NewHireDetail = NewHireRow & {
   form_statuses:            Record<string, FormStatus>
   flag_reasons:             Record<string, string | null>
   has_void_cheque:          boolean
+  has_banking:              boolean   // banking numbers on file; values only through the reveal routes
+  has_sin:                  boolean   // SIN on file; value only through the reveal routes
+  has_date_of_birth:        boolean   // date of birth on file; value only through the 'personal' reveal
+  has_personal_phone:       boolean   // personal phone on file; value only through the 'personal' reveal
+  phone_choice:             PhoneChoice | null
+  work_phone_platform:      WorkPhonePlatform | null
   equipment_items:          Record<string, boolean>
   notes:                    HrNote[]
   audit_log:                AuditEntry[]

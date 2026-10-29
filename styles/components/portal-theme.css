@@ -58,6 +58,15 @@
   --portal-hero-to:   #5E2F10;
 }
 
+/* Deep blue-teal: the clearance reviewer's portal (keep in step with lib/portal-theme.ts) */
+[data-portal="clearance"] {
+  --portal-accent:    #0E5A6E;
+  --portal-hover:     #0A4453;
+  --portal-soft:      #E3F0F3;
+  --portal-hero-from: #0E5A6E;
+  --portal-hero-to:   #073340;
+}
+
 /* ── Portal name pill (header identity) ── */
 .portal-name {
   display: inline-flex; align-items: center; gap: 7px; white-space: nowrap;

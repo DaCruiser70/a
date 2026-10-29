@@ -1,180 +1,44 @@
 'use client'
 
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import '../../../styles/pages/hr-dashboard.css'
+import '../../../styles/pages/hr-hire.css'
+import '../../../styles/pages/hr-dash.css'
 import { timeAgo } from '@/lib/time-ago'
-import { esc, SafeMessage } from '@/lib/safe-html'
 import PortalSwitcher from '@/components/ui/PortalSwitcher'
-import { PortalIdentity } from '@/components/ui/PortalName'
 import ManagerSelect from '@/components/ui/ManagerSelect'
-import { PlanChipBadge, ClearanceChipBadge, PmChipBadge } from '@/components/ui/PlanBadges'
+import { formatPlanDate } from '@/components/ui/PlanBadges'
 import Link from 'next/link'
 import { isRemoteOffice, regionForOffice } from '@/lib/branches'
 import { REGIONS } from '@/lib/regions'
-import type { NewHireRow } from '@/types'
+import {
+  DASH_FILTERS, DASH_FILTER_LABELS, DASH_PAGE_SIZE, DASH_STATUS_LABELS,
+  type DashFilter, type DashResponse,
+} from '@/lib/hr-dashboard'
+import type { HireStatus, NewHireRow } from '@/types'
+import { TOTAL_ITEMS } from '@/lib/hire-status'
 
-type ActivityItem = { type: string; msg: string; time: string }
-
-const INITIAL_ACTIVITY: ActivityItem[] = []
-
+// CSV export labels (unchanged from the previous dashboard)
 const STATUS_LABELS: Record<string,string> = {
   'not-started':'Not Started','in-progress':'In Progress',
   'needs-review':'Needs Review','approved':'Approved','flagged':'Flagged',
 }
 
-const PAGE_SIZE = 8
+const STATUS_PILL: Record<HireStatus, string> = {
+  'flagged':      'red',
+  'needs-review': 'amber',
+  'in-progress':  'navy solid',
+  'approved':     'green',
+  'not-started':  'grey',
+}
 
 function getInitials(name: string) {
-  return name.split(' ').map(n => n[0]).join('').toUpperCase()
+  return name.split(' ').filter(Boolean).map(n => n[0]).slice(0, 2).join('').toUpperCase()
 }
 
-type Hire = NewHireRow
-
-function OfficeLocationBadge({ location }: { location?: string | null }) {
-  if (!location) return null
-  return (
-    <span style={{
-      display: 'inline-block', marginTop: '3px',
-      fontSize: '10px', fontWeight: 600, letterSpacing: '0.03em',
-      color: '#1B3A6B', background: 'rgba(27,58,107,0.1)',
-      border: '1px solid rgba(27,58,107,0.2)', borderRadius: '4px', padding: '1px 6px',
-    }}>
-      {location}
-    </span>
-  )
-}
-
-function HireTable({
-  paginated, filtered, currentPage, totalPages, search, filterStatus, activeNav, loading,
-  onSearch, onFilter, onPage, onView,
-}: {
-  paginated: Hire[]
-  filtered: Hire[]
-  currentPage: number
-  totalPages: number
-  search: string
-  filterStatus: string
-  activeNav: string
-  loading: boolean
-  onSearch: (v: string) => void
-  onFilter: (v: string) => void
-  onPage: (p: number) => void
-  onView: (id: string) => void
-}) {
-  return (
-    <div className="hr-table-card">
-      <div className="hr-table-header">
-        <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
-          <div className="hr-table-title">
-            {activeNav === 'pending' ? 'Pending Review' : activeNav === 'flagged' ? 'Flagged' : 'New Hires'}
-          </div>
-          <div className="hr-table-count">{filtered.length} records</div>
-        </div>
-        <div className="hr-table-controls">
-          <div className="hr-search">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-            </svg>
-            <input placeholder="Search name, email, role..." value={search} onChange={e => onSearch(e.target.value)} />
-          </div>
-          <select
-            className="hr-filter-btn"
-            value={filterStatus}
-            onChange={e => onFilter(e.target.value)}
-            style={{ appearance:'none', paddingRight:'28px', backgroundImage:`url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23888780' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E")`, backgroundRepeat:'no-repeat', backgroundPosition:'right 10px center' }}
-          >
-            <option value="all">All Status</option>
-            <option value="not-started">Not Started</option>
-            <option value="in-progress">In Progress</option>
-            <option value="needs-review">Needs Review</option>
-            <option value="approved">Approved</option>
-            <option value="flagged">Flagged</option>
-          </select>
-        </div>
-      </div>
-
-      <table className="hr-table">
-        <thead>
-          <tr>
-            <th>New Hire</th><th>Role</th><th>Progress</th><th>Status</th><th>Days Since</th><th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {loading
-            ? <tr><td colSpan={6} style={{ textAlign:'center', padding:'3rem', color:'#B0ABA4', fontSize:'13px' }}>Loading…</td></tr>
-            : paginated.map(hire => (
-            <tr key={hire.id} onClick={() => onView(hire.id)}>
-              <td>
-                <div className="hr-table-name">
-                  <div className="hr-table-avatar">{getInitials(hire.name)}</div>
-                  <div>
-                    <div className="hr-table-name-text">{hire.name}</div>
-                    <div className="hr-table-email">{hire.email}</div>
-                  </div>
-                </div>
-              </td>
-              <td>
-                <div style={{ color:'#5F5E5A', fontSize:'12px' }}>{hire.role}</div>
-                <OfficeLocationBadge location={hire.office_location} />
-              </td>
-              <td>
-                <div className="hr-table-progress-wrap">
-                  <div className="hr-table-progress-bar">
-                    <div className="hr-table-progress-fill" style={{ width:`${hire.progress}%` }} />
-                  </div>
-                  <div className="hr-table-progress-pct">{hire.progress}%</div>
-                </div>
-              </td>
-              <td>
-                <div className="status-badge-row">
-                  <span className={`hr-status ${hire.status}`}>{STATUS_LABELS[hire.status]}</span>
-                  {hire.plan_chip && <PlanChipBadge chip={hire.plan_chip} />}
-                  {hire.clearance_chip && <ClearanceChipBadge status={hire.clearance_chip} />}
-                  {hire.pm_chip && <PmChipBadge state={hire.pm_chip.state} claimedByName={hire.pm_chip.claimed_by_name} setRegionHref={`/hr/newhire/${hire.id}?setRegion=1`} />}
-                </div>
-              </td>
-              <td>
-                <span className={`hr-days-badge ${hire.last_submitted_at ? 'urgent' : ''}`}>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ width:'11px', height:'11px' }}>
-                    <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-                  </svg>
-                  {timeAgo(hire.last_submitted_at, 'No submissions yet')}
-                </span>
-              </td>
-              <td onClick={e => e.stopPropagation()}>
-                <div className="hr-table-actions">
-                  <button className="hr-table-action-btn view" onClick={e => { e.stopPropagation(); onView(hire.id) }}>View</button>
-                </div>
-              </td>
-            </tr>
-          ))}
-          {!loading && paginated.length === 0 && (
-            <tr>
-              <td colSpan={6} style={{ textAlign:'center', padding:'3rem', color:'#B0ABA4', fontSize:'13px' }}>
-                No records match your search or filter.
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-
-      {totalPages > 1 && (
-        <div className="hr-pagination">
-          <div className="hr-pagination-info">
-            Showing {((currentPage - 1) * PAGE_SIZE) + 1}–{Math.min(currentPage * PAGE_SIZE, filtered.length)} of {filtered.length}
-          </div>
-          <div className="hr-pagination-btns">
-            <button className="hr-pagination-btn" disabled={currentPage === 1} onClick={() => onPage(currentPage - 1)}>← Previous</button>
-            {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-              <button key={page} className={`hr-pagination-btn ${currentPage === page ? 'active' : ''}`} onClick={() => onPage(page)}>{page}</button>
-            ))}
-            <button className="hr-pagination-btn" disabled={currentPage === totalPages} onClick={() => onPage(currentPage + 1)}>Next →</button>
-          </div>
-        </div>
-      )}
-    </div>
-  )
+function isDashFilter(v: unknown): v is DashFilter {
+  return typeof v === 'string' && (DASH_FILTERS as readonly string[]).includes(v)
 }
 
 const EMPTY_HIRE = {
@@ -187,61 +51,67 @@ type CreatedHire = { name: string; aemEmail: string; personalEmail: string; temp
 
 export default function HRDashboard() {
   const router = useRouter()
-  const [hires, setHires]               = useState<NewHireRow[]>([])
-  const [activity, setActivity]         = useState<ActivityItem[]>(INITIAL_ACTIVITY)
-  const [loading, setLoading]           = useState(true)
+  const searchParams = useSearchParams()
 
-  function loadHires() {
-    return fetch('/api/hr/hires')
-      .then(r => r.json())
-      .then(data => { setHires(data.hires ?? []); setLoading(false) })
-      .catch(() => setLoading(false))
-  }
+  // ── View state lives in the URL: ?filter=…&q=…&page=… (validated again on the server) ──
+  const rawFilter = searchParams?.get('filter')
+  const filter: DashFilter = isDashFilter(rawFilter) ? rawFilter : 'all'
+  const q    = (searchParams?.get('q') ?? '').slice(0, 100)
+  const page = Math.max(1, Math.min(1000, parseInt(searchParams?.get('page') ?? '1', 10) || 1))
 
-  useEffect(() => { loadHires() }, [])
+  const [data, setData]         = useState<DashResponse | null>(null)
+  const [loadError, setLoadError] = useState(false)
+  const [version, setVersion]   = useState(0)
+  const [query, setQuery]       = useState(q)
+  const [view, setView]         = useState<'dashboard' | 'settings'>('dashboard')
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [exporting, setExporting] = useState(false)
 
-  const [search, setSearch]             = useState('')
-  const [filterStatus, setFilterStatus] = useState('all')
-  const [activeNav, setActiveNav]       = useState('dashboard')
-  const [currentPage, setCurrentPage]   = useState(1)
   const [showAddModal, setShowAddModal] = useState(false)
   const [showSuccessModal, setShowSuccessModal] = useState(false)
   const [submitting, setSubmitting]     = useState(false)
   const [addError, setAddError]         = useState('')
   const [createdHire, setCreatedHire]   = useState<CreatedHire | null>(null)
   const [copied, setCopied]             = useState(false)
-  const [showNotifs, setShowNotifs]     = useState(false)
   const [toast, setToast]               = useState<string|null>(null)
   const [newHire, setNewHire]           = useState(EMPTY_HIRE)
   const [managerMissing, setManagerMissing] = useState(false)
 
+  useEffect(() => {
+    let cancelled = false
+    const qs = new URLSearchParams({ filter, page: String(page) })
+    if (q) qs.set('q', q)
+    fetch(`/api/hr/dashboard?${qs}`, { cache: 'no-store' })
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then((d: DashResponse) => { if (!cancelled) { setData(d); setLoadError(false) } })
+      .catch(() => { if (!cancelled) setLoadError(true) })
+    return () => { cancelled = true }
+  }, [filter, q, page, version])
+
+  function setUrl(next: { filter?: DashFilter; q?: string; page?: number }, replace = false) {
+    const p = new URLSearchParams(window.location.search)
+    const f = next.filter ?? filter
+    const s = next.q ?? q
+    const n = next.page ?? 1
+    if (f === 'all') p.delete('filter'); else p.set('filter', f)
+    if (s) p.set('q', s); else p.delete('q')
+    if (n <= 1) p.delete('page'); else p.set('page', String(n))
+    const url = p.toString() ? `?${p}` : window.location.pathname
+    if (replace) window.history.replaceState(null, '', url)
+    else window.history.pushState(null, '', url)
+  }
+
+  // Search runs on the server as you type (debounced); it resets to page 1
+  useEffect(() => {
+    if (query.trim() === q) return
+    const t = setTimeout(() => setUrl({ q: query.trim().slice(0, 100), page: 1 }, true), 300)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query])
+
   const today = new Date().toLocaleDateString('en-CA', { weekday:'long', month:'long', day:'numeric', year:'numeric' })
 
-  const stats = {
-    total:       hires.length,
-    needsReview: hires.filter(h => h.status === 'needs-review').length,
-    approved:    hires.filter(h => h.status === 'approved').length,
-    flagged:     hires.filter(h => h.status === 'flagged').length,
-  }
-  const completionPct = stats.total === 0 ? 0 : Math.round((stats.approved / stats.total) * 100)
-
-  const filtered   = hires.filter(h => {
-    const matchSearch = h.name.toLowerCase().includes(search.toLowerCase()) ||
-                        h.email.toLowerCase().includes(search.toLowerCase()) ||
-                        h.role.toLowerCase().includes(search.toLowerCase())
-    const matchFilter = filterStatus === 'all' || h.status === filterStatus
-    return matchSearch && matchFilter
-  })
-  const totalPages = Math.ceil(filtered.length / PAGE_SIZE)
-  const paginated  = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
-
-  function applyFilter(status: string) { setFilterStatus(status); setCurrentPage(1) }
-  function applySearch(val: string)    { setSearch(val); setCurrentPage(1) }
   function showToast(msg: string)      { setToast(msg); setTimeout(() => setToast(null), 3000) }
-
-  function navTo(nav: string, filter = 'all') {
-    setActiveNav(nav); setFilterStatus(filter); setCurrentPage(1)
-  }
 
   function resetModal() {
     setNewHire(EMPTY_HIRE)
@@ -265,18 +135,31 @@ export default function HRDashboard() {
     ? newHire.formDeadline > newHire.startDate
     : false
 
-  function handleExport() {
-    const headers = ['Name','Email','Role','Office Location','Status','Progress','Days Since Submission']
-    const rows = hires.map(h => [h.name, h.email, h.role, h.office_location ?? '', STATUS_LABELS[h.status], `${h.progress}%`, h.days === 0 ? 'Today' : `${h.days} days ago`])
-    const csv = [headers, ...rows].map(r => r.map(v => `"${v}"`).join(',')).join('\n')
-    const blob = new Blob([csv], { type:'text/csv' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `aem-new-hires-${new Date().toISOString().slice(0,10)}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
-    showToast('CSV exported successfully')
+  // Same CSV as before (every hire, same columns). The list is fetched only when exporting.
+  async function handleExport() {
+    if (exporting) return
+    setExporting(true)
+    try {
+      const res = await fetch('/api/hr/hires', { cache: 'no-store' })
+      if (!res.ok) { showToast('Export failed'); return }
+      const { hires = [] } = await res.json() as { hires: NewHireRow[] }
+      // "Items approved" counts the four forms + Documents (computeHireStatus)
+      const headers = ['Name','Email','Role','Office Location','Status','Items approved','Days Since Submission']
+      const rows = hires.map(h => [h.name, h.email, h.role, h.office_location ?? '', STATUS_LABELS[h.status], `${h.approved_items ?? 0} of ${h.total_items ?? TOTAL_ITEMS}`, h.days === 0 ? 'Today' : `${h.days} days ago`])
+      const csv = [headers, ...rows].map(r => r.map(v => `"${v}"`).join(',')).join('\n')
+      const blob = new Blob([csv], { type:'text/csv' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `aem-new-hires-${new Date().toISOString().slice(0,10)}.csv`
+      a.click()
+      URL.revokeObjectURL(url)
+      showToast('CSV exported successfully')
+    } catch {
+      showToast('Export failed')
+    } finally {
+      setExporting(false)
+    }
   }
 
   async function handleAddHire(e: React.SyntheticEvent<HTMLFormElement>) {
@@ -314,10 +197,9 @@ export default function HRDashboard() {
 
     const { tempPassword } = await res.json()
 
-    // Refresh the hires list with real data from the server
-    await loadHires()
+    // Refresh the dashboard with real data from the server
+    setVersion(v => v + 1)
 
-    setActivity(prev => [{ type:'navy', msg:`<strong>${esc(newHire.name)}</strong> added as new hire`, time:'Just now' }, ...prev])
     setCreatedHire({ name: newHire.name, aemEmail: newHire.aemEmail, personalEmail: newHire.personalEmail, tempPassword })
     closeAddModal()
     setShowSuccessModal(true)
@@ -352,72 +234,54 @@ export default function HRDashboard() {
   }
   const requiredMark = <span style={{ color:'#E74C3C' }}>*</span>
 
-  return (
-    <div className="hr-page" data-portal="hr">
+  const stats      = data?.stats
+  const attention  = stats ? stats.flagged + stats.needsReview : 0
+  const firstRow   = data ? (data.page - 1) * DASH_PAGE_SIZE + 1 : 0
+  const lastRow    = data ? Math.min(data.page * DASH_PAGE_SIZE, data.total) : 0
 
-      {/* ── SIDEBAR ── */}
-      <aside className="hr-sidebar">
+  const navItem = (label: string, icon: React.ReactNode, onClick: () => void, active = false) => (
+    <button type="button" className={`hr-nav-item hd-nav-item${active ? ' active' : ''}`} aria-current={active ? 'page' : undefined} onClick={() => { setMenuOpen(false); onClick() }}>
+      {icon}{label}
+    </button>
+  )
+
+  return (
+    <div className="hr-page hh hd" data-portal="hr">
+
+      {/* ── SIDEBAR (a drawer on small screens) ── */}
+      {menuOpen && <div className="hd-backdrop" onClick={() => setMenuOpen(false)} aria-hidden="true" />}
+      <aside id="hd-sidebar" className={`hr-sidebar hd-sidebar${menuOpen ? ' open' : ''}`}>
         <div className="hr-sidebar-logo">
           <div className="hr-sidebar-logo-mark">AEM</div>
           <div className="hr-sidebar-logo-label">HR Portal</div>
         </div>
         <PortalSwitcher variant="sidebar" />
-        <nav className="hr-sidebar-nav">
-          <div className="hr-nav-section">Main</div>
-          <div className={`hr-nav-item ${activeNav === 'dashboard' ? 'active' : ''}`} onClick={() => navTo('dashboard')}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+        <nav className="hr-sidebar-nav" aria-label="HR portal">
+          {navItem('Dashboard', (
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
               <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
               <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
             </svg>
-            Dashboard
-          </div>
-          <div className={`hr-nav-item ${activeNav === 'newhires' ? 'active' : ''}`} onClick={() => navTo('newhires', 'all')}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-              <circle cx="9" cy="7" r="4"/>
-              <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>
+          ), () => setView('dashboard'), view === 'dashboard')}
+          {navItem(exporting ? 'Exporting…' : 'Export records', (
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
             </svg>
-            New Hires
-            <span className="hr-nav-badge">{stats.total}</span>
-          </div>
-          <div className={`hr-nav-item ${activeNav === 'pending' ? 'active' : ''}`} onClick={() => navTo('pending', 'needs-review')}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-            </svg>
-            Pending Review
-            <span className="hr-nav-badge">{stats.needsReview}</span>
-          </div>
-          <div className={`hr-nav-item ${activeNav === 'flagged' ? 'active' : ''}`} onClick={() => navTo('flagged', 'flagged')}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-              <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
-            </svg>
-            Flagged
-            <span className="hr-nav-badge-red">{stats.flagged}</span>
-          </div>
-          <div className="hr-nav-section">Records</div>
-          <Link href="/hr/outbox" className="hr-nav-item">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+          ), handleExport)}
+          <Link href="/hr/outbox" className="hr-nav-item hd-nav-item" onClick={() => setMenuOpen(false)}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
               <path d="M22 12h-6l-2 3h-4l-2-3H2"/>
               <path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>
             </svg>
             Queued notifications
           </Link>
-          <div className={`hr-nav-item ${activeNav === 'export' ? 'active' : ''}`} onClick={() => { setActiveNav('export'); handleExport() }}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-              <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-            </svg>
-            Export Records
-          </div>
-          <div className="hr-nav-section">Settings</div>
-          <div className={`hr-nav-item ${activeNav === 'settings' ? 'active' : ''}`} onClick={() => setActiveNav('settings')}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+          {navItem('Portal settings', (
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
               <circle cx="12" cy="12" r="3"/>
               <path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
             </svg>
-            Portal Settings
-          </div>
+          ), () => setView('settings'), view === 'settings')}
         </nav>
         <div className="hr-sidebar-user">
           <div className="hr-sidebar-avatar">HR</div>
@@ -425,8 +289,8 @@ export default function HRDashboard() {
             <div className="hr-sidebar-user-name">HR Admin</div>
             <div className="hr-sidebar-user-role">hr@aemltd.com</div>
           </div>
-          <button className="hr-sidebar-logout" onClick={async () => { await fetch('/api/auth/logout', { method: 'POST' }); window.location.href = '/login' }} title="Sign out">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+          <button className="hr-sidebar-logout" onClick={async () => { await fetch('/api/auth/logout', { method: 'POST' }); window.location.href = '/login' }} title="Sign out" aria-label="Sign out">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
               <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
               <polyline points="16 17 21 12 16 7"/>
               <line x1="21" y1="12" x2="9" y2="12"/>
@@ -436,252 +300,252 @@ export default function HRDashboard() {
       </aside>
 
       {/* ── MAIN ── */}
-      <div className="hr-main">
-        <div className="hr-topbar">
-          <div className="hr-topbar-left">
-            <PortalIdentity role="hr" tone="light" hrTopbar />
-            <div className="hr-topbar-title">
-              {activeNav === 'dashboard' ? 'Dashboard' : activeNav === 'newhires' ? 'New Hires' :
-               activeNav === 'pending' ? 'Pending Review' : activeNav === 'flagged' ? 'Flagged' :
-               activeNav === 'settings' ? 'Portal Settings' : 'Dashboard'}
+      <main className="hd-main">
+        <div className="hd-container">
+
+          <header className="hd-header">
+            <button
+              type="button" className="hh-btn secondary hd-menu-btn"
+              aria-controls="hd-sidebar" aria-expanded={menuOpen}
+              onClick={() => setMenuOpen(v => !v)}
+            >
+              Menu
+            </button>
+            <div className="hd-header-text">
+              <h1 className="hd-title">{view === 'settings' ? 'Portal settings' : 'New hires'}</h1>
+              <p className="hd-date">{today}</p>
             </div>
-            <div className="hr-topbar-date">{today}</div>
-          </div>
-          <div className="hr-topbar-right">
-            <button className="hr-topbar-btn secondary" onClick={handleExport}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-              </svg>
-              Export CSV
-            </button>
-            <button className="hr-topbar-btn primary" onClick={openAddModal}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-              </svg>
-              Add New Hire
-            </button>
-            <div className="hr-notif-btn" style={{ position:'relative' }} onClick={() => setShowNotifs(v => !v)}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-                <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
-              </svg>
-              <div className="hr-notif-dot" />
-              {showNotifs && (
-                <div className="hr-notif-dropdown">
-                  <div className="hr-notif-dropdown-title">Notifications</div>
-                  {activity.slice(0,4).map((a,i) => (
-                    <div key={i} className="hr-notif-item">
-                      <div className={`hr-activity-dot ${a.type}`} style={{ width:'10px',height:'10px',flexShrink:0 }}>
-                        <div className="hr-activity-dot-inner" style={{ width:'4px',height:'4px' }} />
-                      </div>
-                      <div>
-                        <div className="hr-notif-msg"><SafeMessage message={a.msg} /></div>
-                        <div className="hr-notif-time">{a.time}</div>
-                      </div>
-                    </div>
-                  ))}
+            <div className="hd-header-actions">
+              <button type="button" className="hh-btn secondary" onClick={handleExport} disabled={exporting}>
+                {exporting ? 'Exporting…' : 'Export CSV'}
+              </button>
+              <button type="button" className="hh-btn" onClick={openAddModal}>+ Add new hire</button>
+            </div>
+          </header>
+
+          {view === 'settings' && (
+            <section className="hd-card hd-card-pad">
+              <h2 className="hd-card-title">Portal settings</h2>
+              <p className="hd-muted">Settings will be available once Supabase integration is complete.</p>
+            </section>
+          )}
+
+          {view === 'dashboard' && (
+            <>
+              {loadError && !data && (
+                <div className="hh-error" role="alert">
+                  The dashboard could not be loaded. Check your connection and try again.
+                  <button type="button" className="hh-btn" onClick={() => setVersion(v => v + 1)}>Try again</button>
                 </div>
               )}
-            </div>
-          </div>
-        </div>
 
-        <div className="hr-content">
-
-          {/* ── DASHBOARD VIEW ── */}
-          {activeNav === 'dashboard' && (
-            <>
-              <div className="hr-stats-row">
-                <div className="hr-stat-card navy">
-                  <div className="hr-stat-top">
-                    <div className="hr-stat-icon navy">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="#1B3A6B" strokeWidth="2" strokeLinecap="round">
-                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-                        <circle cx="9" cy="7" r="4"/>
-                        <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>
-                      </svg>
-                    </div>
-                    <span className="hr-stat-trend up">+3 this week</span>
+              {/* ── Tiles ── */}
+              <div className="hd-tiles" aria-busy={!stats}>
+                {[
+                  { key: 'active',  label: 'Active hires', value: stats?.active,      tone: 'navy',
+                    note: stats ? `${stats.startingThisMonth} starting this month` : '' },
+                  { key: 'review',  label: 'Needs review', value: stats?.needsReview, tone: 'amber', note: 'Waiting on you' },
+                  { key: 'flagged', label: 'Flagged',      value: stats?.flagged,     tone: 'red',   note: 'Waiting on the hire' },
+                  // Counts every approved hire (the tile has never filtered by month)
+                  { key: 'ok',      label: 'Approved',     value: stats?.approved,    tone: 'green', note: `All ${TOTAL_ITEMS} items approved` },
+                ].map(t => (
+                  <div key={t.key} className={`hd-tile ${t.tone}`}>
+                    <div className="hd-tile-num">{t.value ?? <span className="hd-tile-skeleton" aria-hidden="true" />}</div>
+                    <div className="hd-tile-label">{t.label}</div>
+                    <div className="hd-tile-note">{t.note}</div>
                   </div>
-                  <div className="hr-stat-num">{stats.total}</div>
-                  <div className="hr-stat-label">Total New Hires</div>
-                </div>
-                <div className="hr-stat-card amber">
-                  <div className="hr-stat-top">
-                    <div className="hr-stat-icon amber">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="#C8920A" strokeWidth="2" strokeLinecap="round">
-                        <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-                      </svg>
-                    </div>
-                    <span className="hr-stat-trend neutral">Awaiting review</span>
-                  </div>
-                  <div className="hr-stat-num">{stats.needsReview}</div>
-                  <div className="hr-stat-label">Pending Review</div>
-                </div>
-                <div className="hr-stat-card green">
-                  <div className="hr-stat-top">
-                    <div className="hr-stat-icon green">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="#0D5C46" strokeWidth="2" strokeLinecap="round">
-                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-                        <polyline points="22 4 12 14.01 9 11.01"/>
-                      </svg>
-                    </div>
-                    <span className="hr-stat-trend up">+1 today</span>
-                  </div>
-                  <div className="hr-stat-num">{stats.approved}</div>
-                  <div className="hr-stat-label">Approved</div>
-                </div>
-                <div className="hr-stat-card red">
-                  <div className="hr-stat-top">
-                    <div className="hr-stat-icon red">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="#E74C3C" strokeWidth="2" strokeLinecap="round">
-                        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-                        <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
-                      </svg>
-                    </div>
-                    <span className="hr-stat-trend down">Needs attention</span>
-                  </div>
-                  <div className="hr-stat-num">{stats.flagged}</div>
-                  <div className="hr-stat-label">Flagged</div>
-                </div>
+                ))}
               </div>
 
-              <div className="hr-grid">
-                <div className="hr-table-card">
-                  <div className="hr-table-header">
-                    <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
-                      <div className="hr-table-title">Recent New Hires</div>
-                      <div className="hr-table-count">{hires.length} total</div>
-                    </div>
-                    <button className="hr-topbar-btn secondary" style={{ fontSize:'11px', padding:'6px 12px' }} onClick={() => navTo('newhires', 'all')}>
-                      View all →
-                    </button>
+              {/* ── Attention banner ── */}
+              {stats && attention > 0 && (
+                <div className="hd-banner" role="status">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                    <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                  </svg>
+                  <p className="hd-banner-text">
+                    <strong>{attention} new hire{attention === 1 ? '' : 's'} need{attention === 1 ? 's' : ''} your attention</strong>
+                    {' · '}{stats.flagged} flagged, {stats.needsReview} waiting on your review
+                  </p>
+                  <button type="button" className="hh-btn" onClick={() => setUrl({ filter: 'attention', page: 1 })}>Show them</button>
+                </div>
+              )}
+
+              {/* ── Table ── */}
+              <section className="hd-card" aria-labelledby="hd-table-title">
+                <div className="hd-card-head">
+                  <h2 id="hd-table-title" className="hd-card-title">All new hires</h2>
+                  <div className="hd-search">
+                    <label htmlFor="hd-search-input" className="hh-sr-only">Search by name or email</label>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                      <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                    </svg>
+                    <input
+                      id="hd-search-input"
+                      type="search"
+                      placeholder="Search by name or email"
+                      maxLength={100}
+                      value={query}
+                      onChange={e => setQuery(e.target.value)}
+                    />
                   </div>
-                  <table className="hr-table">
+                </div>
+
+                <div className="hh-chips hd-chips" role="group" aria-label="Filter new hires">
+                  {DASH_FILTERS.map(f => (
+                    <button
+                      key={f}
+                      type="button"
+                      className={`hh-chip${f === filter ? ' active' : ''}`}
+                      aria-pressed={f === filter}
+                      onClick={() => setUrl({ filter: f, page: 1 })}
+                    >
+                      {DASH_FILTER_LABELS[f]}
+                      <span className="hd-chip-count">{data ? data.counts[f] : '–'}</span>
+                    </button>
+                  ))}
+                </div>
+
+                <div className="hd-table-wrap">
+                  <table className="hd-table">
+                    <caption className="hh-sr-only">
+                      New hires{filter !== 'all' ? `, ${DASH_FILTER_LABELS[filter]}` : ''}{q ? `, matching “${q}”` : ''}
+                    </caption>
                     <thead>
-                      <tr><th>New Hire</th><th>Role</th><th>Progress</th><th>Status</th><th>Actions</th></tr>
+                      <tr>
+                        <th scope="col">New hire</th>
+                        <th scope="col">Role</th>
+                        <th scope="col">Starts</th>
+                        <th scope="col">Items</th>
+                        <th scope="col">Status</th>
+                        <th scope="col"><span className="hh-sr-only">Action</span></th>
+                      </tr>
                     </thead>
                     <tbody>
-                      {loading
-                        ? <tr><td colSpan={5} style={{ textAlign:'center', padding:'2rem', color:'#B0ABA4', fontSize:'13px' }}>Loading…</td></tr>
-                        : hires.slice(0, 5).map(hire => (
-                        <tr key={hire.id} onClick={() => router.push(`/hr/newhire/${hire.id}`)}>
+                      {!data && !loadError && [0, 1, 2, 3].map(i => (
+                        <tr key={i} aria-hidden="true">
+                          <td colSpan={6}><div className="hh-skeleton" /></td>
+                        </tr>
+                      ))}
+                      {data && data.hires.map(h => (
+                        <tr key={h.id} onClick={() => router.push(`/hr/newhire/${h.id}`)}>
                           <td>
-                            <div className="hr-table-name">
-                              <div className="hr-table-avatar">{getInitials(hire.name)}</div>
-                              <div>
-                                <div className="hr-table-name-text">{hire.name}</div>
-                                <div className="hr-table-email">{hire.email}</div>
-                              </div>
+                            <div className="hd-person">
+                              <span className="hd-avatar" aria-hidden="true">{getInitials(h.name)}</span>
+                              <span className="hd-person-text">
+                                <span className="hd-person-name">{h.name}</span>
+                                <span className="hd-person-email">{h.email}</span>
+                              </span>
                             </div>
                           </td>
                           <td>
-                            <div style={{ color:'#5F5E5A', fontSize:'12px' }}>{hire.role}</div>
-                            <OfficeLocationBadge location={hire.office_location} />
+                            <div className="hd-cell-main">{h.role}</div>
+                            {h.office_location && <div className="hd-cell-sub">{h.office_location}</div>}
+                          </td>
+                          <td className="hd-nowrap">{h.start_date ? formatPlanDate(h.start_date) : '—'}</td>
+                          <td>
+                            <div className="hd-forms">
+                              <span className="hh-bar hd-forms-bar" aria-hidden="true">
+                                <span className={`hh-bar-fill ${h.status}`} style={{ width: `${(h.approved / TOTAL_ITEMS) * 100}%` }} />
+                              </span>
+                              <span className="hd-forms-text">{h.approved} of {TOTAL_ITEMS}</span>
+                            </div>
                           </td>
                           <td>
-                            <div className="hr-table-progress-wrap">
-                              <div className="hr-table-progress-bar">
-                                <div className="hr-table-progress-fill" style={{ width:`${hire.progress}%` }} />
-                              </div>
-                              <div className="hr-table-progress-pct">{hire.progress}%</div>
-                            </div>
+                            <span className={`hh-pill ${STATUS_PILL[h.status]}`}>{DASH_STATUS_LABELS[h.status]}</span>
+                            <div className="hd-next">{h.next_step}</div>
                           </td>
-                          <td>
-                            <div className="status-badge-row">
-                              <span className={`hr-status ${hire.status}`}>{STATUS_LABELS[hire.status]}</span>
-                              {hire.plan_chip && <PlanChipBadge chip={hire.plan_chip} />}
-                              {hire.clearance_chip && <ClearanceChipBadge status={hire.clearance_chip} />}
-                              {hire.pm_chip && <PmChipBadge state={hire.pm_chip.state} claimedByName={hire.pm_chip.claimed_by_name} setRegionHref={`/hr/newhire/${hire.id}?setRegion=1`} />}
-                            </div>
-                          </td>
-                          <td onClick={e => e.stopPropagation()}>
-                            <div className="hr-table-actions">
-                              <button className="hr-table-action-btn view" onClick={e => { e.stopPropagation(); router.push(`/hr/newhire/${hire.id}`) }}>View</button>
-                            </div>
+                          <td className="hd-action" onClick={e => e.stopPropagation()}>
+                            <Link
+                              href={`/hr/newhire/${h.id}`}
+                              className={`hh-btn${h.status === 'needs-review' ? '' : ' secondary'}`}
+                              aria-label={`${h.status === 'needs-review' ? 'Review' : 'Open'} ${h.name}`}
+                            >
+                              {h.status === 'needs-review' ? 'Review' : 'Open'}
+                            </Link>
                           </td>
                         </tr>
                       ))}
+                      {data && data.hires.length === 0 && (
+                        <tr>
+                          <td colSpan={6} className="hd-empty">No new hires match this view.</td>
+                        </tr>
+                      )}
                     </tbody>
                   </table>
                 </div>
 
-                <div className="hr-side-panel">
+                {data && data.total > 0 && (
+                  <nav className="hd-pagination" aria-label="Pages">
+                    <div className="hd-muted">Showing {firstRow}–{lastRow} of {data.total}</div>
+                    {data.pages > 1 && (
+                      <div className="hh-btn-row">
+                        <button type="button" className="hh-btn secondary small" disabled={data.page === 1} onClick={() => setUrl({ page: data.page - 1 })}>← Previous</button>
+                        {Array.from({ length: data.pages }, (_, i) => i + 1).map(n => (
+                          <button
+                            key={n} type="button"
+                            className={`hh-btn small${n === data.page ? '' : ' secondary'}`}
+                            aria-current={n === data.page ? 'page' : undefined}
+                            onClick={() => setUrl({ page: n })}
+                          >
+                            {n}
+                          </button>
+                        ))}
+                        <button type="button" className="hh-btn secondary small" disabled={data.page === data.pages} onClick={() => setUrl({ page: data.page + 1 })}>Next →</button>
+                      </div>
+                    )}
+                  </nav>
+                )}
+              </section>
 
-                  <div className="hr-quick-card">
-                    <div className="hr-quick-title">Completion Overview</div>
-                    <div className="hr-completion-wrap">
-                      <div className="hr-completion-ring">
-                        <svg viewBox="0 0 56 56">
-                          <circle className="hr-completion-ring-bg" cx="28" cy="28" r="22"/>
-                          <circle className="hr-completion-ring-fill" cx="28" cy="28" r="22" style={{ strokeDashoffset: 138 - (138 * completionPct / 100) }}/>
-                        </svg>
-                        <div className="hr-completion-pct">{completionPct}%</div>
-                      </div>
-                      <div className="hr-completion-info">
-                        <div className="hr-completion-label">Overall completion</div>
-                        <div className="hr-completion-sub">{stats.approved} of {stats.total} fully onboarded</div>
-                      </div>
-                    </div>
-                    {['not-started','in-progress','needs-review','approved','flagged'].map(s => (
-                      <div key={s} className="hr-quick-item">
-                        <span className="hr-quick-item-label">{STATUS_LABELS[s]}</span>
-                        <span className="hr-quick-item-value" style={{ color: s==='approved'?'#0D5C46':s==='flagged'?'#E74C3C':s==='needs-review'?'#C8920A':s==='in-progress'?'#1B3A6B':'#B0ABA4' }}>
-                          {hires.filter(h => h.status === s).length}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="hr-activity-card">
-                    <div className="hr-activity-header">
-                      <div className="hr-activity-title">Recent Activity</div>
-                    </div>
-                    <div className="hr-activity-list">
-                      {activity.slice(0,6).map((a,i) => (
-                        <div key={i} className="hr-activity-item">
-                          <div className={`hr-activity-dot ${a.type}`}><div className="hr-activity-dot-inner" /></div>
-                          <div className="hr-activity-text">
-                            <div className="hr-activity-msg"><SafeMessage message={a.msg} /></div>
-                            <div className="hr-activity-time">{a.time}</div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
+              {/* ── Starting soon + Recent activity ── */}
+              <div className="hd-pair">
+                <section className="hd-card" aria-labelledby="hd-soon-title">
+                  <div className="hd-card-head"><h2 id="hd-soon-title" className="hd-card-title">Starting soon</h2></div>
+                  {!data ? <div className="hd-card-pad"><div className="hh-skeleton" /><div className="hh-skeleton" /></div>
+                    : data.startingSoon.length === 0 ? <p className="hd-empty">Nobody starts in the next 30 days.</p>
+                    : (
+                      <ul className="hd-list">
+                        {data.startingSoon.map(s => (
+                          <li key={s.id}>
+                            <Link href={`/hr/newhire/${s.id}`} className="hd-list-row">
+                              <span className="hd-avatar small" aria-hidden="true">{getInitials(s.name)}</span>
+                              <span className="hd-person-text">
+                                <span className="hd-person-name">{s.name}</span>
+                                <span className="hd-person-email">{s.role}</span>
+                              </span>
+                              <span className="hd-list-date">{formatPlanDate(s.start_date)}</span>
+                            </Link>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                </section>
+
+                <section className="hd-card" aria-labelledby="hd-activity-title">
+                  <div className="hd-card-head"><h2 id="hd-activity-title" className="hd-card-title">Recent activity</h2></div>
+                  {!data ? <div className="hd-card-pad"><div className="hh-skeleton" /><div className="hh-skeleton" /></div>
+                    : data.activity.length === 0 ? <p className="hd-empty">No recent activity yet.</p>
+                    : (
+                      <ul className="hd-list">
+                        {data.activity.map(a => (
+                          <li key={a.id} className="hd-list-row static">
+                            <span className={`hh-dot ${a.tone}`} aria-hidden="true" />
+                            <span className="hd-person-text">
+                              <span className="hd-activity-text">{a.text}</span>
+                              <span className="hd-person-email">{timeAgo(a.at)}</span>
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                </section>
               </div>
             </>
           )}
-
-          {/* ── TABLE VIEWS ── */}
-          {(activeNav === 'newhires' || activeNav === 'pending' || activeNav === 'flagged') && (
-            <HireTable
-              paginated={paginated}
-              filtered={filtered}
-              currentPage={currentPage}
-              totalPages={totalPages}
-              search={search}
-              filterStatus={filterStatus}
-              activeNav={activeNav}
-              loading={loading}
-              onSearch={applySearch}
-              onFilter={applyFilter}
-              onPage={setCurrentPage}
-              onView={id => router.push(`/hr/newhire/${id}`)}
-            />
-          )}
-
-          {/* ── SETTINGS VIEW ── */}
-          {activeNav === 'settings' && (
-            <div className="hr-table-card" style={{ padding:'2rem' }}>
-              <div className="hr-table-title" style={{ marginBottom:'0.5rem' }}>Portal Settings</div>
-              <p style={{ fontSize:'13px', color:'#888780' }}>Settings will be available once Supabase integration is complete.</p>
-            </div>
-          )}
-
         </div>
-      </div>
+      </main>
 
       {/* ── ADD NEW HIRE MODAL ── */}
       {showAddModal && (

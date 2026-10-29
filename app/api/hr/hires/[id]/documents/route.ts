@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 import { requireRole } from '@/lib/roles'
+import { recomputeProfileStatus } from '@/lib/hire-status'
+import { syncClearancePackage } from '@/lib/clearance-package'
 
 export async function GET(
   _request: Request,
@@ -61,6 +63,11 @@ export async function PATCH(
   }).eq('id', documentId)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Documents are one of the 5 onboarding items: refresh the stored status (and payroll queueing)
+  await recomputeProfileStatus(admin, id)
+  // An ID document (driver's licence or alternate ID) is part of the clearance package
+  await syncClearancePackage(admin, id, user.id)
 
   return NextResponse.json({ ok: true })
 }

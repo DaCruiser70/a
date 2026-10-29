@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 import { requireRole } from '@/lib/roles'
+import { recomputeProfileStatus } from '@/lib/hire-status'
 
 export async function DELETE(
   _request: Request,
@@ -27,6 +28,8 @@ export async function DELETE(
 
   await admin.storage.from('newhire-documents').remove([doc.file_path])
   await admin.from('newhire_documents').delete().eq('id', documentId)
+  // Documents are one of the 5 onboarding items: refresh the stored status (and payroll queueing)
+  await recomputeProfileStatus(admin, user.id)
 
   return NextResponse.json({ ok: true })
 }

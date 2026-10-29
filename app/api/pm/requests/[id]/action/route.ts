@@ -5,6 +5,8 @@ import { requireRole } from '@/lib/roles'
 import { rateLimit, rateLimitKey } from '@/lib/rate-limit'
 import { esc } from '@/lib/safe-html'
 import { pmMemberOr401, queuePmDone } from '@/lib/pm-server'
+import { syncClearancePackage } from '@/lib/clearance-package'
+import { PM_DETAIL_LABELS, PM_REQUIRED_FIELDS, missingPmFields } from '@/lib/pm'
 
 const BodySchema = z.strictObject({ action: z.enum(['claim', 'release', 'done']) })
 type Action = z.infer<typeof BodySchema>['action']
@@ -49,6 +51,23 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const admin = createServiceClient()
   const now   = new Date().toISOString()
+
+  // Mark done needs every field in PM_REQUIRED_FIELDS. Checked here for a clear message, and again
+  // in the UPDATE's WHERE clause so a save racing the click can't slip past it.
+  if (action === 'done') {
+    const { data: current } = await admin.from('pm_requests')
+      .select('status, claimed_by, dcc, standing_offer, project_name, project_location')
+      .eq('newhire_id', id).eq('region', member.region).neq('status', 'cancelled').maybeSingle()
+    if (!current) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    const missing = missingPmFields(current)
+    if (current.status === 'claimed' && current.claimed_by === member.id && missing.length > 0) {
+      return NextResponse.json({
+        error:   `Add ${missing.map(f => PM_DETAIL_LABELS[f]).join(' and ')} before marking this done.`,
+        missing,
+      }, { status: 409 })
+    }
+  }
+
   const table = admin.from('pm_requests')
 
   // The WHERE clause is the whole rule: region from the session, current status, and the claimer
@@ -59,8 +78,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       : action === 'release'
         ? table.update({ status: 'open', claimed_by: null, claimed_at: null, updated_at: now })
             .eq('newhire_id', id).eq('region', member.region).eq('status', 'claimed').eq('claimed_by', member.id)
-        : table.update({ status: 'done', completed_by: member.id, completed_at: now, updated_at: now })
-            .eq('newhire_id', id).eq('region', member.region).eq('status', 'claimed').eq('claimed_by', member.id)
+        : PM_REQUIRED_FIELDS.reduce(
+            (q, f) => q.not(f, 'is', null),
+            table.update({ status: 'done', completed_by: member.id, completed_at: now, updated_at: now })
+              .eq('newhire_id', id).eq('region', member.region).eq('status', 'claimed').eq('claimed_by', member.id),
+          )
 
   const { data: changed, error } = await update.select('newhire_id')
   if (error) {
@@ -69,9 +91,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
   if (!changed || changed.length === 0) {
     // Another region, unknown or cancelled → 404; otherwise it's in the wrong state for this member
-    const { data: visible } = await admin.from('pm_requests').select('newhire_id')
+    const { data: visible } = await admin.from('pm_requests').select('status, claimed_by, dcc, standing_offer, project_name, project_location')
       .eq('newhire_id', id).eq('region', member.region).neq('status', 'cancelled').maybeSingle()
     if (!visible) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    // Mark done lost a race with a save that emptied a required field
+    const missing = action === 'done' && visible.status === 'claimed' && visible.claimed_by === member.id ? missingPmFields(visible) : []
+    if (missing.length > 0) {
+      return NextResponse.json({ error: `Add ${missing.map(f => PM_DETAIL_LABELS[f]).join(' and ')} before marking this done.`, missing }, { status: 409 })
+    }
     return NextResponse.json({ error: CONFLICT[action] }, { status: 409 })
   }
 
@@ -82,7 +109,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     performed_by: auth.user.id,
   })
 
-  if (action === 'done') await queuePmDone(admin, id)
+  if (action === 'done') {
+    await queuePmDone(admin, id)
+    // The project manager's answers complete the PSPC & RCMP clearance package
+    await syncClearancePackage(admin, id, auth.user.id)
+  }
 
   return NextResponse.json({ ok: true })
 }

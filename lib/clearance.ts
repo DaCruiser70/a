@@ -1,4 +1,5 @@
 import type { ClearanceStatus, ClearanceType, FormStatus, ManagerPlanStatus } from '@/types'
+import { ID_DOCUMENT_TYPES } from './required-documents'
 import { regionForOffice, isRemoteOffice } from './branches'
 
 // Security clearance rules shared by the hire's form, its API routes and the HR views.
@@ -102,7 +103,8 @@ export function formatDcn(digits: string): string {
 
 // ── ID: read from the existing documents (real document_type values) ────────
 
-export const CLEARANCE_ID_DOC_TYPES = ['drivers_license', 'alternative_id'] as const
+// The accepted ID types come from the one required-documents setting (either one is enough)
+export const CLEARANCE_ID_DOC_TYPES = ID_DOCUMENT_TYPES
 
 // ── Who each package goes to ─────────────────────────────────────────────────
 
@@ -126,3 +128,43 @@ export function rcmpRecipientForOffice(office: string | null | undefined): RcmpR
 }
 
 export { isRemoteOffice }
+
+// ── PSPC & RCMP package (sent to the clearance reviewer) ─────────────────────
+
+export const PACKAGE_STAGES = ['needs_review', 'in_process', 'done', 'returned'] as const
+export type PackageStage = typeof PACKAGE_STAGES[number]
+
+export const PACKAGE_STAGE_LABELS: Record<PackageStage, string> = {
+  needs_review: 'Needs review',
+  in_process:   'In process',
+  done:         'Done',
+  returned:     'Returned to HR',
+}
+
+export function isPackageStage(value: unknown): value is PackageStage {
+  return typeof value === 'string' && (PACKAGE_STAGES as readonly string[]).includes(value)
+}
+
+// The reviewer's moves. The server checks the same table (and the database function again).
+export const REVIEWER_ACTIONS = ['start', 'done', 'return'] as const
+export type ReviewerAction = typeof REVIEWER_ACTIONS[number]
+export const REVIEWER_MOVES: Record<ReviewerAction, { from: PackageStage[]; to: PackageStage; label: string }> = {
+  start:  { from: ['needs_review'],               to: 'in_process', label: 'Move to In process' },
+  done:   { from: ['in_process'],                 to: 'done',       label: 'Mark Done' },
+  return: { from: ['needs_review', 'in_process'], to: 'returned',   label: 'Send back to HR' },
+}
+
+// Once sent, HR cannot reject or change the forms until the reviewer returns the package
+export function packageLocked(stage: PackageStage | null | undefined): boolean {
+  return stage === 'needs_review' || stage === 'in_process' || stage === 'done'
+}
+
+export const RETURN_NOTE_MAX = 1000
+
+// Per-form review on clearance_info
+export type FileReview = 'pending' | 'approved' | 'rejected'
+export const FILE_REVIEW_LABELS: Record<FileReview, string> = {
+  pending:  'Needs review',
+  approved: 'Approved',
+  rejected: 'Rejected',
+}

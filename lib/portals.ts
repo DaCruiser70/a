@@ -1,7 +1,7 @@
 // Roles and the portals they open. No server imports, so the edge middleware,
 // API routes and browser code can all share it.
 
-export const ROLES = ['hr', 'newhire', 'stakeholder', 'payroll', 'manager', 'project_mgmt'] as const
+export const ROLES = ['hr', 'newhire', 'stakeholder', 'payroll', 'manager', 'project_mgmt', 'clearance'] as const
 export type Role = typeof ROLES[number]
 
 export type Portal = {
@@ -19,6 +19,7 @@ export const PORTALS: Portal[] = [
   { role: 'stakeholder',  label: 'Stakeholder Portal',        prefix: '/stakeholder',  href: '/stakeholder/dashboard',  built: true  },
   { role: 'manager',      label: 'Manager Portal',            prefix: '/manager',      href: '/manager/dashboard',      built: true  },
   { role: 'project_mgmt', label: 'Project Management Portal', prefix: '/project-mgmt', href: '/project-mgmt/dashboard', built: true  },
+  { role: 'clearance',    label: 'Clearance Review Portal',   prefix: '/clearance',    href: '/clearance/dashboard',    built: true  },
   { role: 'newhire',      label: 'Employee Onboarding',       prefix: '/newhire',      href: '/newhire/welcome',        built: true  },
 ]
 

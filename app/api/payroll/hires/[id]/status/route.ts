@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 import { requireRole } from '@/lib/roles'
+import { inPayrollQueue } from '@/lib/payroll-access'
 import { applyFormStatus } from '@/lib/form-status'
 import type { FormStatus } from '@/types'
 
@@ -17,8 +18,8 @@ export async function PATCH(
   const { id } = await params
 
   // Verify hire is approved (payroll only processes approved hires)
-  const { data: hire } = await admin.from('profiles').select('status').eq('id', id).single()
-  if (!hire || hire.status !== 'approved') return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  const { data: hire } = await admin.from('profiles').select('status, entered_payroll_queue_at').eq('id', id).single()
+  if (!inPayrollQueue(hire)) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   const { formId, status, reason }: { formId: string; status: FormStatus; reason?: string } = await request.json()
 

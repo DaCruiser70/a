@@ -65,7 +65,16 @@ const CLEARANCE_CHIP_TONE: Record<ClearanceStatus, PlanChip> = {
   pending: 'awaiting', review: 'draft', approved: 'submitted', flagged: 'overdue',
 }
 
-export function ClearanceChipBadge({ status }: { status: ClearanceStatus }) {
+// With href (HR dashboard), the chip links to the hire's Clearance tab
+export function ClearanceChipBadge({ status, href }: { status: ClearanceStatus; href?: string }) {
+  if (href) {
+    return (
+      <Link href={href} className={`plan-chip ${CLEARANCE_CHIP_TONE[status]} action`} onClick={e => e.stopPropagation()}>
+        <span className="plan-chip-dot" aria-hidden="true" />
+        Clearance · {CLEARANCE_STATUS_LABELS[status]}
+      </Link>
+    )
+  }
   return (
     <span className={`plan-chip ${CLEARANCE_CHIP_TONE[status]}`}>
       <span className="plan-chip-dot" aria-hidden="true" />
@@ -80,8 +89,9 @@ const PM_CHIP_TONE: Record<PmChip, string> = {
   open: 'draft', claimed: 'pm', done: 'submitted', needs_region: 'overdue',
 }
 
-// With setRegionHref, "Set region" becomes a link that opens the hire's Region editor
-export function PmChipBadge({ state, claimedByName, setRegionHref }: { state: PmChip; claimedByName?: string | null; setRegionHref?: string }) {
+// With setRegionHref, "Set region" becomes a link that opens the hire's Region editor; with href,
+// every other state links to the hire's Plan & Project tab (HR dashboard)
+export function PmChipBadge({ state, claimedByName, setRegionHref, href }: { state: PmChip; claimedByName?: string | null; setRegionHref?: string; href?: string }) {
   const label = state === 'claimed' && claimedByName ? `Claimed by ${claimedByName}` : PM_CHIP_LABELS[state]
   if (state === 'needs_region' && setRegionHref) {
     return (
@@ -89,6 +99,14 @@ export function PmChipBadge({ state, claimedByName, setRegionHref }: { state: Pm
         <span className="plan-chip-dot" aria-hidden="true" />
         Project mgmt · {label}
         <span aria-hidden="true">→</span>
+      </Link>
+    )
+  }
+  if (href) {
+    return (
+      <Link href={href} className={`plan-chip ${PM_CHIP_TONE[state]} action`} onClick={e => e.stopPropagation()}>
+        <span className="plan-chip-dot" aria-hidden="true" />
+        Project mgmt · {label}
       </Link>
     )
   }

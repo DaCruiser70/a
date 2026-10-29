@@ -46,13 +46,17 @@ export async function GET(request: Request) {
   const total   = count ?? 0
   if (hireIds.length === 0) return NextResponse.json({ hires: [], total, hasMore: false })
 
-  const [profiles, pi, bi, si, po] = await Promise.all([
+  const [profiles, pi, bi, si, po, docs] = await Promise.all([
     admin.from('profiles').select('id, full_name, position, start_date, office_location').in('id', hireIds),
     admin.from('personal_info').select('user_id, form_status').in('user_id', hireIds),
     admin.from('banking_info').select('user_id, form_status').in('user_id', hireIds),
     admin.from('sin_info').select('user_id, form_status').in('user_id', hireIds),
     admin.from('policy_acknowledgements').select('user_id, form_status').in('user_id', hireIds),
+    // Types and statuses only: the Documents item counts toward the progress shown to the manager
+    admin.from('newhire_documents').select('user_id, document_type, form_status').in('user_id', hireIds),
   ])
+  const docsByUser: Record<string, { document_type: string; form_status: string }[]> = {}
+  for (const d of docs.data ?? []) (docsByUser[d.user_id] ??= []).push(d)
 
   const byId = <T extends { user_id: string }>(rows: T[] | null) =>
     Object.fromEntries((rows ?? []).map(r => [r.user_id, r]))
@@ -65,7 +69,7 @@ export async function GET(request: Request) {
     const computed = computeHireStatus([
       piMap[plan.newhire_id]?.form_status, biMap[plan.newhire_id]?.form_status,
       siMap[plan.newhire_id]?.form_status, poMap[plan.newhire_id]?.form_status,
-    ])
+    ], docsByUser[plan.newhire_id] ?? [])
     return {
       hire_id:         plan.newhire_id,
       name:            p?.full_name       ?? '—',

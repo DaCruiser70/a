@@ -6,7 +6,7 @@ import { rateLimit, rateLimitKey } from '@/lib/rate-limit'
 import { queueNotification, hrNotifyEmails, appUrl } from '@/lib/notify'
 import {
   CLEARANCE_FILES_BUCKET, CLEARANCE_TEMPLATES_BUCKET, CLEARANCE_TEMPLATE_FILES,
-  normalizeDcn, isValidDcn, type ClearanceKind,
+  normalizeDcn, isValidDcn, packageLocked, type ClearanceKind,
 } from '@/lib/clearance'
 import {
   loadClearanceRequirements, encryptClearanceFields, decryptClearanceField, clearanceIdOnFile,
@@ -116,6 +116,12 @@ export async function POST(request: Request) {
     .eq('user_id', user.id)
     .maybeSingle()
 
+  // While the PSPC & RCMP package is with the clearance reviewer the forms cannot change
+  const { data: tracking } = await admin.from('clearance_tracking').select('package_stage').eq('newhire_id', user.id).maybeSingle()
+  if (packageLocked(tracking?.package_stage)) {
+    return NextResponse.json({ error: 'Your clearance package is with the reviewer, so it can’t be changed right now. HR will contact you if anything needs fixing.' }, { status: 409 })
+  }
+
   // Each file: a new upload (validated), keep what is on file, or remove it at this resubmit
   type FileResult = { path: string | null; name: string | null; changed: boolean }
   async function resolveFile(kind: ClearanceKind, newPath: string | null | undefined, newName: string | undefined, remove: boolean, oldPath: string | null): Promise<FileResult | 'invalid'> {
@@ -154,6 +160,11 @@ export async function POST(request: Request) {
     }),
     form_status:  'review',
     flag_reason:  null,
+    // Any resubmission goes back to HR for a fresh review of each form
+    rcmp_review:               'pending',
+    rcmp_reject_reason:        null,
+    fingerprint_review:        'pending',
+    fingerprint_reject_reason: null,
     submitted_at: now,
     updated_at:   now,
   }

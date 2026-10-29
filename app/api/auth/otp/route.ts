@@ -9,7 +9,7 @@ import {
   signOtpSession, OTP_SESSION_COOKIE, OTP_SESSION_MAX_AGE,
   PENDING_SESSION_COOKIE, PENDING_SESSION_PATH,
 } from '@/lib/otp-session'
-import { landingHref, parseRoles } from '@/lib/portals'
+import { landingHref, parseRoles, portalsFor } from '@/lib/portals'
 import { otpCodeHashInput } from '@/lib/otp-issue'
 
 const BodySchema = z.strictObject({
@@ -98,7 +98,11 @@ export async function POST(request: Request) {
 
   // Landing portal from server-controlled app_metadata
   const appMeta = sessionData.user.app_metadata ?? {}
-  const landing = landingHref(appMeta.role, parseRoles(appMeta.roles))
+  const roles   = parseRoles(appMeta.roles)
+  const landing = landingHref(appMeta.role, roles)
+  // Two or more portals: the login form shows "Where would you like to go?" with exactly these.
+  // Computed here from the session's roles; each portal's own requireRole still guards it.
+  const portals = portalsFor(roles)
 
   clearPending()
 
@@ -111,5 +115,7 @@ export async function POST(request: Request) {
     maxAge:   OTP_SESSION_MAX_AGE,
   })
 
-  return NextResponse.json({ ok: true, landing })
+  return NextResponse.json(portals.length > 1
+    ? { ok: true, landing, portals: portals.map(p => ({ role: p.role, label: p.label, href: p.href })) }
+    : { ok: true, landing })
 }

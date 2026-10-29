@@ -24,7 +24,7 @@ export async function loadSubmission(admin: Admin, userId: string): Promise<{
     policy:    po.data?.form_status ?? 'pending',
     documents: computeDocumentStatus(docs.data ?? []),
   }
-  return { statuses, submission: computeSubmission(statuses) }
+  return { statuses, submission: computeSubmission(statuses, docs.data ?? []) }
 }
 
 // Call after any required form or document is saved. When that save completes the set, it queues
