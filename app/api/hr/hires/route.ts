@@ -8,6 +8,10 @@ import { computeHireStatus } from '@/lib/hire-status'
 import { queueNotification, appUrl } from '@/lib/notify'
 import { planChip, todayIso } from '@/lib/manager-plan'
 import { getClearanceRequirements, computeClearanceStatus } from '@/lib/clearance'
+import { needsPmRequest, pmChipState } from '@/lib/pm'
+import { memberNames, syncPmRequest } from '@/lib/pm-server'
+import { REMOTE_OFFICE, isRemoteOffice, regionForOffice } from '@/lib/branches'
+import { REGIONS } from '@/lib/regions'
 import type { NewHireRow } from '@/types'
 
 function generateTempPassword(): string {
@@ -38,7 +42,7 @@ export async function GET() {
 
   const { data: profiles, error } = await admin
     .from('profiles')
-    .select('id, full_name, aem_email, position, start_date, created_at, office_location')
+    .select('id, full_name, aem_email, position, start_date, created_at, office_location, region')
     .eq('role', 'newhire')
     .order('created_at', { ascending: false })
 
@@ -55,15 +59,19 @@ export async function GET() {
       ])
     : [{ data: [] }, { data: [] }, { data: [] }, { data: [] }]
 
-  // Batched queries for every listed hire's manager plan and clearance form (no per-row lookups)
-  const [{ data: planRows }, { data: clearanceRows }] = hireIds.length
+  // Batched queries for every listed hire's manager plan, clearance form and project-management
+  // request (no per-row lookups)
+  const [{ data: planRows }, { data: clearanceRows }, { data: pmRows }] = hireIds.length
     ? await Promise.all([
         admin.from('manager_plans').select('newhire_id, status, due_date, clearance_type').in('newhire_id', hireIds),
         admin.from('clearance_info').select('user_id, form_status').in('user_id', hireIds),
+        admin.from('pm_requests').select('newhire_id, status, claimed_by').in('newhire_id', hireIds),
       ])
-    : [{ data: [] }, { data: [] }]
+    : [{ data: [] }, { data: [] }, { data: [] }]
   const planMap      = Object.fromEntries((planRows ?? []).map(r => [r.newhire_id, r]))
   const clearanceMap = Object.fromEntries((clearanceRows ?? []).map(r => [r.user_id, r]))
+  const pmMap        = Object.fromEntries((pmRows ?? []).map(r => [r.newhire_id, r]))
+  const claimerNames = await memberNames(admin, (pmRows ?? []).filter(r => r.status === 'claimed').map(r => r.claimed_by))
   const today   = todayIso()
 
   const piMap = Object.fromEntries((piRows.data ?? []).map(r => [r.user_id, r]))
@@ -101,13 +109,19 @@ export async function GET() {
       clearance_chip:    getClearanceRequirements(planMap[p.id]).required
         ? computeClearanceStatus(clearanceMap[p.id]?.form_status)
         : null,
+      pm_chip:           (() => {
+        const state = pmChipState(needsPmRequest(planMap[p.id]), pmMap[p.id], p.region)
+        if (!state) return null
+        const claimer = state === 'claimed' ? pmMap[p.id]?.claimed_by : null
+        return { state, claimed_by_name: claimer ? claimerNames[claimer] ?? null : null }
+      })(),
     }
   })
 
   return NextResponse.json({ hires })
 }
 
-const OFFICE_LOCATIONS = ['Dartmouth NS', 'Moncton NB', 'Oakville ON', 'Remote'] as const
+const OFFICE_LOCATIONS = ['Dartmouth NS', 'Moncton NB', 'Oakville ON', REMOTE_OFFICE] as const
 const PROBATION_PERIODS = ['3 Months', '6 Months', 'Waived'] as const
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(v => !Number.isNaN(Date.parse(v)))
 
@@ -118,11 +132,14 @@ const CreateHireSchema = z.strictObject({
   aemEmail:           z.string().trim().toLowerCase().max(254).pipe(z.email()),
   role:               z.string().trim().min(1).max(150),
   officeLocation:     z.enum(OFFICE_LOCATIONS),
+  // Only read for Remote; every other office's region comes from lib/branches.ts
+  region:             z.enum(REGIONS).optional(),
   reportingManagerId: z.uuid(),
   startDate:          isoDate,
   formDeadline:       isoDate,
   probationPeriod:    z.enum(PROBATION_PERIODS),
 }).refine(v => v.formDeadline <= v.startDate, { path: ['formDeadline'] })
+  .refine(v => !isRemoteOffice(v.officeLocation) || !!v.region, { path: ['region'] })
 
 export async function POST(request: Request) {
   const auth = await requireRole('hr')
@@ -145,9 +162,15 @@ export async function POST(request: Request) {
   }
   const {
     name, preferredName, personalEmail, aemEmail,
-    role: position, officeLocation, reportingManagerId,
+    role: position, officeLocation, region: chosenRegion, reportingManagerId,
     startDate, formDeadline, probationPeriod,
   } = parsed.data
+
+  // Any region the browser sends for a non-Remote office is ignored
+  const region = isRemoteOffice(officeLocation) ? chosenRegion ?? null : regionForOffice(officeLocation)
+  if (!region) {
+    return NextResponse.json({ error: 'Please choose a region for this remote hire.' }, { status: 400 })
+  }
 
   const admin = createServiceClient()
 
@@ -198,6 +221,7 @@ export async function POST(request: Request) {
       preferred_name:          preferredName || null,
       personal_email:          personalEmail,
       office_location:         officeLocation,
+      region,
       reporting_manager_id:    manager.id,
       reporting_manager_name:  manager.full_name,
       reporting_manager_email: manager.email,
@@ -249,6 +273,9 @@ export async function POST(request: Request) {
       link:      appUrl(`/manager/newhire/${newUser.user.id}`),
     },
   })
+
+  // No-op until the manager submits a PSPC & RCMP plan; kept so every region save runs the sync
+  await syncPmRequest(admin, newUser.user.id)
 
   return NextResponse.json({ ok: true, id: newUser.user.id, tempPassword })
 }

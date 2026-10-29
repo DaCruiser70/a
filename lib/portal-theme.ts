@@ -35,8 +35,8 @@ export const PORTAL_THEMES: Record<Role, PortalTheme> = {
   payroll:      theme('payroll',      { short: 'Payroll',     accent: '#0F4C4A', hover: '#0a3332', soft: 'rgba(15,76,74,0.08)',  heroFrom: '#0F4C4A', heroTo: '#0a3332' }),
   newhire:      theme('newhire',      { short: 'Onboarding',  accent: '#1B3A6B', hover: '#0f2348', soft: 'rgba(27,58,107,0.08)', heroFrom: '#1B3A6B', heroTo: '#0f2348' }),
   manager:      theme('manager',      { short: 'Manager',     accent: '#4C2A85', hover: '#3B1F69', soft: '#F1ECF9',              heroFrom: '#4C2A85', heroTo: '#2E1A52' }),
-  // Reserved: copper for the project management portal. Hover and tint are provisional.
-  project_mgmt: theme('project_mgmt', { short: 'Projects',    accent: '#9A4F1D', hover: '#7A3E16', soft: '#F6EDE5',              heroFrom: '#9A4F1D', heroTo: '#5E2F10', reserved: true }),
+  // Copper: the regional project management portal
+  project_mgmt: theme('project_mgmt', { short: 'Projects',    accent: '#9A4F1D', hover: '#7A3E16', soft: '#F6EDE5',              heroFrom: '#9A4F1D', heroTo: '#5E2F10' }),
 }
 
 export function themeForRole(role: Role): PortalTheme {

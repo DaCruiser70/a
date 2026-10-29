@@ -1,4 +1,5 @@
 import type { ClearanceStatus, ClearanceType, FormStatus, ManagerPlanStatus } from '@/types'
+import { regionForOffice, isRemoteOffice } from './branches'
 
 // Security clearance rules shared by the hire's form, its API routes and the HR views.
 // No server imports.
@@ -115,15 +116,13 @@ export const RCMP_RECIPIENTS = {
 } as const satisfies Record<string, Recipient>
 export type RcmpRecipientKey = keyof typeof RCMP_RECIPIENTS
 
-// Office values come from the Add New Hire form: 'Dartmouth NS', 'Moncton NB', 'Oakville ON', 'Remote'.
+// Office → region comes from lib/branches.ts (the only place that mapping lives).
 // Ontario → Trevor; New Brunswick / Nova Scotia → Emily; Remote → HR chooses (null here).
 export function rcmpRecipientForOffice(office: string | null | undefined): RcmpRecipientKey | null {
-  const o = (office ?? '').trim()
-  if (/\bON$/.test(o)) return 'ontario'
-  if (/\b(NB|NS)$/.test(o)) return 'atlantic'
+  const region = regionForOffice(office)
+  if (region === 'Ontario') return 'ontario'
+  if (region === 'New Brunswick' || region === 'Nova Scotia') return 'atlantic'
   return null
 }
 
-export function isRemoteOffice(office: string | null | undefined): boolean {
-  return (office ?? '').trim() === 'Remote'
-}
+export { isRemoteOffice }

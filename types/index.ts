@@ -107,6 +107,35 @@ export type ClearanceTracking = {
 // Clearance form state as shown in chips and badges ('pending' = not submitted yet)
 export type ClearanceStatus = FormStatus
 
+export type RegionName = 'Ontario' | 'New Brunswick' | 'Nova Scotia'
+
+export type RegionTeamMember = {
+  id:           string
+  region:       RegionName
+  member_name:  string
+  member_email: string
+  active:       boolean
+  created_at:   string
+}
+
+export type PmRequestStatus = 'open' | 'claimed' | 'done' | 'cancelled'
+
+export type PmRequest = {
+  id:           string
+  newhire_id:   string
+  region:       RegionName
+  status:       PmRequestStatus
+  claimed_by:   string | null   // region_teams.id
+  claimed_at:   string | null
+  completed_by: string | null   // region_teams.id
+  completed_at: string | null
+  created_at:   string
+  updated_at:   string
+}
+
+// Project-management state as shown on HR chips; null when the hire needs no request
+export type PmChip = 'open' | 'claimed' | 'done' | 'needs_region'
+
 export type OutboxStatus = 'pending' | 'sent' | 'failed'
 
 export type NotificationOutboxRow = {
@@ -290,6 +319,18 @@ export type Database = {
         Update:        Partial<Omit<ClearanceTracking, 'id' | 'newhire_id' | 'created_at'>>
         Relationships: []
       }
+      region_teams: {
+        Row:           RegionTeamMember
+        Insert:        Pick<RegionTeamMember, 'region' | 'member_name' | 'member_email'> & Partial<Pick<RegionTeamMember, 'active'>>
+        Update:        Partial<Omit<RegionTeamMember, 'id' | 'created_at'>>
+        Relationships: []
+      }
+      pm_requests: {
+        Row:           PmRequest
+        Insert:        Pick<PmRequest, 'newhire_id' | 'region'> & Partial<Omit<PmRequest, 'id' | 'newhire_id' | 'region'>>
+        Update:        Partial<Omit<PmRequest, 'id' | 'newhire_id' | 'created_at'>>
+        Relationships: []
+      }
       notification_outbox: {
         Row:           NotificationOutboxRow
         Insert:        Pick<NotificationOutboxRow, 'dedupe_key' | 'to_emails' | 'template' | 'payload'> & Partial<Omit<NotificationOutboxRow, 'id' | 'dedupe_key' | 'to_emails' | 'template' | 'payload'>>
@@ -397,12 +438,14 @@ export type NewHireRow = {
   office_location?:    string | null
   plan_chip?:          PlanChip | null
   clearance_chip?:     ClearanceStatus | null   // null when the hire needs no clearance
+  pm_chip?:            { state: PmChip; claimed_by_name: string | null } | null
 }
 
 // Manager plan state as shown on HR chips; null when no plan was requested
 export type PlanChip = 'awaiting' | 'draft' | 'submitted' | 'overdue'
 
 export type NewHireDetail = NewHireRow & {
+  region:                   RegionName | null   // separate from the office; HR can change it
   phone:                    string
   start_date:               string
   address:                  string

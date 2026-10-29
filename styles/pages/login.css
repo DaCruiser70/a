@@ -341,6 +341,35 @@
   text-align: center;
 }
 
+/* Shared team account: "Who is signing in?" */
+.login-member-list { border: none; margin: 20px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.login-member-legend { font-size: 9.5px; font-weight: 700; color: rgba(255,255,255,0.6); letter-spacing: 1.2px; text-transform: uppercase; margin-bottom: 8px; padding: 0; }
+.login-member {
+  position: relative; display: flex; align-items: center; gap: 12px; min-height: 52px;
+  padding: 10px 14px; border-radius: 10px; cursor: pointer;
+  background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.14);
+  transition: border-color 0.2s, background 0.2s;
+}
+.login-member:hover { border-color: rgba(200,146,10,0.4); }
+.login-member.selected { border-color: #C8920A; background: rgba(200,146,10,0.08); }
+.login-member input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.login-member-mark {
+  width: 18px; height: 18px; border-radius: 50%; flex-shrink: 0;
+  border: 2px solid rgba(255,255,255,0.45); display: flex; align-items: center; justify-content: center;
+}
+.login-member.selected .login-member-mark { border-color: #E8B84B; }
+.login-member.selected .login-member-mark::after { content: ''; width: 8px; height: 8px; border-radius: 50%; background: #E8B84B; }
+.login-member:focus-within { outline: 2px solid #E8B84B; outline-offset: 2px; }
+.login-member-text  { display: flex; flex-direction: column; min-width: 0; }
+.login-member-name  { font-size: 13px; font-weight: 600; color: #fff; }
+.login-member-email { font-size: 11.5px; color: rgba(255,255,255,0.65); overflow-wrap: anywhere; }
+.login-back-link {
+  background: none; border: none; cursor: pointer; padding: 6px 4px; font-family: var(--font-sans);
+  font-size: 11px; font-weight: 600; color: #C8920A;
+}
+.login-back-link:hover { color: #E8B84B; }
+.login-back-link:focus-visible { outline: 2px solid #E8B84B; outline-offset: 2px; border-radius: 4px; }
+
 .login-btn:disabled {
   opacity: 0.7;
   cursor: not-allowed;

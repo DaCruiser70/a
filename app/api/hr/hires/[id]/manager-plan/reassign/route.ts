@@ -4,6 +4,7 @@ import { createServiceClient } from '@/lib/supabase/server'
 import { requireRole } from '@/lib/roles'
 import { rateLimit, rateLimitKey } from '@/lib/rate-limit'
 import { queueNotification, appUrl } from '@/lib/notify'
+import { syncPmRequest } from '@/lib/pm-server'
 
 const BodySchema = z.strictObject({ managerId: z.uuid() })
 
@@ -56,6 +57,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (result === 'unchanged') {
     return NextResponse.json({ ok: true, unchanged: true, manager: manager ? { id: manager.id, name: manager.full_name } : null })
   }
+
+  // Keep the regional project-management request in step with the plan (idempotent)
+  await syncPmRequest(admin, id)
 
   await admin.from('audit_log').insert({
     user_id:      id,

@@ -8,8 +8,10 @@ import { esc, SafeMessage } from '@/lib/safe-html'
 import PortalSwitcher from '@/components/ui/PortalSwitcher'
 import { PortalIdentity } from '@/components/ui/PortalName'
 import ManagerSelect from '@/components/ui/ManagerSelect'
-import { PlanChipBadge, ClearanceChipBadge } from '@/components/ui/PlanBadges'
+import { PlanChipBadge, ClearanceChipBadge, PmChipBadge } from '@/components/ui/PlanBadges'
 import Link from 'next/link'
+import { isRemoteOffice, regionForOffice } from '@/lib/branches'
+import { REGIONS } from '@/lib/regions'
 import type { NewHireRow } from '@/types'
 
 type ActivityItem = { type: string; msg: string; time: string }
@@ -129,6 +131,7 @@ function HireTable({
                   <span className={`hr-status ${hire.status}`}>{STATUS_LABELS[hire.status]}</span>
                   {hire.plan_chip && <PlanChipBadge chip={hire.plan_chip} />}
                   {hire.clearance_chip && <ClearanceChipBadge status={hire.clearance_chip} />}
+                  {hire.pm_chip && <PmChipBadge state={hire.pm_chip.state} claimedByName={hire.pm_chip.claimed_by_name} setRegionHref={`/hr/newhire/${hire.id}?setRegion=1`} />}
                 </div>
               </td>
               <td>
@@ -176,7 +179,7 @@ function HireTable({
 
 const EMPTY_HIRE = {
   name: '', preferredName: '', personalEmail: '', aemEmail: '',
-  role: '', officeLocation: '', reportingManagerId: '',
+  role: '', officeLocation: '', region: '', reportingManagerId: '',
   startDate: '', formDeadline: '', probationPeriod: '',
 }
 
@@ -293,6 +296,8 @@ export default function HRDashboard() {
         aemEmail:             newHire.aemEmail,
         role:                 newHire.role,
         officeLocation:       newHire.officeLocation,
+        // Only Remote sends a region; the server derives every other office's region itself
+        ...(isRemoteOffice(newHire.officeLocation) ? { region: newHire.region } : {}),
         reportingManagerId:   newHire.reportingManagerId,
         startDate:            newHire.startDate,
         formDeadline:         newHire.formDeadline,
@@ -588,6 +593,7 @@ export default function HRDashboard() {
                               <span className={`hr-status ${hire.status}`}>{STATUS_LABELS[hire.status]}</span>
                               {hire.plan_chip && <PlanChipBadge chip={hire.plan_chip} />}
                               {hire.clearance_chip && <ClearanceChipBadge status={hire.clearance_chip} />}
+                              {hire.pm_chip && <PmChipBadge state={hire.pm_chip.state} claimedByName={hire.pm_chip.claimed_by_name} setRegionHref={`/hr/newhire/${hire.id}?setRegion=1`} />}
                             </div>
                           </td>
                           <td onClick={e => e.stopPropagation()}>
@@ -774,7 +780,12 @@ export default function HRDashboard() {
                   required
                   style={inputStyle}
                   value={newHire.officeLocation}
-                  onChange={e => setNewHire(p => ({ ...p, officeLocation: e.target.value }))}
+                  aria-describedby={regionForOffice(newHire.officeLocation) ? 'add-hire-region-note' : undefined}
+                  onChange={e => {
+                    const office = e.target.value
+                    // The region follows the office straight away; Remote starts blank for HR to choose
+                    setNewHire(p => ({ ...p, officeLocation: office, region: regionForOffice(office) ?? '' }))
+                  }}
                 >
                   <option value="">Select location</option>
                   <option>Dartmouth NS</option>
@@ -782,7 +793,33 @@ export default function HRDashboard() {
                   <option>Oakville ON</option>
                   <option>Remote</option>
                 </select>
+                {regionForOffice(newHire.officeLocation) && (
+                  <span id="add-hire-region-note" style={{ fontSize:'11px', color:'#5F5E5A', marginTop:'2px' }}>
+                    Region: <strong style={{ color:'#1B3A6B' }}>{regionForOffice(newHire.officeLocation)}</strong>
+                  </span>
+                )}
               </div>
+
+              {isRemoteOffice(newHire.officeLocation) && (
+                <div style={fieldStyle}>
+                  <label htmlFor="add-hire-region" style={labelStyle}>Region {requiredMark}</label>
+                  <select
+                    id="add-hire-region"
+                    className="hr-add-region"
+                    required
+                    style={inputStyle}
+                    value={newHire.region}
+                    aria-describedby="add-hire-region-help"
+                    onChange={e => setNewHire(p => ({ ...p, region: e.target.value }))}
+                  >
+                    <option value="">Select region</option>
+                    {REGIONS.map(r => <option key={r} value={r}>{r}</option>)}
+                  </select>
+                  <span id="add-hire-region-help" style={{ fontSize:'11px', color:'#888780', marginTop:'2px' }}>
+                    Remote hires have no office region. Choose the team they will work with.
+                  </span>
+                </div>
+              )}
 
               <ManagerSelect
                 value={newHire.reportingManagerId}

@@ -14,6 +14,8 @@ type PayloadByTemplate = {
   clearance_unlocked:     { newhireId: string; hireName: string; link: string }
   clearance_submitted:    { newhireId: string; hireName: string; link: string }
   onboarding_complete:    { newhireId: string; hireName: string; link: string }
+  pm_request_created:     { newhireId: string; hireName: string; link: string }
+  pm_request_done:        { newhireId: string; hireName: string; link: string }
 }
 
 export function appUrl(path: string): string {

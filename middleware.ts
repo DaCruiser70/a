@@ -7,7 +7,7 @@ import {
 
 // APIs that require a completed one-time-code sign-in. Every API route also
 // calls requireRole(), which applies the same rule plus the role check.
-const OTP_API_PREFIXES = ['/api/hr', '/api/stakeholder', '/api/payroll', '/api/manager', '/api/project-mgmt']
+const OTP_API_PREFIXES = ['/api/hr', '/api/stakeholder', '/api/payroll', '/api/manager', '/api/project-mgmt', '/api/pm']
 
 function matchesPrefix(pathname: string, prefixes: string[]) {
   return prefixes.some(p => pathname === p || pathname.startsWith(`${p}/`))

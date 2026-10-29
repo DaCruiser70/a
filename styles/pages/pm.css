@@ -1,0 +1,74 @@
+/* ══════════════════════════════════════════════
+   PROJECT MANAGEMENT PORTAL (copper, data-portal="project_mgmt")
+   Builds on styles/pages/manager.css: the mgr-* classes take the portal's
+   tokens, so the layout matches the manager portal.
+   Copper #9A4F1D: 5.98:1 on white, 5.17:1 on its tint #F6EDE5.
+══════════════════════════════════════════════ */
+
+/* ── Tabs ── */
+.pm-tabs {
+  display: flex; gap: 6px; flex-wrap: nowrap; overflow-x: auto;
+  padding: 4px; margin-bottom: 1.25rem; border-radius: 12px;
+  background: #fff; border: 1px solid rgba(0,0,0,0.07); width: fit-content; max-width: 100%;
+}
+.pm-tab {
+  display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 16px;
+  border: none; border-radius: 9px; background: transparent; cursor: pointer; white-space: nowrap;
+  font-family: inherit; font-size: 13px; font-weight: 600; color: #4A4640;
+}
+.pm-tab:hover { background: var(--portal-soft); }
+.pm-tab[aria-selected="true"] { background: var(--portal-accent); color: #fff; }
+.pm-tab:focus-visible { outline: 3px solid var(--portal-accent); outline-offset: 2px; }
+.pm-tab-count {
+  font-size: 11px; padding: 1px 7px; border-radius: 100px;
+  background: rgba(0,0,0,0.06); color: inherit;
+}
+.pm-tab[aria-selected="true"] .pm-tab-count { background: rgba(255,255,255,0.22); }
+
+/* ── Status badges (text carries the meaning) ── */
+.pm-status {
+  display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;
+  font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 100px;
+}
+.pm-status::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.pm-status.open    { color: #8A6206; background: rgba(200,146,10,0.1);  border: 1px solid rgba(200,146,10,0.3); }
+.pm-status.claimed { color: #9A4F1D; background: #F6EDE5;               border: 1px solid rgba(154,79,29,0.3); }
+.pm-status.done    { color: #0D5C46; background: rgba(13,92,70,0.08);   border: 1px solid rgba(13,92,70,0.2); }
+
+.pm-card-rows { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 12px; margin-top: 10px; font-size: 12px; }
+.pm-card-rows dt { color: #5F5E5A; font-weight: 600; }
+.pm-card-rows dd { margin: 0; color: #1A1916; overflow-wrap: anywhere; }
+
+/* ── Detail page ── */
+.pm-panel {
+  background: #fff; border-radius: 14px; border: 1px solid rgba(0,0,0,0.07);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.05); margin-bottom: 1.25rem; overflow: hidden;
+}
+.pm-panel-head { padding: 1rem 1.25rem; border-bottom: 1px solid rgba(0,0,0,0.06); background: #FAFAF8; }
+.pm-panel-title { font-weight: 700; font-size: 14px; color: #1A1916; margin: 0; }
+.pm-panel-sub   { font-size: 12px; color: #5F5E5A; margin-top: 2px; }
+.pm-panel-body  { padding: 1rem 1.25rem; }
+
+.pm-rows { display: grid; grid-template-columns: 170px minmax(0, 1fr); margin: 0; }
+.pm-rows dt, .pm-rows dd { padding: 9px 0; border-bottom: 1px solid rgba(0,0,0,0.04); margin: 0; }
+.pm-rows dt { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: #5F5E5A; }
+.pm-rows dd { font-size: 13px; color: #1A1916; overflow-wrap: anywhere; white-space: pre-wrap; }
+.pm-rows dd.empty { color: #888780; font-style: italic; }
+
+.pm-actions { display: flex; gap: 8px; flex-wrap: wrap; padding: 0.875rem 1.25rem; border-top: 1px solid rgba(0,0,0,0.06); }
+.pm-btn {
+  min-height: 44px; padding: 0 16px; border-radius: 8px; cursor: pointer; white-space: nowrap;
+  font-family: inherit; font-size: 13px; font-weight: 600;
+  border: 1.5px solid var(--portal-accent); background: #fff; color: var(--portal-accent);
+}
+.pm-btn.primary { background: var(--portal-accent); color: #fff; }
+.pm-btn.primary:hover { background: var(--portal-hover); }
+.pm-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.pm-btn:focus-visible { outline: 3px solid var(--portal-accent); outline-offset: 2px; }
+.pm-note { font-size: 13px; color: #4A4640; }
+
+@media (max-width: 560px) {
+  .pm-rows { grid-template-columns: minmax(0, 1fr); }
+  .pm-rows dt { border-bottom: none; padding-bottom: 0; }
+  .pm-btn { flex: 1 1 auto; }
+}

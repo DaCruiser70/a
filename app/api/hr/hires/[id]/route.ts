@@ -97,6 +97,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     submitted:               submittedDate,
     days,
     office_location:         profile.office_location          ?? null,
+    region:                  profile.region                   ?? null,
     phone:                   personal?.phone                  ?? '—',
     start_date:              profile.start_date               ?? '—',
     address:                 personal

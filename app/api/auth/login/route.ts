@@ -1,17 +1,13 @@
 import { NextResponse } from 'next/server'
-import { randomInt } from 'node:crypto'
 import { z } from 'zod'
 import { createClient } from '@supabase/supabase-js'
 import { createServiceClient } from '@/lib/supabase/server'
-import { cookies } from 'next/headers'
-import { encrypt } from '@/lib/encrypt'
-import { hmacHex } from '@/lib/auth-secrets'
 import { rateLimit, rateLimitKey, getClientIp } from '@/lib/rate-limit'
-import { getOtpRecipients } from '@/lib/otp-recipients'
-import { PENDING_SESSION_COOKIE, PENDING_SESSION_PATH } from '@/lib/otp-session'
+import { issueLoginCode, setPendingSession, devOtpEnabled } from '@/lib/otp-issue'
+import { accountRegion, activeRegionMembers } from '@/lib/pm-server'
+import { maskEmail } from '@/lib/pm'
 import { landingHref } from '@/lib/portals'
 
-const OTP_TTL_SECONDS = 300
 const WINDOW_SECONDS  = 15 * 60
 
 const BodySchema = z.strictObject({
@@ -23,6 +19,11 @@ const INVALID_CREDENTIALS = 'Invalid email or password.'
 
 function invalid() {
   return NextResponse.json({ error: INVALID_CREDENTIALS }, { status: 401 })
+}
+
+// Shared project-management account with no usable team: one generic answer for every cause
+function signInUnavailable() {
+  return NextResponse.json({ error: 'Sign-in could not be completed. Please contact HR.' }, { status: 401 })
 }
 
 function tooMany(retryAfterSeconds: number) {
@@ -82,63 +83,40 @@ export async function POST(request: Request) {
     return NextResponse.json({ role: 'newhire', session: authData.session, landing: landingHref('newhire', ['newhire']) })
   }
 
-  // Everyone else: one-time code. Only its HMAC is stored.
-  const code      = randomInt(0, 1_000_000).toString().padStart(6, '0')
-  const codeHash  = await hmacHex('otp-code', `${userId}:${code}`)
-  const expiresAt = new Date(Date.now() + OTP_TTL_SECONDS * 1000).toISOString()
+  // Shared regional project-management account: show the region's active team (names, masked
+  // emails) and wait for the person to pick themselves; the code then goes to that member.
+  if (roles.includes('project_mgmt')) {
+    const region  = await accountRegion(admin, userId)
+    const members = region ? await activeRegionMembers(admin, region) : []
+    // No region or an empty team: fail closed with the same generic answer
+    if (members.length === 0) return signInUnavailable()
 
-  const { error: deleteError } = await admin
-    .from('otp_codes')
-    .delete()
-    .eq('user_id', userId)
-    .or(`used.eq.true,expires_at.lt.${new Date().toISOString()}`)
-  if (deleteError) console.error(`[login] stale code cleanup failed (code ${deleteError.code})`)
-
-  const { error: invalidateError } = await admin
-    .from('otp_codes')
-    .update({ used: true })
-    .eq('user_id', userId)
-    .eq('used', false)
-  if (invalidateError) {
-    console.error(`[login] code invalidation failed (code ${invalidateError.code})`)
-    return NextResponse.json({ error: 'Sign in failed. Please try again.' }, { status: 500 })
+    await setPendingSession({
+      access_token:    authData.session.access_token,
+      refresh_token:   authData.session.refresh_token,
+      user_id:         userId,
+      awaiting_member: true,
+    })
+    return NextResponse.json({
+      requiresMember: true,
+      members: members.map(m => ({ id: m.id, name: m.member_name, email: maskEmail(m.member_email) })),
+    })
   }
 
-  const { error: insertError } = await admin.from('otp_codes').insert({
-    user_id:    userId,
-    code:       null,
-    code_hash:  codeHash,
-    expires_at: expiresAt,
-    used:       false,
-  })
-  if (insertError) {
-    console.error(`[login] code insert failed (code ${insertError.code})`)
-    return NextResponse.json({ error: 'Sign in failed. Please try again.' }, { status: 500 })
-  }
-
-  // Delivery is not wired up yet; recipients are resolved here and never revealed.
-  await getOtpRecipients(userId)
-
-  const devOtp = process.env.ALLOW_DEV_OTP === 'true' && process.env.NODE_ENV !== 'production'
-  if (devOtp) console.log(`[DEV] login code: ${code}`)
+  // Everyone else: one-time code to the account's own address. Only its HMAC is stored.
+  const issued = await issueLoginCode(admin, userId, null)
+  if (!issued.ok) return NextResponse.json({ error: 'Sign in failed. Please try again.' }, { status: 500 })
 
   // Tokens are held encrypted in a short-lived cookie until the code is verified
-  const cookieStore = await cookies()
-  cookieStore.set(PENDING_SESSION_COOKIE, encrypt(JSON.stringify({
+  await setPendingSession({
     access_token:  authData.session.access_token,
     refresh_token: authData.session.refresh_token,
     user_id:       userId,
-  })), {
-    httpOnly: true,
-    secure:   process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    path:     PENDING_SESSION_PATH,
-    maxAge:   OTP_TTL_SECONDS,
   })
 
   return NextResponse.json({
     role:        profile.role,
     requiresOtp: true,
-    ...(devOtp ? { devCode: code } : {}),
+    ...(devOtpEnabled() ? { devCode: issued.code } : {}),
   })
 }

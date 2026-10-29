@@ -473,3 +473,8 @@
   opacity: 0.35;
   cursor: not-allowed;
 }
+/* Add New Hire: Region select for remote hires (inline styles remove the outline) */
+.hr-add-region:focus-visible {
+  border-color: #1B3A6B !important;
+  box-shadow: 0 0 0 3px rgba(27,58,107,0.18);
+}

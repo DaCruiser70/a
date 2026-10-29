@@ -9,6 +9,7 @@ import {
   PLAN_TEXT_FIELDS, PROJECT_TEXT_FIELDS,
 } from '@/lib/manager-plan'
 import { getClearanceRequirements } from '@/lib/clearance'
+import { syncPmRequest } from '@/lib/pm-server'
 import type { Database } from '@/types'
 
 type PlanUpdate = Database['public']['Tables']['manager_plans']['Update']
@@ -166,6 +167,9 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       })
     }
   }
+
+  // Regional project management: open, reopen or cancel the hire's request to match the plan
+  await syncPmRequest(admin, id)
 
   return NextResponse.json({ ok: true, status: saved[0].status, submitted_at: submittedAt })
 }

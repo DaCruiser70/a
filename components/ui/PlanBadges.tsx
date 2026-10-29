@@ -1,7 +1,9 @@
+import Link from 'next/link'
 import '../../styles/components/plan-badges.css'
 import { PLAN_STATUS_LABELS, PLAN_CHIP_LABELS, CLEARANCE_LABELS } from '@/lib/manager-plan'
 import { CLEARANCE_STATUS_LABELS } from '@/lib/clearance'
-import type { ManagerPlanStatus, PlanChip, ClearanceType, ClearanceStatus } from '@/types'
+import { PM_CHIP_LABELS } from '@/lib/pm'
+import type { ManagerPlanStatus, PlanChip, ClearanceType, ClearanceStatus, PmChip } from '@/types'
 
 // Every badge carries its meaning in text; colour and icon only reinforce it.
 
@@ -68,6 +70,32 @@ export function ClearanceChipBadge({ status }: { status: ClearanceStatus }) {
     <span className={`plan-chip ${CLEARANCE_CHIP_TONE[status]}`}>
       <span className="plan-chip-dot" aria-hidden="true" />
       Clearance · {CLEARANCE_STATUS_LABELS[status]}
+    </span>
+  )
+}
+
+// Project management chip: open → amber (waiting), claimed → copper (the project portal's colour),
+// done → green, needs region → red (HR must set the hire's region)
+const PM_CHIP_TONE: Record<PmChip, string> = {
+  open: 'draft', claimed: 'pm', done: 'submitted', needs_region: 'overdue',
+}
+
+// With setRegionHref, "Set region" becomes a link that opens the hire's Region editor
+export function PmChipBadge({ state, claimedByName, setRegionHref }: { state: PmChip; claimedByName?: string | null; setRegionHref?: string }) {
+  const label = state === 'claimed' && claimedByName ? `Claimed by ${claimedByName}` : PM_CHIP_LABELS[state]
+  if (state === 'needs_region' && setRegionHref) {
+    return (
+      <Link href={setRegionHref} className={`plan-chip ${PM_CHIP_TONE[state]} action`} onClick={e => e.stopPropagation()}>
+        <span className="plan-chip-dot" aria-hidden="true" />
+        Project mgmt · {label}
+        <span aria-hidden="true">→</span>
+      </Link>
+    )
+  }
+  return (
+    <span className={`plan-chip ${PM_CHIP_TONE[state]}`}>
+      <span className="plan-chip-dot" aria-hidden="true" />
+      Project mgmt · {label}
     </span>
   )
 }

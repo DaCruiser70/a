@@ -6,6 +6,9 @@ import { createClient } from '@/lib/supabase/client'
 
 const OTP_EXPIRY = 300
 
+// A shared regional project-management account lists its team (names, masked emails only)
+type TeamMember = { id: string; name: string; email: string }
+
 // Error bodies are JSON from our routes, but a proxy or crash page may not be
 async function readJson(res: Response): Promise<{ error?: string; [key: string]: unknown }> {
   try { return await res.json() } catch { return {} }
@@ -19,7 +22,11 @@ export default function LoginForm({ otpRequired = false }: { otpRequired?: boole
   const [password, setPassword]     = useState('')
   const [error, setError]           = useState('')
   const [loading, setLoading]       = useState(false)
-  const [stage, setStage]           = useState<'login' | 'otp'>('login')
+  const [stage, setStage]           = useState<'login' | 'member' | 'otp'>('login')
+  const [members, setMembers]       = useState<TeamMember[]>([])
+  const [memberId, setMemberId]     = useState('')
+  const [memberError, setMemberError] = useState('')
+  const [memberLoading, setMemberLoading] = useState(false)
   const [otp, setOtp]               = useState(['', '', '', '', '', ''])
   const [otpError, setOtpError]     = useState('')
   const [otpLoading, setOtpLoading] = useState(false)
@@ -79,14 +86,58 @@ export default function LoginForm({ otpRequired = false }: { otpRequired?: boole
       return
     }
 
+    // Shared project-management account: pick who is signing in; the code goes to that person
+    if (data.requiresMember && Array.isArray(data.members)) {
+      setMembers(data.members as TeamMember[])
+      setMemberId('')
+      setMemberError('')
+      setStage('member')
+      setLoading(false)
+      return
+    }
+
     // Everyone else: show OTP screen
+    showOtpStage(data)
+    setLoading(false)
+  }
+
+  function showOtpStage(data: Record<string, unknown>) {
     setDevOtp(typeof data.devCode === 'string' ? data.devCode : null)
     setTimeLeft(OTP_EXPIRY)
     setCanResend(false)
     setOtp(['', '', '', '', '', ''])
     setOtpError('')
     setStage('otp')
-    setLoading(false)
+  }
+
+  // Sends the code to the chosen team member (POST /api/auth/login/member)
+  async function requestMemberCode(id: string): Promise<{ ok: boolean; data: Record<string, unknown>; status: number }> {
+    try {
+      const res = await fetch('/api/auth/login/member', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ memberId: id }),
+      })
+      return { ok: res.ok, data: await readJson(res), status: res.status }
+    } catch {
+      return { ok: false, data: { error: 'Could not reach the server. Check your connection and try again.' }, status: 0 }
+    }
+  }
+
+  async function handleMemberSubmit(e: React.SyntheticEvent<HTMLFormElement>) {
+    e.preventDefault()
+    if (!memberId) { setMemberError('Choose your name to continue.'); return }
+    setMemberError('')
+    setMemberLoading(true)
+    const { ok, data, status } = await requestMemberCode(memberId)
+    setMemberLoading(false)
+    if (status === 401) {
+      handleBackToLogin()
+      setError((data.error as string) || 'Session expired. Please sign in again.')
+      return
+    }
+    if (!ok) { setMemberError((data.error as string) || 'Sign-in could not be completed.'); return }
+    showOtpStage(data)
   }
 
   function handleOtpChange(index: number, value: string) {
@@ -159,6 +210,16 @@ export default function LoginForm({ otpRequired = false }: { otpRequired?: boole
     setOtpError('')
     setDevOtp(null)
 
+    // Shared account: resend to the same team member
+    if (memberId) {
+      const { ok, data } = await requestMemberCode(memberId)
+      if (!ok) { setOtpError((data.error as string) || 'Could not send a new code.'); return }
+      if (typeof data.devCode === 'string') setDevOtp(data.devCode)
+      setTimeLeft(OTP_EXPIRY)
+      setCanResend(false)
+      return
+    }
+
     let res: Response
     try {
       res = await fetch('/api/auth/login', {
@@ -186,6 +247,57 @@ export default function LoginForm({ otpRequired = false }: { otpRequired?: boole
     setOtp(['', '', '', '', '', ''])
     setOtpError('')
     setDevOtp(null)
+    setMembers([])
+    setMemberId('')
+    setMemberError('')
+  }
+
+  /* ── WHO IS SIGNING IN (shared regional project-management account) ── */
+  if (stage === 'member') {
+    return (
+      <>
+        <div className="login-card-body">
+          <div className="login-card-title">Who is signing in?</div>
+          <div className="login-card-sub">
+            This is a shared team account. Choose your name and we&apos;ll send<br />
+            the sign-in code to your own email.
+          </div>
+
+          <form onSubmit={handleMemberSubmit} noValidate>
+            <fieldset className="login-member-list" aria-describedby={memberError ? 'login-member-error' : undefined}>
+              <legend className="login-member-legend">Team members</legend>
+              {members.map(m => (
+                <label key={m.id} className={`login-member${memberId === m.id ? ' selected' : ''}`}>
+                  <input
+                    type="radio"
+                    name="team-member"
+                    value={m.id}
+                    checked={memberId === m.id}
+                    onChange={() => { setMemberId(m.id); setMemberError('') }}
+                  />
+                  <span className="login-member-mark" aria-hidden="true" />
+                  <span className="login-member-text">
+                    <span className="login-member-name">{m.name}</span>
+                    <span className="login-member-email">{m.email}</span>
+                  </span>
+                </label>
+              ))}
+            </fieldset>
+
+            {memberError && <div id="login-member-error" className="login-error" role="alert">{memberError}</div>}
+
+            <button type="submit" className="login-btn" disabled={memberLoading}>
+              <span className="login-btn-text">{memberLoading ? 'Sending code...' : 'Send my code'}</span>
+              <span className="login-btn-arrow">{memberLoading ? '...' : '→'}</span>
+            </button>
+          </form>
+        </div>
+
+        <div className="login-card-foot">
+          <button type="button" className="login-back-link" onClick={handleBackToLogin}>← Back to sign in</button>
+        </div>
+      </>
+    )
   }
 
   /* ── OTP SCREEN ── */
@@ -210,8 +322,9 @@ export default function LoginForm({ otpRequired = false }: { otpRequired?: boole
 
           <div className="login-card-title">Verify your identity</div>
           <div className="login-card-sub">
-            A 6-digit code was sent to the email address<br />
-            registered to your account
+            {memberId
+              ? <>A 6-digit code was sent to<br />{members.find(m => m.id === memberId)?.name ?? 'your'}&apos;s email</>
+              : <>A 6-digit code was sent to the email address<br />registered to your account</>}
           </div>
 
           <form onSubmit={handleOtpSubmit}>

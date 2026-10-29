@@ -7,7 +7,7 @@ import { portalsFor } from '@/lib/portals'
 export async function GET() {
   const auth = await requireRole(...ROLES)
   if (auth instanceof NextResponse) return auth
-  const { user, roles } = auth
+  const { user, roles, member } = auth
 
   const { data: profile, error } = await createServiceClient()
     .from('profiles')
@@ -17,7 +17,8 @@ export async function GET() {
   if (error) console.error(`[me] profile lookup failed (code ${error.code})`)
 
   return NextResponse.json({
-    name:    profile?.preferred_name || profile?.full_name || '',
+    // On a shared project-management account, the team member who signed in
+    name:    member?.member_name || profile?.preferred_name || profile?.full_name || '',
     roles,
     portals: portalsFor(roles).map(p => ({ label: p.label, href: p.href })),
   })

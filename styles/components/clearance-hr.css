@@ -71,3 +71,12 @@
   .clr-hr-actions { padding: 0.875rem 1rem; }
   .clr-hr-btn     { flex: 1 1 auto; }
 }
+
+/* HR hire page: Region row edit control (Hire Details card) */
+.hire-region-edit {
+  min-height: 32px; padding: 0 12px; border-radius: 8px; cursor: pointer;
+  border: 1px solid rgba(200,146,10,0.45); background: rgba(200,146,10,0.08); color: #7A5806;
+  font-family: inherit; font-size: 11px; font-weight: 700;
+}
+.hire-region-edit:hover { background: rgba(200,146,10,0.16); }
+.hire-region-edit:focus-visible { outline: 2px solid #1B3A6B; outline-offset: 2px; }

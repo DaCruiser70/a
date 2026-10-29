@@ -49,7 +49,7 @@
   --portal-hero-to:   #2E1A52;
 }
 
-/* Reserved: copper, not applied to any page yet (hover and tint provisional) */
+/* Copper: the regional project management portal */
 [data-portal="project_mgmt"] {
   --portal-accent:    #9A4F1D;
   --portal-hover:     #7A3E16;

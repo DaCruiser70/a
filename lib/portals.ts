@@ -18,7 +18,7 @@ export const PORTALS: Portal[] = [
   { role: 'payroll',      label: 'Payroll Portal',            prefix: '/payroll',      href: '/payroll/dashboard',      built: true  },
   { role: 'stakeholder',  label: 'Stakeholder Portal',        prefix: '/stakeholder',  href: '/stakeholder/dashboard',  built: true  },
   { role: 'manager',      label: 'Manager Portal',            prefix: '/manager',      href: '/manager/dashboard',      built: true  },
-  { role: 'project_mgmt', label: 'Project Management Portal', prefix: '/project-mgmt', href: '/project-mgmt/dashboard', built: false },
+  { role: 'project_mgmt', label: 'Project Management Portal', prefix: '/project-mgmt', href: '/project-mgmt/dashboard', built: true  },
   { role: 'newhire',      label: 'Employee Onboarding',       prefix: '/newhire',      href: '/newhire/welcome',        built: true  },
 ]
 

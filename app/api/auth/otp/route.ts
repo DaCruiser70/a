@@ -10,15 +10,18 @@ import {
   PENDING_SESSION_COOKIE, PENDING_SESSION_PATH,
 } from '@/lib/otp-session'
 import { landingHref, parseRoles } from '@/lib/portals'
+import { otpCodeHashInput } from '@/lib/otp-issue'
 
 const BodySchema = z.strictObject({
   code: z.string().regex(/^\d{6}$/),
 })
 
 const PendingSchema = z.strictObject({
-  access_token:  z.string().min(1).max(8192),
-  refresh_token: z.string().min(1).max(1024),
-  user_id:       z.uuid(),
+  access_token:    z.string().min(1).max(8192),
+  refresh_token:   z.string().min(1).max(1024),
+  user_id:         z.uuid(),
+  member_id:       z.uuid().optional(),     // shared project-management account
+  awaiting_member: z.boolean().optional(),  // no member chosen yet, so no code exists
 })
 
 const SESSION_EXPIRED = 'Session expired. Please sign in again.'
@@ -58,7 +61,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: SESSION_EXPIRED }, { status: 401 })
   }
 
-  const codeHash = await hmacHex('otp-code', `${pending.user_id}:${code}`)
+  // A shared account must have picked a member before any code can be checked
+  if (pending.awaiting_member) return NextResponse.json({ error: SESSION_EXPIRED }, { status: 401 })
+
+  const codeHash = await hmacHex('otp-code', otpCodeHashInput(pending.user_id, code, pending.member_id))
 
   const { data: result, error: otpError } = await createServiceClient()
     .rpc('verify_otp', { p_user_id: pending.user_id, p_code_hash: codeHash })
@@ -96,7 +102,8 @@ export async function POST(request: Request) {
 
   clearPending()
 
-  cookieStore.set(OTP_SESSION_COOKIE, await signOtpSession(pending.user_id), {
+  // For a shared account the session records (and signs) which team member signed in
+  cookieStore.set(OTP_SESSION_COOKIE, await signOtpSession(pending.user_id, { memberId: pending.member_id }), {
     httpOnly: true,
     secure:   process.env.NODE_ENV === 'production',
     sameSite: 'lax',

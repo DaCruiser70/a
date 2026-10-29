@@ -1,6 +1,6 @@
 'use client'
 
-import { useRouter, useParams } from 'next/navigation'
+import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import '../../../../styles/pages/hr-newhire.css'
 import { timeAgo } from '@/lib/time-ago'
@@ -11,6 +11,8 @@ import { PortalIdentity } from '@/components/ui/PortalName'
 import ManagerPlanCard from '@/components/hr/ManagerPlanCard'
 import ClearanceReviewRow from '@/components/hr/ClearanceReviewRow'
 import ClearanceTrackerCard from '@/components/hr/ClearanceTrackerCard'
+import PmRequestCard from '@/components/hr/PmRequestCard'
+import HireRegionRow from '@/components/hr/HireRegionRow'
 import { ClearanceChipBadge } from '@/components/ui/PlanBadges'
 import type { HrClearanceView } from '@/lib/clearance-server'
 import Link from 'next/link'
@@ -128,6 +130,7 @@ export default function HRNewHirePage() {
   const router  = useRouter()
   const params  = useParams()
   const hireId  = params?.id as string
+  const searchParams = useSearchParams()
 
   const [hire, setHire]                   = useState<HireDetail | null>(null)
   const [loadError, setLoadError]         = useState(false)
@@ -155,6 +158,9 @@ export default function HRNewHirePage() {
   // Security clearance: tracked apart from the four forms (never in formStatuses or the 4/4 count)
   const [clearance, setClearance]               = useState<HrClearanceView | null>(null)
   const [clearanceVersion, setClearanceVersion] = useState(0)
+  // Region (separate from the office): editing can be opened from the Project Management card
+  const [editingRegion, setEditingRegion]       = useState(() => searchParams?.get('setRegion') === '1')
+  const [pmVersion, setPmVersion]               = useState(0)
 
   useEffect(() => {
     fetch(`/api/hr/hires/${hireId}`)
@@ -1179,6 +1185,9 @@ export default function HRNewHirePage() {
               }}
             />
 
+            {/* ── Regional project management (PSPC & RCMP hires only) ── */}
+            <PmRequestCard key={pmVersion} hireId={hireId} onToast={showToast} onSetRegion={() => setEditingRegion(true)} />
+
             {/* ── Clearance Tracker ── */}
             {clearance?.required && (
               <ClearanceTrackerCard
@@ -1280,6 +1289,16 @@ export default function HRNewHirePage() {
                     </div>
                   </div>
                 )}
+
+                {/* Region (HR can set or change it; not tied to the office once saved) */}
+                <HireRegionRow
+                  hireId={hireId}
+                  region={hire.region}
+                  editing={editingRegion}
+                  onEditingChange={setEditingRegion}
+                  onSaved={region => { setHire(h => h ? { ...h, region } : h); setPmVersion(v => v + 1) }}
+                  onToast={showToast}
+                />
 
                 {/* Address */}
                 <div className="hrd-info-row">

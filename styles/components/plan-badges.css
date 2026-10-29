@@ -38,3 +38,10 @@
 .plan-chip.draft     { color: #8A6206; background: rgba(200,146,10,0.08); border-color: rgba(200,146,10,0.3); }
 .plan-chip.awaiting  { color: #5F5E5A; background: rgba(0,0,0,0.03);      border-color: rgba(0,0,0,0.12); }
 .plan-chip.overdue   { color: #B03A2E; background: rgba(231,76,60,0.06);  border-color: rgba(231,76,60,0.25); }
+/* Project management (copper, 5.17:1 on its tint) */
+.plan-chip.pm        { color: #9A4F1D; background: #F6EDE5;               border-color: rgba(154,79,29,0.3); }
+
+/* "Set region" chip on the HR dashboard: a link to the hire's Region editor */
+a.plan-chip.action { text-decoration: none; cursor: pointer; }
+a.plan-chip.action:hover { text-decoration: underline; text-underline-offset: 2px; }
+a.plan-chip.action:focus-visible { outline: 2px solid #1B3A6B; outline-offset: 2px; }
