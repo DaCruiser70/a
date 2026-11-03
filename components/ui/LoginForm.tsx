@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { isRole, type Role } from '@/lib/portals'
 import { themeForRole } from '@/lib/portal-theme'
 import PortalIcon from '@/components/ui/PortalIcon'
+import ForgotPasswordForm from '@/components/ui/ForgotPasswordForm'
 
 const OTP_EXPIRY = 300
 
@@ -36,7 +37,7 @@ export default function LoginForm({ otpRequired = false }: { otpRequired?: boole
   const [password, setPassword]     = useState('')
   const [error, setError]           = useState('')
   const [loading, setLoading]       = useState(false)
-  const [stage, setStage]           = useState<'login' | 'member' | 'otp' | 'portal'>('login')
+  const [stage, setStage]           = useState<'login' | 'member' | 'otp' | 'portal' | 'forgot'>('login')
   const [portals, setPortals]       = useState<PortalChoice[]>([])
   const [leaving, setLeaving]       = useState<string | null>(null)
   const portalTitleRef = useRef<HTMLDivElement>(null)
@@ -288,6 +289,25 @@ export default function LoginForm({ otpRequired = false }: { otpRequired?: boole
     setMemberError('')
   }
 
+  /* ── FORGOT PASSWORD (new hires get a reset link; the answer is the same for every email) ── */
+  if (stage === 'forgot') {
+    return (
+      <>
+        <div className="login-card-body">
+          <ForgotPasswordForm
+            title="Forgot your password?"
+            intro="Enter the email you sign in with and we will send you a link to choose a new password."
+            initialEmail={email}
+          />
+        </div>
+
+        <div className="login-card-foot">
+          <button type="button" className="login-back-link" onClick={() => { setError(''); setStage('login') }}>← Back to sign in</button>
+        </div>
+      </>
+    )
+  }
+
   /* ── WHERE WOULD YOU LIKE TO GO? (accounts that can open two or more portals) ── */
   if (stage === 'portal') {
     return (
@@ -489,7 +509,10 @@ export default function LoginForm({ otpRequired = false }: { otpRequired?: boole
         </div>
 
         <div className="login-card-title">Welcome back</div>
-        <div className="login-card-sub">Use the credentials sent to your email</div>
+        <div className="login-card-sub">
+          Sign in with your email and the password you set.<br />
+          First time here? Use the link in your welcome email.
+        </div>
 
         {otpRequired && !error && (
           <div className="login-notice" role="status">Please sign in again to continue</div>
@@ -520,6 +543,11 @@ export default function LoginForm({ otpRequired = false }: { otpRequired?: boole
                 onChange={e => setPassword(e.target.value)}
                 required
               />
+            </div>
+            <div className="login-forgot">
+              <button type="button" className="login-back-link" onClick={() => { setError(''); setStage('forgot') }}>
+                Forgot password?
+              </button>
             </div>
           </div>
 

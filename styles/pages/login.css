@@ -471,3 +471,5 @@
   .login-left  { padding:72px 96px; }
   .login-right { width:560px;padding:48px 72px; }
 }
+/* "Forgot password?" under the password field */
+.login-forgot { display: flex; justify-content: flex-end; margin-top: var(--s1); }

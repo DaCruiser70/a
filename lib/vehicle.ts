@@ -1,18 +1,44 @@
 import { z } from 'zod'
 
 // Company vehicle request: Rob fills the vehicle details, Heather checks and completes them, then
-// Marley confirms the vehicle insurance. Shared by the stakeholder screens, the routes and the HR
-// view. No server imports.
+// (once the hire's Driver's License is uploaded and approved by HR) Marley confirms the vehicle
+// insurance. Shared by the stakeholder screens, the routes and the HR view. No server imports.
+//
+// 'license': Heather is done; Marley's step waits for the approved Driver's License.
+// 'cancelled': HR unticked Company Vehicle before the request was complete.
 
-export const VEHICLE_STEPS = ['rob', 'heather', 'marley', 'complete'] as const
+export const VEHICLE_STEPS = ['rob', 'heather', 'license', 'marley', 'complete', 'cancelled'] as const
 export type VehicleStep = typeof VEHICLE_STEPS[number]
-export type VehicleActorStep = Exclude<VehicleStep, 'complete'>
+export type VehicleActorStep = 'rob' | 'heather' | 'marley'
+
+// The order the steps happen in ('cancelled' is outside it)
+export const VEHICLE_STEP_ORDER: readonly VehicleStep[] = ['rob', 'heather', 'license', 'marley', 'complete']
 
 export const VEHICLE_STEP_LABELS: Record<VehicleStep, string> = {
-  rob:      'Waiting on Rob',
-  heather:  'Waiting on Heather',
-  marley:   'Waiting on Marley (insurance)',
-  complete: 'Complete',
+  rob:       'Waiting on Rob',
+  heather:   'Waiting on Heather',
+  license:   'Waiting on the licence',
+  marley:    'Waiting on Marley (insurance)',
+  complete:  'Complete',
+  cancelled: 'Cancelled',
+}
+
+// The hire's Driver's License, as the vehicle request sees it
+export type LicenseStatus = 'approved' | 'review' | 'rejected' | 'missing'
+export const LICENSE_STATUS_LABELS: Record<LicenseStatus, string> = {
+  approved: 'Approved',
+  review:   'Waiting on HR',
+  rejected: 'Rejected, waiting on the hire',
+  missing:  'Not uploaded',
+}
+
+// Why Marley's step has not started yet (HR's view), or null once it has
+export function insuranceWaitingReason(step: VehicleStep, license: LicenseStatus): string | null {
+  if (step === 'rob' || step === 'heather') return step === 'rob' ? 'Waiting on Rob' : 'Waiting on Heather'
+  if (step !== 'license') return null
+  if (license === 'approved') return 'Starting Marley’s insurance step'
+  if (license === 'review')   return 'Waiting on HR to approve the Driver’s License'
+  return 'Waiting on the hire’s Driver’s License'
 }
 
 // stakeholder_tasks rows: Rob and Heather share 'vehicle'; Marley's is a separate, clearly named key

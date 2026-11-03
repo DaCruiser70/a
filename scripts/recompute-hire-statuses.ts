@@ -15,7 +15,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import type { Database, FormStatus, HireStatus } from '../types'
-import { computeHireStatus, type HireDoc } from '../lib/hire-status'
+import { computeHireStatus, companyVehicleHires, type HireDoc } from '../lib/hire-status'
 
 const DRY_RUN = process.argv.includes('--dry-run')
 
@@ -53,6 +53,8 @@ async function main() {
   const piM = map(pi.data), biM = map(bi.data), siM = map(si.data), poM = map(po.data)
   const docs: Record<string, HireDoc[]> = {}
   for (const d of dc.data ?? []) (docs[d.user_id] ??= []).push(d)
+  // Company Vehicle makes the Driver's License the required ID (lib/required-documents.ts)
+  const vehicleHires = await companyVehicleHires(admin, ids)
 
   const transitions: Record<string, number> = {}
   const counts = { hires: ids.length, changed: 0, unchanged: 0, newlyQueued: 0, leftApprovedButKeptByPayroll: 0, failures: 0 }
@@ -61,6 +63,7 @@ async function main() {
     const computed = computeHireStatus(
       [piM[p.id], biM[p.id], siM[p.id], poM[p.id]] as (FormStatus | undefined)[],
       docs[p.id] ?? [],
+      { companyVehicle: vehicleHires.has(p.id) },
     )
     const before = (p.status ?? 'not-started') as HireStatus
     const after  = computed.status

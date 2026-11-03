@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 import { requireRole } from '@/lib/roles'
 import { RETIRED_TASK_KEYS } from '@/lib/stakeholder-mapping'
+import { driversLicense } from '@/lib/vehicle-server'
 
 export async function GET(
   _request: Request,
@@ -23,11 +24,13 @@ export async function GET(
     .not('task_key', 'in', `(${RETIRED_TASK_KEYS.join(',')})`)
     .order('created_at', { ascending: true })
 
-  // Company vehicle request (step only here; the details come from the HR vehicle route on expand)
-  const { data: vehicle } = await admin.from('vehicle_requests').select('step').eq('newhire_id', hireId).maybeSingle()
+  // Company vehicle request: the step and the Driver's License status only here (the reason the
+  // insurance step has not started); the details come from the HR vehicle route on expand
+  const { data: vehicleRow } = await admin.from('vehicle_requests').select('step').eq('newhire_id', hireId).maybeSingle()
+  const vehicle = vehicleRow ? { step: vehicleRow.step, license: (await driversLicense(admin, hireId)).status } : null
 
   if (!tasks || tasks.length === 0) {
-    return NextResponse.json({ tasks: [], vehicle: vehicle ? { step: vehicle.step } : null })
+    return NextResponse.json({ tasks: [], vehicle })
   }
 
   // Enrich with stakeholder display names (safe — no hire PII)
@@ -56,5 +59,5 @@ export async function GET(
     stakeholder_name: nameMap[t.assigned_to] ?? '—',
   }))
 
-  return NextResponse.json({ tasks: enriched, vehicle: vehicle ? { step: vehicle.step } : null })
+  return NextResponse.json({ tasks: enriched, vehicle })
 }

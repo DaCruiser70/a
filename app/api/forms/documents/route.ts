@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 import { requireRole } from '@/lib/roles'
-import { recomputeProfileStatus } from '@/lib/hire-status'
+import { recomputeProfileStatus, hasCompanyVehicle } from '@/lib/hire-status'
 import { syncClearancePackage } from '@/lib/clearance-package'
 import { afterHireFormSaved } from '@/lib/submission-server'
 
@@ -12,13 +12,17 @@ export async function GET() {
 
   const admin = createServiceClient()
   // file_path is deliberately excluded — storage paths never leave the server
-  const { data: documents } = await admin
-    .from('newhire_documents')
-    .select('id, user_id, document_type, document_label, file_name, file_size, expiry_date, form_status, flag_reason, uploaded_at, updated_at, reviewed_at, reviewed_by, sharepoint_filed, sharepoint_filed_at')
-    .eq('user_id', user.id)
-    .order('uploaded_at', { ascending: false })
+  const [{ data: documents }, { data: equipment }] = await Promise.all([
+    admin
+      .from('newhire_documents')
+      .select('id, user_id, document_type, document_label, file_name, file_size, expiry_date, form_status, flag_reason, uploaded_at, updated_at, reviewed_at, reviewed_by, sharepoint_filed, sharepoint_filed_at')
+      .eq('user_id', user.id)
+      .order('uploaded_at', { ascending: false }),
+    admin.from('equipment_provisioning').select('items').eq('user_id', user.id).maybeSingle(),
+  ])
 
-  return NextResponse.json({ documents: documents ?? [] })
+  // company_vehicle: the Driver's License is then the required ID (lib/required-documents.ts)
+  return NextResponse.json({ documents: documents ?? [], company_vehicle: hasCompanyVehicle(equipment?.items) })
 }
 
 export async function POST(request: Request) {

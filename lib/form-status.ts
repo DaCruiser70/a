@@ -35,8 +35,8 @@ export async function applyFormStatus(
     } as never)
     .eq('user_id', hireId)
 
-  const { forms, docs } = await loadHireStatusInputs(admin, hireId)
-  const computed = computeHireStatus(forms, docs)
+  const { forms, docs, req } = await loadHireStatusInputs(admin, hireId)
+  const computed = computeHireStatus(forms, docs, req)
   const overallStatus: HireStatus = computed.status
 
   const now = new Date().toISOString()

@@ -190,3 +190,13 @@ a.hd-list-row:focus-visible { outline: 3px solid var(--color-gold); outline-offs
 @media (prefers-reduced-motion: reduce) {
   .hd-table tbody tr { transition: none; }
 }
+
+/* Add New Hire success dialog: where the welcome email went (no password is ever shown). Tokens only. */
+.hd-welcome {
+  display: flex; align-items: flex-start; gap: var(--s2); flex-wrap: wrap;
+  margin: 0; padding: var(--s3) var(--s4); border-radius: var(--r-md);
+  background: var(--color-green-faint); border: 1px solid var(--color-border-md);
+  font-size: 14px; line-height: 1.5; color: var(--color-text); overflow-wrap: anywhere;
+}
+.hd-welcome.warn { background: var(--color-gold-faint); }
+.hd-welcome .hh-pill { flex-shrink: 0; }

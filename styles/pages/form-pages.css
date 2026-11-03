@@ -455,6 +455,12 @@ select.form-input {
   background: var(--color-gold-faint); border: 1px solid var(--color-gold);
   font-size: 14px; color: var(--color-text); line-height: 1.5;
 }
+/* One line on a document card: why it is required (company vehicle), or why it is not enough */
+.doc-card-notice {
+  margin-top: var(--s2); padding: var(--s2) var(--s3); border-radius: var(--r-sm);
+  background: var(--color-navy-faint); border-left: 3px solid var(--color-gold);
+  font-size: 13px; font-weight: 600; color: var(--color-text); line-height: 1.5;
+}
 .doc-req-badge {
   font-size: 10px; font-weight: 700; letter-spacing: 0.04em; padding: 2px 7px; border-radius: var(--r-pill);
   background: var(--color-gold-faint); color: var(--color-gold-text); border: 1px solid var(--color-gold);

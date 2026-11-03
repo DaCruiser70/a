@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { FormStatus, HireStatus, Database } from '@/types'
-import { REQUIRED_DOCUMENT_SLOTS } from './required-documents'
+import { requiredDocumentSlots, type DocumentRequirements } from './required-documents'
 
 export const HIRE_STATUS_LABELS: Record<HireStatus, string> = {
   'not-started':  'Not Started',
@@ -35,8 +35,9 @@ function slotState(types: readonly string[], docs: HireDoc[]): SlotState {
   return 'missing'
 }
 
-export function computeDocumentsItem(docs: HireDoc[]): DocumentsItem {
-  const slots = REQUIRED_DOCUMENT_SLOTS.map(s => ({ key: s.key, label: s.label, short: s.short, state: slotState(s.types, docs) }))
+// req: what changes the required slots for this hire (a company vehicle needs the Driver's License)
+export function computeDocumentsItem(docs: HireDoc[], req: DocumentRequirements = {}): DocumentsItem {
+  const slots = requiredDocumentSlots(req).map(s => ({ key: s.key, label: s.label, short: s.short, state: slotState(s.types, docs) }))
   const status: FormStatus =
     slots.every(s => s.state === 'approved') ? 'approved'
     : slots.some(s => s.state === 'flagged') ? 'flagged'
@@ -66,7 +67,8 @@ export interface HireStatusResult {
 }
 
 // formStatuses: personal, banking, sin, policy (in that order). docs: the hire's uploaded documents
-// (any type; only REQUIRED_DOCUMENT_SLOTS count). Clearance is never part of this.
+// (any type; only the required slots count). req: { companyVehicle } from equipment provisioning,
+// which makes the Driver's License the only accepted ID. Clearance is never part of this.
 //   Flagged       anything rejected and waiting on the hire
 //   Needs review  anything waiting on HR
 //   Approved      all 5 items approved
@@ -75,9 +77,10 @@ export interface HireStatusResult {
 export function computeHireStatus(
   formStatuses: (FormStatus | null | undefined)[],
   docs: HireDoc[],
+  req: DocumentRequirements = {},
 ): HireStatusResult {
   const forms     = formStatuses.map(s => s ?? 'pending') as FormStatus[]
-  const documents = computeDocumentsItem(docs)
+  const documents = computeDocumentsItem(docs, req)
   const items     = [...forms, documents.status]
   const approvedCount = items.filter(s => s === 'approved').length
 
@@ -103,18 +106,33 @@ export function computeHireStatus(
   }
 }
 
+// Company Vehicle is ticked in the hire's equipment provisioning (the one place it is recorded)
+export function hasCompanyVehicle(items: unknown): boolean {
+  return !!items && typeof items === 'object' && (items as Record<string, unknown>).vehicle === true
+}
+
+// The hires (of ids) with Company Vehicle ticked. Server only; one query for a whole list.
+export async function companyVehicleHires(admin: SupabaseClient<Database>, ids: string[]): Promise<Set<string>> {
+  if (ids.length === 0) return new Set()
+  const { data } = await admin.from('equipment_provisioning').select('user_id, items').in('user_id', ids)
+  return new Set((data ?? []).filter(r => hasCompanyVehicle(r.items)).map(r => r.user_id))
+}
+
 // Loads what computeHireStatus needs for one hire. Server only (pass the service client).
 export async function loadHireStatusInputs(admin: SupabaseClient<Database>, userId: string) {
-  const [pi, bi, si, po, docs] = await Promise.all([
+  const [pi, bi, si, po, docs, equipment] = await Promise.all([
     admin.from('personal_info').select('form_status').eq('user_id', userId).maybeSingle(),
     admin.from('banking_info').select('form_status').eq('user_id', userId).maybeSingle(),
     admin.from('sin_info').select('form_status').eq('user_id', userId).maybeSingle(),
     admin.from('policy_acknowledgements').select('form_status').eq('user_id', userId).maybeSingle(),
     admin.from('newhire_documents').select('document_type, form_status').eq('user_id', userId),
+    admin.from('equipment_provisioning').select('items').eq('user_id', userId).maybeSingle(),
   ])
+  const req: DocumentRequirements = { companyVehicle: hasCompanyVehicle(equipment.data?.items) }
   return {
     forms: [pi.data?.form_status, bi.data?.form_status, si.data?.form_status, po.data?.form_status] as (FormStatus | undefined)[],
     docs:  (docs.data ?? []) as HireDoc[],
+    req,
   }
 }
 
@@ -122,8 +140,8 @@ export async function recomputeProfileStatus(
   admin:  SupabaseClient<Database>,
   userId: string,
 ): Promise<void> {
-  const { forms, docs } = await loadHireStatusInputs(admin, userId)
-  const result = computeHireStatus(forms, docs)
+  const { forms, docs, req } = await loadHireStatusInputs(admin, userId)
+  const result = computeHireStatus(forms, docs, req)
 
   const now = new Date().toISOString()
   await admin.from('profiles').update({

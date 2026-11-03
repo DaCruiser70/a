@@ -3,12 +3,13 @@ import { z } from 'zod'
 import { createServiceClient } from '@/lib/supabase/server'
 import { requireRole } from '@/lib/roles'
 import { rateLimit, rateLimitKey } from '@/lib/rate-limit'
-import { computeHireStatus, type DocumentsItem } from '@/lib/hire-status'
+import { computeHireStatus, companyVehicleHires, type DocumentsItem } from '@/lib/hire-status'
 import { todayIso } from '@/lib/manager-plan'
 import {
   DASH_FILTERS, DASH_PAGE_SIZE, STATUS_ORDER, matchesFilter,
   type DashActivity, type DashFilter, type DashResponse, type DashRow,
 } from '@/lib/hr-dashboard'
+import { PASSWORD_SET_AUDIT_PREFIX } from '@/lib/password-setup'
 import type { FormStatus } from '@/types'
 
 const QuerySchema = z.strictObject({
@@ -117,10 +118,26 @@ export async function GET(request: Request) {
   const byUser = (rows: { user_id: string; form_status: FormStatus }[] | null) =>
     Object.fromEntries((rows ?? []).map(r => [r.user_id, r.form_status])) as Record<string, FormStatus>
   const maps = { personal: byUser(pi.data), banking: byUser(bi.data), sin: byUser(si.data), policy: byUser(po.data) }
+  // Company Vehicle makes the Driver's License the required ID (lib/required-documents.ts)
+  const vehicleHires = await companyVehicleHires(admin, ids)
+
+  // Hires who were sent a set-password link and have not used one yet. Text only: never changes a
+  // status, a count or progress.
+  const [{ data: linkRows }, { data: setRows }] = ids.length
+    ? await Promise.all([
+        admin.from('password_setup_tokens').select('user_id, used_at').in('user_id', ids),
+        admin.from('audit_log').select('user_id').in('user_id', ids).like('message', `${PASSWORD_SET_AUDIT_PREFIX}%`),
+      ])
+    : [{ data: [] }, { data: [] }]
+  const passwordSet = new Set([
+    ...(linkRows ?? []).filter(r => r.used_at).map(r => r.user_id),
+    ...(setRows ?? []).map(r => r.user_id),
+  ])
+  const awaitingPassword = new Set((linkRows ?? []).map(r => r.user_id).filter(id => !passwordSet.has(id)))
 
   const rows: DashRow[] = (profiles ?? []).map(p => {
     const forms = Object.fromEntries(FORM_IDS.map(f => [f, maps[f][p.id] ?? 'pending'])) as Record<FormId, FormStatus>
-    const computed = computeHireStatus(FORM_IDS.map(f => forms[f]), docsByUser[p.id] ?? [])
+    const computed = computeHireStatus(FORM_IDS.map(f => forms[f]), docsByUser[p.id] ?? [], { companyVehicle: vehicleHires.has(p.id) })
     return {
       id:              p.id,
       name:            p.full_name,
@@ -130,7 +147,9 @@ export async function GET(request: Request) {
       start_date:      p.start_date ?? null,
       status:          computed.status,
       approved:        computed.approvedCount,
-      next_step:       nextStep(computed.status, forms, computed.documents, !!p.payroll_completed_at),
+      next_step:       computed.status === 'not-started' && awaitingPassword.has(p.id)
+        ? 'Waiting on hire to set their password'
+        : nextStep(computed.status, forms, computed.documents, !!p.payroll_completed_at),
     }
   })
 

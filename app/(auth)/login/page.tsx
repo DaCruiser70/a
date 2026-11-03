@@ -55,8 +55,8 @@ export default async function LoginPage({
               </h1>
               <div className="login-gold-line" />
               <p className="login-sub">
-                Sign in with the credentials sent to your email.
-                Everything you need to get started is waiting inside.
+                Sign in with your email and the password you set. First time here?
+                Use the link in your welcome email. Everything you need to get started is waiting inside.
               </p>
             </div>
           </div>

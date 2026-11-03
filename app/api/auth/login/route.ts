@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js'
 import { createServiceClient } from '@/lib/supabase/server'
 import { rateLimit, rateLimitKey, getClientIp } from '@/lib/rate-limit'
 import { issueLoginCode, setPendingSession, devOtpEnabled } from '@/lib/otp-issue'
+import { CODE_SEND_FAILED } from '@/lib/code-delivery'
 import { accountRegion, activeRegionMembers } from '@/lib/pm-server'
 import { maskEmail } from '@/lib/pm'
 import { landingHref } from '@/lib/portals'
@@ -105,7 +106,11 @@ export async function POST(request: Request) {
 
   // Everyone else: one-time code to the account's own address. Only its HMAC is stored.
   const issued = await issueLoginCode(admin, userId, null)
-  if (!issued.ok) return NextResponse.json({ error: 'Sign in failed. Please try again.' }, { status: 500 })
+  if (!issued.ok) {
+    return issued.reason === 'send_failed'
+      ? NextResponse.json({ error: CODE_SEND_FAILED }, { status: 503 })
+      : NextResponse.json({ error: 'Sign in failed. Please try again.' }, { status: 500 })
+  }
 
   // Tokens are held encrypted in a short-lived cookie until the code is verified
   await setPendingSession({

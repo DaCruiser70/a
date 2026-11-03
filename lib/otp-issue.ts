@@ -5,6 +5,7 @@ import type { Database } from '@/types'
 import { encrypt } from '@/lib/encrypt'
 import { hmacHex } from '@/lib/auth-secrets'
 import { getOtpRecipients } from '@/lib/otp-recipients'
+import { deliverCode, codeDeliveryPossible, devOtpEnabled } from '@/lib/code-delivery'
 import { PENDING_SESSION_COOKIE, PENDING_SESSION_PATH } from '@/lib/otp-session'
 
 // Shared by the password step and the team-member step of sign-in. Server only.
@@ -36,13 +37,19 @@ export async function setPendingSession(value: PendingSession): Promise<void> {
   })
 }
 
+export { devOtpEnabled }
+
 // Issues a fresh 6-digit code: clears stale codes, invalidates unused ones, stores only the HMAC,
-// resolves the recipients (sending is not wired up yet). Returns the code for the dev-only echo.
+// and emails it to the account's (or the chosen member's) own address. Returns the code for the
+// dev-only echo. 'send_failed': the email could not be sent, and the code was invalidated.
 export async function issueLoginCode(
   admin: SupabaseClient<Database>,
   userId: string,
   memberId: string | null,
-): Promise<{ ok: true; code: string } | { ok: false }> {
+): Promise<{ ok: true; code: string } | { ok: false; reason?: 'send_failed' }> {
+  // No way to deliver a code: fail before one exists
+  if (!codeDeliveryPossible()) return { ok: false, reason: 'send_failed' }
+
   const code      = randomInt(0, 1_000_000).toString().padStart(6, '0')
   const codeHash  = await hmacHex('otp-code', otpCodeHashInput(userId, code, memberId))
   const expiresAt = new Date(Date.now() + OTP_TTL_SECONDS * 1000).toISOString()
@@ -76,16 +83,17 @@ export async function issueLoginCode(
     return { ok: false }
   }
 
-  // Delivery is not wired up yet; recipients are resolved here and never revealed.
+  // Recipients are resolved here and never returned or logged. Exactly one address per code.
   const recipients = await getOtpRecipients(userId, memberId)
-  if (memberId && recipients.length === 0) return { ok: false }
+  const delivered  = recipients.length > 0 &&
+    await deliverCode(admin, userId, recipients[0], { kind: 'sign_in', code, ttlSeconds: OTP_TTL_SECONDS })
 
-  if (process.env.ALLOW_DEV_OTP === 'true' && process.env.NODE_ENV !== 'production') {
-    console.log(`[DEV] login code: ${code}`)
+  if (!delivered) {
+    // Never leave a usable code behind when it could not be delivered
+    const { error } = await admin.from('otp_codes').update({ used: true }).eq('user_id', userId).eq('used', false)
+    if (error) console.error(`[login] code invalidation after failed send failed (code ${error.code})`)
+    // No recipient at all is not a delivery problem; the routes answer it generically
+    return recipients.length === 0 ? { ok: false } : { ok: false, reason: 'send_failed' }
   }
   return { ok: true, code }
-}
-
-export function devOtpEnabled(): boolean {
-  return process.env.ALLOW_DEV_OTP === 'true' && process.env.NODE_ENV !== 'production'
 }

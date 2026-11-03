@@ -17,6 +17,8 @@ type Data = {
   rob: { name: string | null; at: string | null }
   heather: { name: string | null; at: string | null }
   marley: { name: string | null; at: string | null }
+  // Marley's turn only: the hire's Driver's License (status and expiry; the file comes from .../license)
+  license: { approved: boolean; expiry_date: string | null } | null
 }
 
 const when = (iso: string | null) => iso ? new Date(iso).toLocaleString('en-CA', { dateStyle: 'medium', timeStyle: 'short' }) : ''
@@ -38,6 +40,25 @@ export default function VehicleTaskModal({ hireId, hireName, onClose, onDone }: 
   const [saving, setSaving]   = useState(false)
   const [error, setError]     = useState('')
   const errorRef = useRef<HTMLDivElement>(null)
+  const [opening, setOpening] = useState<'view' | 'download' | null>(null)
+  const [licenseError, setLicenseError] = useState('')
+
+  // A 60-second link from the server, which checks again that it is Marley's turn
+  async function openLicense(kind: 'view' | 'download') {
+    setOpening(kind)
+    setLicenseError('')
+    try {
+      const res = await fetch(`/api/stakeholder/vehicle/${hireId}/license${kind === 'download' ? '?download=1' : ''}`, { cache: 'no-store' })
+      const out = await res.json().catch(() => ({})) as { url?: string; error?: string }
+      if (!res.ok || !out.url) { setLicenseError(out.error === 'Not found' || !out.error ? 'The Driver’s License is not available right now.' : out.error); return }
+      if (kind === 'view') window.open(out.url, '_blank', 'noopener')
+      else window.location.href = out.url
+    } catch {
+      setLicenseError('Could not reach the server. Check your connection and try again.')
+    } finally {
+      setOpening(null)
+    }
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -174,6 +195,27 @@ export default function VehicleTaskModal({ hireId, hireName, onClose, onDone }: 
                 </dl>
               </section>
             ))}
+            <section className="vh-group" aria-label="Driver’s License">
+              <div className="vh-legend">Driver’s License</div>
+              {data.license?.approved ? (
+                <>
+                  <p className="vh-byline">
+                    Approved by HR{data.license.expiry_date ? ` · Expires ${new Date(`${data.license.expiry_date}T12:00:00`).toLocaleDateString('en-CA', { dateStyle: 'medium' })}` : ' · No expiry date on file'}
+                  </p>
+                  <div className="vh-license-actions">
+                    <button type="button" className="hh-btn secondary small" disabled={!!opening || saving} onClick={() => openLicense('view')}>
+                      {opening === 'view' ? 'Opening…' : 'View'}
+                    </button>
+                    <button type="button" className="hh-btn secondary small" disabled={!!opening || saving} onClick={() => openLicense('download')}>
+                      {opening === 'download' ? 'Preparing…' : 'Download'}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <p className="vh-byline">The Driver’s License is not approved. Please contact HR.</p>
+              )}
+              {licenseError && <div className="ui-modal-error" role="alert">{licenseError}</div>}
+            </section>
             <section className="vh-group" aria-label="Completed by">
               <div className="vh-legend">Completed by</div>
               <ol className="vh-steps">

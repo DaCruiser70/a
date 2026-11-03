@@ -4,7 +4,7 @@ import { createServiceClient } from '@/lib/supabase/server'
 import { requireRole } from '@/lib/roles'
 import { rateLimit, rateLimitKey } from '@/lib/rate-limit'
 import { z } from 'zod'
-import { computeHireStatus } from '@/lib/hire-status'
+import { computeHireStatus, companyVehicleHires } from '@/lib/hire-status'
 import { queueNotification, appUrl } from '@/lib/notify'
 import { planChip, todayIso } from '@/lib/manager-plan'
 import { getClearanceRequirements, computeClearanceStatus } from '@/lib/clearance'
@@ -12,27 +12,9 @@ import { needsPmRequest, pmChipState } from '@/lib/pm'
 import { memberNames, syncPmRequest } from '@/lib/pm-server'
 import { REMOTE_OFFICE, isRemoteOffice, regionForOffice } from '@/lib/branches'
 import { REGIONS } from '@/lib/regions'
+import { encrypt } from '@/lib/encrypt'
+import { sendPasswordLink } from '@/lib/password-setup'
 import type { NewHireRow } from '@/types'
-
-function generateTempPassword(): string {
-  const upper   = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
-  const lower   = 'abcdefghijklmnopqrstuvwxyz'
-  const digits  = '0123456789'
-  const special = '!@#$%^&*'
-  const all     = upper + lower + digits + special
-
-  const pick = (set: string) => set[randomBytes(1)[0] % set.length]
-  const required = [pick(upper), pick(lower), pick(digits), pick(special)]
-  const rest     = Array.from(randomBytes(8)).map(b => all[b % all.length])
-  const chars    = [...required, ...rest]
-
-  const shuffleBytes = randomBytes(chars.length)
-  for (let i = chars.length - 1; i > 0; i--) {
-    const j = shuffleBytes[i] % (i + 1)
-    ;[chars[i], chars[j]] = [chars[j], chars[i]]
-  }
-  return chars.join('')
-}
 
 export async function GET() {
   const auth = await requireRole('hr')
@@ -61,6 +43,7 @@ export async function GET() {
     : [{ data: [] }, { data: [] }, { data: [] }, { data: [] }, { data: [] }]
   const docsByUser: Record<string, { document_type: string; form_status: string }[]> = {}
   for (const d of docRows.data ?? []) (docsByUser[d.user_id] ??= []).push(d)
+  const vehicleHires = await companyVehicleHires(admin, hireIds)
 
   // Batched queries for every listed hire's manager plan, clearance form and project-management
   // request (no per-row lookups)
@@ -88,7 +71,7 @@ export async function GET() {
     const computed = computeHireStatus([
       piMap[p.id]?.form_status, biMap[p.id]?.form_status,
       siMap[p.id]?.form_status, poMap[p.id]?.form_status,
-    ], docsByUser[p.id] ?? [])
+    ], docsByUser[p.id] ?? [], { companyVehicle: vehicleHires.has(p.id) })
     const timestamps = [
       piMap[p.id]?.submitted_at, biMap[p.id]?.submitted_at,
       siMap[p.id]?.submitted_at, poMap[p.id]?.submitted_at,
@@ -146,6 +129,8 @@ const CreateHireSchema = z.strictObject({
   name:               z.string().trim().min(1).max(150),
   preferredName:      z.string().trim().max(150).optional().default(''),
   personalEmail:      z.string().trim().toLowerCase().max(254).pipe(z.email()),
+  // Optional: where the welcome email goes (stored encrypted). Blank means the AEM email.
+  contactEmail:       z.string().trim().toLowerCase().max(254).pipe(z.union([z.literal(''), z.email()])).optional().default(''),
   aemEmail:           z.string().trim().toLowerCase().max(254).pipe(z.email()),
   role:               z.string().trim().min(1).max(150),
   officeLocation:     z.enum(OFFICE_LOCATIONS),
@@ -178,7 +163,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Please check the form — some fields are missing or invalid.' }, { status: 400 })
   }
   const {
-    name, preferredName, personalEmail, aemEmail,
+    name, preferredName, personalEmail, contactEmail, aemEmail,
     role: position, officeLocation, region: chosenRegion, reportingManagerId,
     startDate, formDeadline, probationPeriod,
   } = parsed.data
@@ -211,12 +196,11 @@ export async function POST(request: Request) {
   }
   const probationStatus = probationPeriod === 'Waived' ? 'waived' : 'in-progress'
 
-  const tempPassword = generateTempPassword()
-
-  // The role is set only in app_metadata, which users cannot change
+  // The role is set only in app_metadata, which users cannot change. The password is 32 random bytes
+  // that nobody ever sees, stores or logs: the hire chooses their own through the emailed link.
   const { data: newUser, error: createError } = await admin.auth.admin.createUser({
     email:         aemEmail,
-    password:      tempPassword,
+    password:      randomBytes(32).toString('base64url'),
     email_confirm: true,
     // Both keys: the middleware and requireRole read app_metadata.roles, not role
     app_metadata:  { role: 'newhire', roles: ['newhire'] },
@@ -243,6 +227,7 @@ export async function POST(request: Request) {
       start_date:              startDate,
       preferred_name:          preferredName || null,
       personal_email:          personalEmail,
+      contact_email:           contactEmail ? encrypt(contactEmail) : null,
       office_location:         officeLocation,
       region,
       reporting_manager_id:    manager.id,
@@ -308,5 +293,16 @@ export async function POST(request: Request) {
   // No-op until the manager submits a PSPC & RCMP plan; kept so every region save runs the sync
   await syncPmRequest(admin, newUser.user.id)
 
-  return NextResponse.json({ ok: true, id: newUser.user.id, tempPassword })
+  // The welcome email with the one-time set-password link. A failed send keeps the account; HR sees
+  // a warning and can resend from here or the hire page.
+  const welcome = await sendPasswordLink(admin, newUser.user.id, 'welcome', user.id)
+
+  return NextResponse.json({
+    ok: true,
+    id: newUser.user.id,
+    welcome: {
+      sent: welcome.outcome === 'sent',
+      to:   welcome.outcome === 'refused' ? null : welcome.maskedTo,
+    },
+  })
 }

@@ -7,13 +7,16 @@ import { esc } from '@/lib/safe-html'
 import { hrNotifyEmails } from '@/lib/notify'
 import {
   VehicleDetailsSchema, GasCardSchema, cleanDetails, VEHICLE_FIELDS, VEHICLE_FIELD_LABELS, GAS_CARD_LABEL,
-  VEHICLE_TASK_KEY, VEHICLE_TASK_NAME, INSURANCE_TASK_KEY, INSURANCE_TASK_NAME, VEHICLE_TASK_KEYS,
+  VEHICLE_TASK_KEY, VEHICLE_TASK_NAME, VEHICLE_TASK_KEYS, VEHICLE_STEP_ORDER,
   type VehicleActorStep, type VehicleStep,
 } from '@/lib/vehicle'
-import { vehicleStepAccounts, stepsOf, encryptDetails, decryptDetails, queueVehicleNotice } from '@/lib/vehicle-server'
+import {
+  vehicleStepAccounts, stepsOf, encryptDetails, decryptDetails, queueVehicleNotice, driversLicense, tryStartInsurance,
+} from '@/lib/vehicle-server'
 
 const NOT_FOUND = () => NextResponse.json({ error: 'Not found' }, { status: 404, headers: { 'Cache-Control': 'no-store' } })
-const ORDER: VehicleStep[] = ['rob', 'heather', 'marley', 'complete']
+// rob → heather → license (waiting on the approved Driver's License) → marley → complete
+const ORDER = VEHICLE_STEP_ORDER
 
 const BodySchema = z.discriminatedUnion('step', [
   z.strictObject({ step: z.literal('rob'),     details: VehicleDetailsSchema, gasCard: GasCardSchema }),
@@ -37,7 +40,9 @@ async function gate(hireIdRaw: string, scope: string, max: number) {
   const [accounts, { data: row }, { data: myTasks }] = await Promise.all([
     vehicleStepAccounts(admin),
     admin.from('vehicle_requests').select('*').eq('newhire_id', hireIdRaw).maybeSingle(),
-    admin.from('stakeholder_tasks').select('task_key, status').eq('newhire_id', hireIdRaw).eq('assigned_to', auth.user.id).in('task_key', [...VEHICLE_TASK_KEYS]),
+    // Hidden tasks (a cancelled request) do not count as access
+    admin.from('stakeholder_tasks').select('task_key, status').eq('newhire_id', hireIdRaw).eq('assigned_to', auth.user.id)
+      .in('task_key', [...VEHICLE_TASK_KEYS]).eq('hidden_from_stakeholder', false),
   ])
   const mine = stepsOf(accounts, auth.user.id)
   // Visible only to Rob, Heather and Marley, and only once their own step has started (their task exists)
@@ -58,6 +63,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ hir
   const name = (id: string | null) => (id && people?.find(p => p.id === id)?.full_name) || null
 
   const myTurn = mine.includes(row.step as VehicleActorStep) ? row.step : null
+  // Marley's turn: the hire's Driver's License (status and expiry only; the file comes from
+  // GET .../license, which checks her turn again)
+  const license = myTurn === 'marley' ? await driversLicense(admin, hireId) : null
   return NextResponse.json({
     step:     row.step,
     my_step:  myTurn,                        // the step this person may act on now (or null)
@@ -67,6 +75,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ hir
     rob:      { name: name(row.rob_completed_by) ?? accounts.rob?.name ?? null,         at: row.rob_completed_at },
     heather:  { name: name(row.heather_completed_by) ?? accounts.heather?.name ?? null, at: row.heather_completed_at },
     marley:   { name: name(row.marley_confirmed_by) ?? accounts.marley?.name ?? null,   at: row.marley_confirmed_at },
+    license:  license ? { approved: license.status === 'approved', expiry_date: license.expiry_date } : null,
   }, { headers: { 'Cache-Control': 'no-store' } })
 }
 
@@ -89,6 +98,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ hir
   const body = parsed.data
   if (!mine.includes(body.step)) return NextResponse.json({ error: 'This step belongs to someone else.' }, { status: 403 })
 
+  if (row.step === 'cancelled') return NextResponse.json({ error: 'This vehicle request was cancelled by HR.' }, { status: 409 })
   const at = ORDER.indexOf(row.step as VehicleStep)
   const want = ORDER.indexOf(body.step)
   if (at > want) return NextResponse.json({ error: 'This step has already been completed.' }, { status: 409 })
@@ -99,9 +109,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ hir
   const details = body.step === 'marley' ? null : cleanDetails(body.details)
   const gas     = body.step === 'marley' ? null : body.gasCard === null ? null : body.gasCard === 'yes'
 
-  const next = body.step === 'rob'     ? { acct: accounts.heather, key: VEHICLE_TASK_KEY,   name: VEHICLE_TASK_NAME }
-             : body.step === 'heather' ? { acct: accounts.marley,  key: INSURANCE_TASK_KEY, name: INSURANCE_TASK_NAME }
-             : null
+  // Insurance needs the licence: if HR has since un-approved it, Marley cannot confirm
+  if (body.step === 'marley' && (await driversLicense(admin, hireId)).status !== 'approved') {
+    return NextResponse.json({ error: 'The hire’s Driver’s License is no longer approved. Please contact HR.' }, { status: 409 })
+  }
+
+  // Heather's step creates no task: Marley's starts only once the Driver's License is approved too
+  // (tryStartInsurance, below and after HR approves the licence)
+  const next = body.step === 'rob' ? { acct: accounts.heather, key: VEHICLE_TASK_KEY, name: VEHICLE_TASK_NAME } : null
   if (next && !next.acct) {
     console.error('[vehicle] next step account was not found')
     return NextResponse.json({ error: 'The next person for this vehicle request could not be found. Please contact HR.' }, { status: 409 })
@@ -141,9 +156,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ hir
   }
   await admin.from('audit_log').insert({ user_id: hireId, action_type: body.step === 'marley' ? 'green' : 'navy', message, performed_by: user.id })
 
-  // Next person's notice, or HR's when all three are done
+  // Next person's notice, or HR's when all three are done. After Heather, Marley's step (and her
+  // notice) starts here only if the licence is already approved; otherwise HR's approval starts it.
   if (body.step === 'rob')     await queueVehicleNotice(admin, hireId, 'heather', accounts.heather!.email)
-  if (body.step === 'heather') await queueVehicleNotice(admin, hireId, 'marley', accounts.marley!.email)
+  if (body.step === 'heather') await tryStartInsurance(admin, hireId)
   if (body.step === 'marley')  await queueVehicleNotice(admin, hireId, 'complete', hrNotifyEmails())
 
   return NextResponse.json({ ok: true })

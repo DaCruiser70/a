@@ -5,6 +5,7 @@ import { requireRole } from '@/lib/roles'
 import { rateLimit, rateLimitKey } from '@/lib/rate-limit'
 import { REVEAL_GROUPS } from '@/lib/reveal'
 import { auditReveal, issueRevealCode } from '@/lib/reveal-server'
+import { CODE_SEND_FAILED } from '@/lib/code-delivery'
 
 const BodySchema = z.strictObject({ group: z.enum(REVEAL_GROUPS) })
 
@@ -45,6 +46,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const issued = await issueRevealCode(admin, user.id, user.email, id, group)
   if (!issued.ok) {
     if (issued.reason === 'unavailable') return UNAVAILABLE()
+    // 502, not 503: the dialog shows this message and lets the person try again
+    if (issued.reason === 'send_failed') return NextResponse.json({ error: CODE_SEND_FAILED }, { status: 502 })
     return NextResponse.json({ error: 'Could not send a code. Please try again.' }, { status: 500 })
   }
 

@@ -3,6 +3,8 @@ import { createServiceClient } from '@/lib/supabase/server'
 import { requireRole } from '@/lib/roles'
 import { recomputeProfileStatus } from '@/lib/hire-status'
 import { syncClearancePackage } from '@/lib/clearance-package'
+import { DRIVERS_LICENSE_TYPE } from '@/lib/required-documents'
+import { tryStartInsurance } from '@/lib/vehicle-server'
 
 export async function GET(
   _request: Request,
@@ -48,7 +50,7 @@ export async function PATCH(
   // Verify document belongs to the specified hire
   const { data: doc } = await admin
     .from('newhire_documents')
-    .select('id, user_id')
+    .select('id, user_id, document_type')
     .eq('id', documentId)
     .maybeSingle()
 
@@ -68,6 +70,9 @@ export async function PATCH(
   await recomputeProfileStatus(admin, id)
   // An ID document (driver's licence or alternate ID) is part of the clearance package
   await syncClearancePackage(admin, id, user.id)
+  // An approved Driver's License may be the last thing Marley's insurance step was waiting for.
+  // Safe to call every time: it starts the step at most once.
+  if (action === 'approve' && doc.document_type === DRIVERS_LICENSE_TYPE) await tryStartInsurance(admin, id)
 
   return NextResponse.json({ ok: true })
 }

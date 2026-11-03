@@ -4,7 +4,7 @@ import type { Database } from '@/types'
 import { decrypt, isEncrypted } from '@/lib/encrypt'
 import { hmacHex } from '@/lib/auth-secrets'
 import { esc } from '@/lib/safe-html'
-import { devOtpEnabled } from '@/lib/otp-issue'
+import { deliverCode, codeDeliveryPossible, devOtpEnabled } from '@/lib/code-delivery'
 import type { RevealGroup } from '@/lib/reveal'
 
 // Server only. The code that gates reveals of a hire's SIN, banking numbers, personal details
@@ -25,29 +25,28 @@ export function hashRevealCode(hrUserId: string, hireId: string, group: RevealGr
 }
 
 // ── Delivery ──
-// Email is sent directly at issue time. No sender is wired up yet: until one is, delivery is
-// unavailable, and the route falls back to the development echo (ALLOW_DEV_OTP=true, not
-// production) or fails closed. Wire the provider here; never pass the code anywhere else.
-export function revealEmailConfigured(): boolean {
-  return false
-}
+// The code is emailed at issue time (lib/code-delivery.ts → lib/mailer.ts) to the requester's own
+// address, or shown by the development echo (ALLOW_DEV_OTP=true, never in production). With no
+// way to deliver it no code is created; when the email fails the code is invalidated.
 
-async function sendRevealCodeEmail(message: { to: string; code: string; what: string }): Promise<boolean> {
-  void message   // no provider wired yet
-  return false
+// Names the kind of record in the email, never whose or any value
+const RECORD_TYPE: Record<RevealGroup, string> = {
+  banking:   'banking details',
+  sin:       'Social Insurance Number',
+  personal:  'personal details',
+  clearance: 'clearance details',
 }
 
 export type IssueResult =
   | { ok: true; devCode?: string }
-  | { ok: false; reason: 'unavailable' | 'error' }
+  | { ok: false; reason: 'unavailable' | 'error' | 'send_failed' }
 
 export async function issueRevealCode(
   admin: Admin, hrUserId: string, hrEmail: string | null | undefined, hireId: string, group: RevealGroup,
 ): Promise<IssueResult> {
-  const canEmail = revealEmailConfigured() && !!hrEmail
-  const dev      = devOtpEnabled()
+  const dev = devOtpEnabled()
   // Fail closed before a code exists when there is no way to deliver it
-  if (!canEmail && !dev) return { ok: false, reason: 'unavailable' }
+  if (!codeDeliveryPossible() || (!hrEmail && !dev)) return { ok: false, reason: 'unavailable' }
 
   const code = randomInt(0, 1_000_000).toString().padStart(6, '0')
   const { data: issued, error } = await admin.rpc('issue_reveal_code', {
@@ -62,12 +61,17 @@ export async function issueRevealCode(
     return { ok: false, reason: 'error' }
   }
 
-  if (canEmail) {
-    const sent = await sendRevealCodeEmail({ to: hrEmail!, code, what: group === 'sin' ? 'SIN' : group === 'clearance' ? 'clearance details' : group === 'personal' ? 'personal details' : 'banking numbers' })
-    if (sent) return { ok: true }
-    if (!dev) return { ok: false, reason: 'unavailable' }
+  const delivered = hrEmail
+    ? await deliverCode(admin, hrUserId, hrEmail, { kind: 'reveal', code, ttlSeconds: REVEAL_TTL_SECONDS, recordType: RECORD_TYPE[group] })
+    : dev
+  if (!delivered) {
+    // Never leave a usable code behind when it could not be delivered
+    const { error: invalidateError } = await admin.from('reveal_codes').update({ used: true })
+      .eq('hr_user_id', hrUserId).eq('hire_id', hireId).eq('grp', group).eq('used', false)
+    if (invalidateError) console.error(`[reveal] invalidation after failed send failed (code ${invalidateError.code})`)
+    return { ok: false, reason: 'send_failed' }
   }
-  return { ok: true, devCode: code }
+  return dev ? { ok: true, devCode: code } : { ok: true }
 }
 
 // ── Values ──

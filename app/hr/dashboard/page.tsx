@@ -18,6 +18,7 @@ import {
 } from '@/lib/hr-dashboard'
 import type { HireStatus, NewHireRow } from '@/types'
 import { TOTAL_ITEMS } from '@/lib/hire-status'
+import Modal from '@/components/ui/Modal'
 
 // CSV export labels (unchanged from the previous dashboard)
 const STATUS_LABELS: Record<string,string> = {
@@ -42,12 +43,13 @@ function isDashFilter(v: unknown): v is DashFilter {
 }
 
 const EMPTY_HIRE = {
-  name: '', preferredName: '', personalEmail: '', aemEmail: '',
+  name: '', preferredName: '', personalEmail: '', contactEmail: '', aemEmail: '',
   role: '', officeLocation: '', region: '', reportingManagerId: '',
   startDate: '', formDeadline: '', probationPeriod: '',
 }
 
-type CreatedHire = { name: string; aemEmail: string; personalEmail: string; tempPassword: string }
+// No password is ever part of this: the hire sets their own through the emailed link
+type CreatedHire = { id: string; name: string; welcomeSent: boolean; welcomeTo: string | null }
 
 export default function HRDashboard() {
   const router = useRouter()
@@ -72,7 +74,8 @@ export default function HRDashboard() {
   const [submitting, setSubmitting]     = useState(false)
   const [addError, setAddError]         = useState('')
   const [createdHire, setCreatedHire]   = useState<CreatedHire | null>(null)
-  const [copied, setCopied]             = useState(false)
+  const [resending, setResending]       = useState(false)
+  const [resendError, setResendError]   = useState('')
   const [toast, setToast]               = useState<string|null>(null)
   const [newHire, setNewHire]           = useState(EMPTY_HIRE)
   const [managerMissing, setManagerMissing] = useState(false)
@@ -176,6 +179,7 @@ export default function HRDashboard() {
         name:                 newHire.name,
         preferredName:        newHire.preferredName,
         personalEmail:        newHire.personalEmail,
+        contactEmail:         newHire.contactEmail,
         aemEmail:             newHire.aemEmail,
         role:                 newHire.role,
         officeLocation:       newHire.officeLocation,
@@ -189,28 +193,45 @@ export default function HRDashboard() {
     })
 
     if (!res.ok) {
-      const data = await res.json()
+      const data = await res.json().catch(() => ({}))
       setAddError(data.error ?? 'Failed to add hire — please try again.')
       setSubmitting(false)
       return
     }
 
-    const { tempPassword } = await res.json()
+    const created = await res.json().catch(() => ({})) as { id?: string; welcome?: { sent?: boolean; to?: string | null } }
 
     // Refresh the dashboard with real data from the server
     setVersion(v => v + 1)
 
-    setCreatedHire({ name: newHire.name, aemEmail: newHire.aemEmail, personalEmail: newHire.personalEmail, tempPassword })
+    setCreatedHire({
+      id:          created.id ?? '',
+      name:        newHire.name,
+      welcomeSent: created.welcome?.sent === true,
+      welcomeTo:   created.welcome?.to ?? null,
+    })
+    setResendError('')
     closeAddModal()
     setShowSuccessModal(true)
   }
 
-  function handleCopy() {
-    if (!createdHire) return
-    navigator.clipboard.writeText(createdHire.tempPassword).then(() => {
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    })
+  // The account exists either way; this only sends a fresh welcome link (earlier ones stop working)
+  async function handleResendWelcome() {
+    if (!createdHire?.id || resending) return
+    setResending(true)
+    setResendError('')
+    try {
+      const res  = await fetch(`/api/hr/hires/${createdHire.id}/password-link`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'welcome' }),
+      })
+      const body = await res.json().catch(() => ({})) as { error?: string; to?: string | null }
+      if (!res.ok) { setResendError(body.error ?? 'The email could not be sent. Please try again in a minute.'); return }
+      setCreatedHire(h => h ? { ...h, welcomeSent: true, welcomeTo: body.to ?? h.welcomeTo } : h)
+    } catch {
+      setResendError('Could not reach the server. Check your connection and try again.')
+    } finally {
+      setResending(false)
+    }
   }
 
   const fieldStyle: React.CSSProperties = {
@@ -558,7 +579,7 @@ export default function HRDashboard() {
             <div className="hr-modal-header">
               <div>
                 <div className="hr-modal-title">Add New Hire</div>
-                <div className="hr-modal-sub">Complete all required fields — they will receive login credentials at their AEM email</div>
+                <div className="hr-modal-sub">Complete all required fields. They will get a welcome email with a link to set their own password.</div>
               </div>
               <button className="hr-modal-close" onClick={closeAddModal}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -620,6 +641,24 @@ export default function HRDashboard() {
                   value={newHire.aemEmail}
                   onChange={e => setNewHire(p => ({ ...p, aemEmail: e.target.value }))}
                 />
+              </div>
+
+              <div style={fieldStyle}>
+                <label htmlFor="add-hire-contact-email" style={labelStyle}>Personal email (for the welcome message)</label>
+                <input
+                  id="add-hire-contact-email"
+                  type="email"
+                  maxLength={254}
+                  autoComplete="off"
+                  style={inputStyle}
+                  placeholder="jane@gmail.com"
+                  aria-describedby="add-hire-contact-email-help"
+                  value={newHire.contactEmail}
+                  onChange={e => setNewHire(p => ({ ...p, contactEmail: e.target.value }))}
+                />
+                <span id="add-hire-contact-email-help" style={{ fontSize:'11px', color:'#888780', marginTop:'2px' }}>
+                  Optional. The welcome email and the link to set their password go here. Leave blank to use their AEM email.
+                </span>
               </div>
 
               {/* ── Role & Location ── */}
@@ -771,87 +810,41 @@ export default function HRDashboard() {
         </div>
       )}
 
-      {/* ── SUCCESS MODAL ── */}
+      {/* ── SUCCESS DIALOG: no password anywhere; the hire sets their own from the email ── */}
       {showSuccessModal && createdHire && (
-        <div className="hr-modal-overlay" onClick={() => setShowSuccessModal(false)}>
-          <div
-            className="hr-modal"
-            onClick={e => e.stopPropagation()}
-            style={{ maxWidth:'480px', padding:'0' }}
-          >
-            {/* Green header */}
-            <div style={{ background:'linear-gradient(135deg, #0D5C46, #0a7a5f)', borderRadius:'16px 16px 0 0', padding:'28px 28px 24px', textAlign:'center' }}>
-              <div style={{ width:'52px', height:'52px', background:'rgba(255,255,255,0.15)', borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 14px', border:'2px solid rgba(255,255,255,0.3)' }}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" style={{ width:'26px', height:'26px' }}>
-                  <polyline points="20 6 9 17 4 12"/>
-                </svg>
+        <Modal
+          title="New hire created"
+          description={`${createdHire.name}'s onboarding account is ready.`}
+          onClose={() => setShowSuccessModal(false)}
+          busy={resending}
+        >
+          <div aria-live="polite">
+            {createdHire.welcomeSent ? (
+              <p className="hd-welcome">
+                <span className="hh-pill green">Sent</span>
+                <span>Welcome email sent to <strong>{createdHire.welcomeTo ?? 'their email'}</strong>. The link to set their password expires in 72 hours.</span>
+              </p>
+            ) : (
+              <div className="hd-welcome warn" role="alert">
+                <span className="hh-pill amber">Not sent</span>
+                <span>
+                  The account was created, but the welcome email could not be sent
+                  {createdHire.welcomeTo ? <> to <strong>{createdHire.welcomeTo}</strong></> : null}.
+                  Try again now, or later from the hire&apos;s page.
+                </span>
               </div>
-              <div style={{ color:'#fff', fontWeight:700, fontSize:'18px', fontFamily:'sans-serif', marginBottom:'6px' }}>
-                New Hire Created Successfully
-              </div>
-              <div style={{ color:'rgba(255,255,255,0.75)', fontSize:'13px', fontFamily:'sans-serif' }}>
-                Account is ready — save the temporary password below
-              </div>
-            </div>
-
-            {/* Body */}
-            <div style={{ padding:'24px 28px 28px', fontFamily:'sans-serif' }}>
-              {/* Hire info */}
-              <div style={{ marginBottom:'20px' }}>
-                <div style={{ fontWeight:700, fontSize:'17px', color:'#1A1916', marginBottom:'4px' }}>{createdHire.name}</div>
-                <div style={{ fontSize:'13px', color:'#5F5E5A', marginBottom:'2px' }}>{createdHire.aemEmail}</div>
-                <div style={{ fontSize:'13px', color:'#5F5E5A' }}>
-                  {createdHire.personalEmail}
-                  <span style={{ marginLeft:'6px', fontSize:'11px', color:'#888780' }}>— a welcome email will be sent here</span>
-                </div>
-              </div>
-
-              {/* Temp password */}
-              <div style={{ background:'#F5F3EF', border:'1.5px solid rgba(0,0,0,0.1)', borderRadius:'10px', padding:'14px 16px', marginBottom:'12px' }}>
-                <div style={{ fontSize:'11px', fontWeight:700, color:'#888780', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:'8px' }}>
-                  Temporary Password
-                </div>
-                <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
-                  <code style={{ flex:1, fontSize:'15px', fontFamily:'monospace', color:'#1A1916', letterSpacing:'0.05em', userSelect:'all', wordBreak:'break-all' }}>
-                    {createdHire.tempPassword}
-                  </code>
-                  <button
-                    onClick={handleCopy}
-                    style={{
-                      flexShrink:0, padding:'6px 12px', borderRadius:'6px', border:'1.5px solid rgba(0,0,0,0.15)',
-                      background: copied ? '#0D5C46' : '#fff', color: copied ? '#fff' : '#4A4640',
-                      cursor:'pointer', fontFamily:'sans-serif', fontSize:'12px', fontWeight:600,
-                      transition:'all 0.15s',
-                    }}
-                  >
-                    {copied ? '✓ Copied' : 'Copy'}
-                  </button>
-                </div>
-              </div>
-
-              <div style={{ display:'flex', alignItems:'flex-start', gap:'8px', padding:'10px 12px', background:'rgba(231,76,60,0.06)', border:'1px solid rgba(231,76,60,0.2)', borderRadius:'8px', marginBottom:'20px' }}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="#E74C3C" strokeWidth="2" strokeLinecap="round" style={{ width:'16px', height:'16px', flexShrink:0, marginTop:'1px' }}>
-                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-                  <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
-                </svg>
-                <div style={{ fontSize:'13px', fontWeight:700, color:'#C0392B' }}>
-                  Save this password now — it will not be shown again
-                </div>
-              </div>
-
-              <button
-                onClick={() => setShowSuccessModal(false)}
-                style={{
-                  width:'100%', padding:'11px', background:'#1B3A6B', color:'#fff',
-                  border:'none', borderRadius:'10px', cursor:'pointer',
-                  fontFamily:'sans-serif', fontSize:'14px', fontWeight:600,
-                }}
-              >
-                Close
-              </button>
-            </div>
+            )}
+            {resendError && <div className="ui-modal-error" role="alert">{resendError}</div>}
           </div>
-        </div>
+          <div className="ui-modal-actions">
+            {!createdHire.welcomeSent && createdHire.id && (
+              <button type="button" className="ui-btn-cancel" disabled={resending} onClick={handleResendWelcome}>
+                {resending ? 'Sending…' : 'Resend welcome email'}
+              </button>
+            )}
+            <button type="button" className="ui-btn-primary" disabled={resending} onClick={() => setShowSuccessModal(false)}>Done</button>
+          </div>
+        </Modal>
       )}
 
       {toast && (

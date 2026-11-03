@@ -43,6 +43,8 @@ export function equipmentProgress(
   let awaiting = 0
   for (const item of ALL_EQUIPMENT_ITEMS) {
     if (item.id === 'vehicle' && vehicleStep) {
+      // Cancelled (unticked): its old tasks no longer count; ticked again, it waits for the restart
+      if (vehicleStep === 'cancelled') { if (checked[item.id]) awaiting++; continue }
       if (vehicleStep === 'complete') done++
       else awaiting++
       continue

@@ -6,6 +6,7 @@ import { decrypt } from '@/lib/encrypt'
 import { rateLimit, rateLimitKey, getClientIp } from '@/lib/rate-limit'
 import { PENDING_SESSION_COOKIE } from '@/lib/otp-session'
 import { issueLoginCode, setPendingSession, devOtpEnabled } from '@/lib/otp-issue'
+import { CODE_SEND_FAILED } from '@/lib/code-delivery'
 import { loadAccountMember } from '@/lib/pm-server'
 
 // Step 2 of signing in to a shared regional project-management account: the person picks their
@@ -71,7 +72,11 @@ export async function POST(request: Request) {
   if (!member) return UNAVAILABLE()
 
   const issued = await issueLoginCode(admin, pending.user_id, member.id)
-  if (!issued.ok) return UNAVAILABLE()
+  if (!issued.ok) {
+    return issued.reason === 'send_failed'
+      ? NextResponse.json({ error: CODE_SEND_FAILED }, { status: 503 })
+      : UNAVAILABLE()
+  }
 
   await setPendingSession({
     access_token:  pending.access_token,

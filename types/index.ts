@@ -19,6 +19,7 @@ export type Profile = {
   progress:                 number
   preferred_name:           string | null
   personal_email:           string | null
+  contact_email:            string | null   // AES-256-GCM ciphertext (20261029_password_setup_tokens.sql); never sent to the browser
   office_location:          string | null
   reporting_manager_name:   string | null
   reporting_manager_email:  string | null
@@ -291,7 +292,7 @@ export type StakeholderTask = {
 export type VehicleRequest = {
   id:                   string
   newhire_id:           string
-  step:                 'rob' | 'heather' | 'marley' | 'complete'
+  step:                 'rob' | 'heather' | 'license' | 'marley' | 'complete' | 'cancelled'
   details_enc:          string | null
   gas_card_acquired:    boolean | null
   rob_completed_by:     string | null
@@ -328,6 +329,36 @@ export type AuditEntry = {
   message:      string
   performed_by: string | null
   created_at:   string
+}
+
+// 20261023_reveal_codes.sql. Issued and checked only by RPC; the app only marks a code used
+// when its email could not be sent.
+export type RevealCode = {
+  id:         string
+  hr_user_id: string
+  hire_id:    string
+  grp:        'banking' | 'sin' | 'clearance' | 'personal'
+  purpose:    'reveal'
+  code_hash:  string
+  attempts:   number
+  used:       boolean
+  expires_at: string
+  created_at: string
+}
+
+// 20261029_password_setup_tokens.sql. Only the SHA-256 of a token is stored. Issued and consumed
+// by RPC; the app only records delivery and releases a claim when setting the password fails.
+export type PasswordSetupToken = {
+  id:              string
+  user_id:         string
+  token_hash:      string
+  purpose:         'welcome' | 'reset'
+  expires_at:      string
+  used_at:         string | null
+  created_by:      string | null
+  created_at:      string
+  delivery_status: 'sent' | 'failed' | 'pending'
+  sent_at:         string | null
 }
 
 export type OtpCode = {
@@ -445,6 +476,18 @@ export type Database = {
         Update:        Partial<Pick<AuditEntry, 'message'>>
         Relationships: []
       }
+      reveal_codes: {
+        Row:           RevealCode
+        Insert:        never
+        Update:        Partial<Pick<RevealCode, 'used'>>
+        Relationships: []
+      }
+      password_setup_tokens: {
+        Row:           PasswordSetupToken
+        Insert:        never
+        Update:        Partial<Pick<PasswordSetupToken, 'used_at' | 'expires_at' | 'delivery_status' | 'sent_at'>>
+        Relationships: []
+      }
       otp_codes: {
         Row:           OtpCode
         Insert:        Omit<OtpCode, 'id' | 'created_at' | 'attempts'>
@@ -492,6 +535,19 @@ export type Database = {
         Args:    { p_hr_user_id: string; p_hire_id: string; p_group: 'banking' | 'sin' | 'clearance' | 'personal'; p_code_hash: string }
         Returns: 'ok' | 'bad' | 'locked' | 'none'
       }
+      // 20261029_password_setup_tokens.sql
+      issue_password_token: {
+        Args:    { p_user_id: string; p_token_hash: string; p_purpose: 'welcome' | 'reset'; p_ttl_seconds: number; p_created_by: string | null }
+        Returns: string | null
+      }
+      consume_password_token: {
+        Args:    { p_token_hash: string }
+        Returns: Array<{ token_id: string; user_id: string; purpose: 'welcome' | 'reset'; token_hash: string }>
+      }
+      revoke_user_sessions: {
+        Args:    { p_user_id: string }
+        Returns: number
+      }
       // 20261028_vehicle_requests.sql
       start_vehicle_request: {
         Args:    { p_newhire_id: string; p_rob_id: string; p_task_name: string }
@@ -504,6 +560,15 @@ export type Database = {
           p_next_assignee: string | null; p_next_task_key: string | null; p_next_task_name: string | null
         }
         Returns: 'ok' | 'conflict' | 'invalid'
+      }
+      // 20261102_vehicle_insurance_license.sql
+      start_vehicle_insurance: {
+        Args:    { p_newhire_id: string; p_marley_id: string; p_task_name: string }
+        Returns: boolean
+      }
+      cancel_vehicle_request: {
+        Args:    { p_newhire_id: string }
+        Returns: boolean
       }
       // 20261024_clearance_packages.sql: one conditional stage move plus its history row
       move_clearance_stage: {

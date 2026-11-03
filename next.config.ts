@@ -19,6 +19,16 @@ const nextConfig: NextConfig = {
     return [
       { source: "/:path*",     headers: securityHeaders },
       { source: "/api/:path*", headers: [{ key: "Cache-Control", value: "no-store" }] },
+      // The emailed set-password link: nothing leaks through Referer, caches or search engines.
+      // Listed after the global rule so its Referrer-Policy wins.
+      {
+        source: "/set-password",
+        headers: [
+          { key: "Referrer-Policy", value: "no-referrer" },
+          { key: "Cache-Control",   value: "no-store" },
+          { key: "X-Robots-Tag",    value: "noindex, nofollow" },
+        ],
+      },
     ];
   },
 };

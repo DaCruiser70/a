@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createServiceClient } from '@/lib/supabase/server'
 import { requireRole } from '@/lib/roles'
-import { computeHireStatus } from '@/lib/hire-status'
+import { computeHireStatus, hasCompanyVehicle } from '@/lib/hire-status'
 import { planChip, PLAN_CHIP_LABELS, CLEARANCE_LABELS, todayIso } from '@/lib/manager-plan'
 import { getClearanceRequirements, computeClearanceStatus, CLEARANCE_STATUS_LABELS, PACKAGE_STAGE_LABELS } from '@/lib/clearance'
 import { needsPmRequest, pmChipState, PM_CHIP_LABELS } from '@/lib/pm'
@@ -64,7 +64,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   // ── Forms ──
   const formRows = { personal, banking, sin, policy }
   const forms = Object.fromEntries(HIRE_FORMS.map(f => [f, (formRows[f]?.form_status ?? 'pending') as FormStatus])) as HireOverview['forms']
-  const computed = computeHireStatus(HIRE_FORMS.map(f => forms[f]), docs ?? [])
+  const computed = computeHireStatus(HIRE_FORMS.map(f => forms[f]), docs ?? [], { companyVehicle: hasCompanyVehicle(equipment?.items) })
   const docItem  = computed.documents
   const flagged  = HIRE_FORMS.filter(f => forms[f] === 'flagged')
   const inReview = HIRE_FORMS.filter(f => forms[f] === 'review')

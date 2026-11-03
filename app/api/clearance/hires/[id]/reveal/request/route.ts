@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { rateLimit, rateLimitKey } from '@/lib/rate-limit'
 import { CLEARANCE_REVEAL_GROUP } from '@/lib/reveal'
 import { auditReveal, issueRevealCode } from '@/lib/reveal-server'
+import { CODE_SEND_FAILED } from '@/lib/code-delivery'
 import { reviewerGate } from '@/lib/clearance-review-server'
 
 const BodySchema = z.strictObject({ group: z.literal(CLEARANCE_REVEAL_GROUP) })
@@ -35,6 +36,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const issued = await issueRevealCode(admin, userId, me?.aem_email, hireId, CLEARANCE_REVEAL_GROUP)
   if (!issued.ok) {
     if (issued.reason === 'unavailable') return NextResponse.json({ error: 'Reveal is unavailable right now. Please try again later.' }, { status: 503 })
+    // 502, not 503: the dialog shows this message and lets the person try again
+    if (issued.reason === 'send_failed') return NextResponse.json({ error: CODE_SEND_FAILED }, { status: 502 })
     return NextResponse.json({ error: 'Could not send a code. Please try again.' }, { status: 500 })
   }
 

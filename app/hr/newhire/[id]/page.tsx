@@ -18,7 +18,8 @@ import HireTabBar, { StatusPill, panelId, tabId, type TabDef } from '@/component
 import OverviewPanel from '@/components/hr/hire/OverviewPanel'
 import AuditLogCard from '@/components/hr/hire/AuditLogCard'
 import VehicleRequestRow from '@/components/hr/hire/VehicleRequestRow'
-import { VEHICLE_STEP_LABELS, VEHICLE_TASK_KEYS, type VehicleStep } from '@/lib/vehicle'
+import PasswordLinkCard from '@/components/hr/hire/PasswordLinkCard'
+import { VEHICLE_STEP_LABELS, VEHICLE_TASK_KEYS, type LicenseStatus, type VehicleStep } from '@/lib/vehicle'
 import RevealModal, { type RevealedBanking, type RevealedPersonal, type RevealResult } from '@/components/hr/hire/RevealModal'
 import { PHONE_CHOICE_LABELS, WORK_PHONE_PLATFORM_LABELS, formatDob } from '@/lib/personal-info'
 import { REVEAL_VISIBLE_SECONDS, type RevealGroup } from '@/lib/reveal'
@@ -122,6 +123,8 @@ export default function HRNewHirePage() {
   const [stakeholderTasks, setStakeholderTasks] = useState<(StakeholderTask & { stakeholder_name: string | null; has_note: boolean })[] | null>(null)
   // Company vehicle request step (Rob → Heather → Marley); null when the hire has no request
   const [vehicleStep, setVehicleStep]           = useState<VehicleStep | null>(null)
+  // The hire's Driver's License as the vehicle request sees it (for the step pill's reason)
+  const [vehicleLicense, setVehicleLicense]     = useState<LicenseStatus | null>(null)
   const [revealedNotes, setRevealedNotes]       = useState<Record<string, string>>({})
   const [fetchingNote, setFetchingNote]         = useState<string | null>(null)
   const [expandedGroups, setExpandedGroups]     = useState<Record<string, boolean>>({})
@@ -257,7 +260,7 @@ export default function HRNewHirePage() {
     if (!hireId || !equipmentOpened) return
     fetch(`/api/hr/hires/${hireId}/stakeholder-tasks`)
       .then(r => r.ok ? r.json() : { tasks: [] })
-      .then(data => { setStakeholderTasks(data.tasks ?? []); setVehicleStep(data.vehicle?.step ?? null) })
+      .then(data => { setStakeholderTasks(data.tasks ?? []); setVehicleStep(data.vehicle?.step ?? null); setVehicleLicense(data.vehicle?.license ?? null) })
       .catch(() => setStakeholderTasks([]))
   }, [hireId, equipmentOpened])
 
@@ -415,9 +418,14 @@ export default function HRNewHirePage() {
     // savedItems state — savedItems can drift out of sync with the database.
     const existingTaskKeys = new Set((stakeholderTasks ?? []).map(t => t.task_key))
 
+    // Company Vehicle is a request, not one task: start it when there is none, or restart a cancelled
+    // one (the server does either at most once)
     const newlyChecked = Object.entries(checkedItems)
-      .filter(([key, val]) => val && !existingTaskKeys.has(key))
+      .filter(([key, val]) => val && (key === 'vehicle'
+        ? !vehicleStep || vehicleStep === 'cancelled'
+        : !existingTaskKeys.has(key)))
       .map(([key]) => key)
+    const vehicleChanged = !!savedItems.vehicle !== !!checkedItems.vehicle
 
     setSavedItems({ ...checkedItems })
     await fetch(`/api/hr/hires/${hireId}/equipment`, {
@@ -425,6 +433,14 @@ export default function HRNewHirePage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ items: checkedItems }),
     })
+
+    // Unticking Company Vehicle cancels an unfinished request on the server: show that straight away
+    if (vehicleChanged && !checkedItems.vehicle) {
+      fetch(`/api/hr/hires/${hireId}/stakeholder-tasks`)
+        .then(r => r.ok ? r.json() : { tasks: [] })
+        .then(data => { setStakeholderTasks(data.tasks ?? []); setVehicleStep(data.vehicle?.step ?? null); setVehicleLicense(data.vehicle?.license ?? null) })
+        .catch(() => {})
+    }
 
     if (newlyChecked.length > 0) {
       const notifyRes = await fetch(`/api/hr/hires/${hireId}/equipment/notify`, {
@@ -437,7 +453,7 @@ export default function HRNewHirePage() {
         if (tasksCreated > 0) {
           fetch(`/api/hr/hires/${hireId}/stakeholder-tasks`)
             .then(r => r.ok ? r.json() : { tasks: [] })
-            .then(data => { setStakeholderTasks(data.tasks ?? []); setVehicleStep(data.vehicle?.step ?? null) })
+            .then(data => { setStakeholderTasks(data.tasks ?? []); setVehicleStep(data.vehicle?.step ?? null); setVehicleLicense(data.vehicle?.license ?? null) })
             .catch(() => {})
         }
       }
@@ -849,6 +865,8 @@ export default function HRNewHirePage() {
                   </div>
                 </div>
 
+                <PasswordLinkCard hireId={hireId} onToast={toastAndRefresh} />
+
                 <section className="hh-card" aria-labelledby="hh-latest-title">
                   <div className="hh-card-head row">
                     <h2 id="hh-latest-title" className="hh-card-title">Latest activity</h2>
@@ -1205,8 +1223,10 @@ export default function HRNewHirePage() {
                       <div className="hrd-equip-category-label">{cat.category}</div>
                       <div className="hrd-equip-items">
                         {cat.items.map(item => {
-                          const vehicleFlow    = item.id === 'vehicle' && !!vehicleStep
-                          const itemTasks      = tasksByKey[item.id] ?? []
+                          // A cancelled request (Company Vehicle unticked) is shown as a plain, unticked item
+                          const vehicleCancelled = item.id === 'vehicle' && vehicleStep === 'cancelled'
+                          const vehicleFlow    = item.id === 'vehicle' && !!vehicleStep && !vehicleCancelled
+                          const itemTasks      = vehicleCancelled ? [] : tasksByKey[item.id] ?? []
                           const confirmedTasks = itemTasks.filter(t => t.status === 'confirmed')
                           const pendingTasks   = itemTasks.filter(t => t.status === 'pending')
                           const isConfirmed    = vehicleFlow ? vehicleStep === 'complete' : itemTasks.length > 0 && pendingTasks.length === 0
@@ -1273,11 +1293,11 @@ export default function HRNewHirePage() {
                     <p className="hh-card-sub">Third-party confirmations for equipment and access items</p>
                   </div>
                   <span className="hh-count-inline">
-                    {groupedTasks.filter(g => g.isComplete).length + (vehicleStep === 'complete' ? 1 : 0)}/{groupedTasks.length + (vehicleStep ? 1 : 0)} confirmed
+                    {groupedTasks.filter(g => g.isComplete).length + (vehicleStep === 'complete' ? 1 : 0)}/{groupedTasks.length + (vehicleStep && vehicleStep !== 'cancelled' ? 1 : 0)} confirmed
                   </span>
                 </div>
 
-                {vehicleStep && <VehicleRequestRow hireId={hireId} step={vehicleStep} />}
+                {vehicleStep && <VehicleRequestRow hireId={hireId} step={vehicleStep} license={vehicleLicense} />}
 
                 {groupedTasks.length === 0 && !vehicleStep ? (
                   <div className="hh-empty">No stakeholder tasks created yet. They are generated when equipment items are saved.</div>

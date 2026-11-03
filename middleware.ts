@@ -9,6 +9,9 @@ import {
 // calls requireRole(), which applies the same rule plus the role check.
 const OTP_API_PREFIXES = ['/api/hr', '/api/stakeholder', '/api/payroll', '/api/manager', '/api/project-mgmt', '/api/pm', '/api/clearance']
 
+// Same value as SET_PASSWORD_PATH in lib/password-setup.ts (server only, not imported here)
+const SET_PASSWORD_PATH = '/set-password'
+
 function matchesPrefix(pathname: string, prefixes: string[]) {
   return prefixes.some(p => pathname === p || pathname.startsWith(`${p}/`))
 }
@@ -77,6 +80,9 @@ export async function middleware(request: NextRequest) {
   }
 
   if (isApi) return supabaseResponse
+
+  // The emailed set-password link works signed in or out; it never signs anyone in
+  if (pathname === SET_PASSWORD_PATH) return noStore(supabaseResponse)
 
   // Not logged in → redirect to login (except for login itself)
   if (!user) {

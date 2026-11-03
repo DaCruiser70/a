@@ -4,7 +4,7 @@ import { requireRole } from '@/lib/roles'
 import { decryptFields } from '@/lib/encrypt'
 import { esc } from '@/lib/safe-html'
 import { rateLimit, rateLimitKey } from '@/lib/rate-limit'
-import { computeHireStatus } from '@/lib/hire-status'
+import { computeHireStatus, hasCompanyVehicle } from '@/lib/hire-status'
 import type { NewHireDetail, FormStatus } from '@/types'
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -77,7 +77,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   }
 
   const computed = computeHireStatus(
-    [formStatuses.personal, formStatuses.banking, formStatuses.sin, formStatuses.policy], docs ?? [])
+    [formStatuses.personal, formStatuses.banking, formStatuses.sin, formStatuses.policy], docs ?? [],
+    { companyVehicle: hasCompanyVehicle(equipment?.items) })
 
   const flagReasons: Record<string, string | null> = {
     personal: personal?.flag_reason ?? null,

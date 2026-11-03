@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createServiceClient } from '@/lib/supabase/server'
 import { requireRole } from '@/lib/roles'
-import { computeHireStatus } from '@/lib/hire-status'
+import { computeHireStatus, companyVehicleHires } from '@/lib/hire-status'
 import { managerIdsFor } from '@/lib/manager-access'
 import { isPlanOverdue, todayIso } from '@/lib/manager-plan'
 
@@ -57,6 +57,7 @@ export async function GET(request: Request) {
   ])
   const docsByUser: Record<string, { document_type: string; form_status: string }[]> = {}
   for (const d of docs.data ?? []) (docsByUser[d.user_id] ??= []).push(d)
+  const vehicleHires = await companyVehicleHires(admin, hireIds)
 
   const byId = <T extends { user_id: string }>(rows: T[] | null) =>
     Object.fromEntries((rows ?? []).map(r => [r.user_id, r]))
@@ -69,7 +70,7 @@ export async function GET(request: Request) {
     const computed = computeHireStatus([
       piMap[plan.newhire_id]?.form_status, biMap[plan.newhire_id]?.form_status,
       siMap[plan.newhire_id]?.form_status, poMap[plan.newhire_id]?.form_status,
-    ], docsByUser[plan.newhire_id] ?? [])
+    ], docsByUser[plan.newhire_id] ?? [], { companyVehicle: vehicleHires.has(plan.newhire_id) })
     return {
       hire_id:         plan.newhire_id,
       name:            p?.full_name       ?? '—',

@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database, FormStatus } from '@/types'
 import { computeDocumentStatus, computeSubmission, type RequiredItem, type Submission } from '@/lib/submission'
 import { queueNotification, hrNotifyEmails, appUrl } from '@/lib/notify'
+import { hasCompanyVehicle } from '@/lib/hire-status'
 
 type Admin = SupabaseClient<Database>
 
@@ -10,21 +11,23 @@ export async function loadSubmission(admin: Admin, userId: string): Promise<{
   statuses:   Record<RequiredItem, FormStatus>
   submission: Submission
 }> {
-  const [pi, bi, si, po, docs] = await Promise.all([
+  const [pi, bi, si, po, docs, equipment] = await Promise.all([
     admin.from('personal_info').select('form_status').eq('user_id', userId).maybeSingle(),
     admin.from('banking_info').select('form_status').eq('user_id', userId).maybeSingle(),
     admin.from('sin_info').select('form_status').eq('user_id', userId).maybeSingle(),
     admin.from('policy_acknowledgements').select('form_status').eq('user_id', userId).maybeSingle(),
     admin.from('newhire_documents').select('document_type, form_status').eq('user_id', userId),
+    admin.from('equipment_provisioning').select('items').eq('user_id', userId).maybeSingle(),
   ])
+  const req = { companyVehicle: hasCompanyVehicle(equipment.data?.items) }
   const statuses: Record<RequiredItem, FormStatus> = {
     personal:  pi.data?.form_status ?? 'pending',
     banking:   bi.data?.form_status ?? 'pending',
     sin:       si.data?.form_status ?? 'pending',
     policy:    po.data?.form_status ?? 'pending',
-    documents: computeDocumentStatus(docs.data ?? []),
+    documents: computeDocumentStatus(docs.data ?? [], req),
   }
-  return { statuses, submission: computeSubmission(statuses, docs.data ?? []) }
+  return { statuses, submission: computeSubmission(statuses, docs.data ?? [], req) }
 }
 
 // Call after any required form or document is saved. When that save completes the set, it queues

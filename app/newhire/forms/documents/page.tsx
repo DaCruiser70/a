@@ -6,7 +6,7 @@ import { useRef, useState, useEffect, useCallback } from 'react'
 import '../../../../styles/pages/form-pages.css'
 import { createClient } from '@/lib/supabase/client'
 import type { NewhireDocument } from '@/types'
-import { REQUIRED_DOCUMENT_SLOTS } from '@/lib/required-documents'
+import { requiredDocumentSlots } from '@/lib/required-documents'
 import { computeDocumentsItem } from '@/lib/hire-status'
 import { FORMS_HOME, COMPLETE_PAGE } from '@/lib/routes'
 
@@ -185,7 +185,7 @@ function SectionHead({ title, icon }: { title: string; icon: React.ReactNode }) 
 
 // ── Single document card ──────────────────────────────────────────────────────
 function DocCard({
-  docType, docLabel, description, required, oneOf, notNeeded, needsExpiry, extra,
+  docType, docLabel, description, required, oneOf, notNeeded, needsExpiry, extra, notice,
   doc, uploadState, onUploadChange, onUpload,
 }: {
   docType: string
@@ -196,6 +196,7 @@ function DocCard({
   notNeeded?: boolean   // the other accepted document is already approved or waiting on HR
   needsExpiry: boolean
   extra?: React.ReactNode
+  notice?: string       // one line under the description (why this card is required, or not enough)
   doc: NewhireDocument | undefined
   uploadState: UploadState
   onUploadChange: (patch: Partial<UploadState>) => void
@@ -226,6 +227,7 @@ function DocCard({
             }
           </div>
           <div className="form-section-heading-sub" style={{ lineHeight: 1.5 }}>{description}</div>
+          {notice && <div className="doc-card-notice" role="note">{notice}</div>}
         </div>
         {notNeeded && !doc
           ? <span className="doc-not-needed">Not needed</span>
@@ -329,6 +331,8 @@ export default function DocumentsPage() {
   const [officeLocation, setOfficeLocation] = useState<string | null>(null)
   const [loading, setLoading]               = useState(true)
   const [noInsurance, setNoInsurance]       = useState(false)
+  // Assigned a company vehicle: the Driver's License is the required ID (the server decides)
+  const [companyVehicle, setCompanyVehicle] = useState(false)
 
   const [uploadStates, setUploadStates] = useState<Record<string, UploadState>>(
     () => Object.fromEntries(SINGLE_DOC_TYPES.map(t => [t, { ...EMPTY_UPLOAD }]))
@@ -348,6 +352,7 @@ export default function DocumentsPage() {
     if (res.ok) {
       const data = await res.json()
       setDocuments(data.documents ?? [])
+      setCompanyVehicle(data.company_vehicle === true)
     }
   }, [])
 
@@ -368,6 +373,7 @@ export default function DocumentsPage() {
         setOfficeLocation(profile.office_location ?? null)
       }
       setDocuments(docsRes.documents ?? [])
+      setCompanyVehicle(docsRes.company_vehicle === true)
       setLoading(false)
     }
     init().catch(() => setLoading(false))
@@ -452,9 +458,9 @@ export default function DocumentsPage() {
   }
 
   // ── Summary ────────────────────────────────────────────────────────────────
-  const docsItem       = computeDocumentsItem(documents)
+  const docsItem       = computeDocumentsItem(documents, { companyVehicle })
   const requiredCount  = docsItem.slots.filter(sl => sl.state !== 'missing').length
-  const REQUIRED_TOTAL = REQUIRED_DOCUMENT_SLOTS.length
+  const REQUIRED_TOTAL = requiredDocumentSlots({ companyVehicle }).length
 
   const summaryStatus = docsItem.status === 'flagged' ? 'rejected'
     : docsItem.status === 'approved' ? 'approved'
@@ -551,16 +557,19 @@ export default function DocumentsPage() {
           } />
 
           <div className="doc-id-notice" role="note">
-            <strong>ID required:</strong> upload your Driver&apos;s License <strong>or</strong> an Alternative ID (you only need one).
+            {companyVehicle
+              ? <><strong>Driver&apos;s License required:</strong> you have been assigned a company vehicle, so an Alternative ID is not enough.</>
+              : <><strong>ID required:</strong> upload your Driver&apos;s License <strong>or</strong> an Alternative ID (you only need one).</>}
           </div>
 
           <DocCard
             docType="drivers_license"
             docLabel="Driver's License"
             description="Required if you will be driving a company vehicle. Also accepted as primary ID for PSPC and RCMP security clearances."
-            required={false}
-            oneOf
-            notNeeded={idCovered && getDoc('drivers_license')?.form_status !== 'approved' && getDoc('drivers_license')?.form_status !== 'review'}
+            required={companyVehicle}
+            oneOf={!companyVehicle}
+            notice={companyVehicle ? 'Required because you have been assigned a company vehicle.' : undefined}
+            notNeeded={!companyVehicle && idCovered && getDoc('drivers_license')?.form_status !== 'approved' && getDoc('drivers_license')?.form_status !== 'review'}
             needsExpiry={true}
             doc={getDoc('drivers_license')}
             uploadState={uploadStates['drivers_license']}
@@ -573,8 +582,9 @@ export default function DocumentsPage() {
             docLabel="Alternative ID"
             description="If you do not have a driver's license, please upload a passport or other government-issued photo ID. Required for security clearance purposes."
             required={false}
-            oneOf
-            notNeeded={idCovered && getDoc('alternative_id')?.form_status !== 'approved' && getDoc('alternative_id')?.form_status !== 'review'}
+            oneOf={!companyVehicle}
+            notice={companyVehicle ? 'Not enough for a company vehicle, please upload your Driver’s License.' : undefined}
+            notNeeded={!companyVehicle && idCovered && getDoc('alternative_id')?.form_status !== 'approved' && getDoc('alternative_id')?.form_status !== 'review'}
             needsExpiry={false}
             doc={getDoc('alternative_id')}
             uploadState={uploadStates['alternative_id']}
