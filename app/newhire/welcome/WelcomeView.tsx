@@ -1,12 +1,14 @@
 'use client'
 
-import Link from 'next/link'
 import Image from 'next/image'
+import Link from 'next/link'
 import { useState, useEffect, useRef } from 'react'
 import '../../../styles/pages/welcome.css'
 import { useMe } from '@/lib/use-me'
 import { PortalIdentity } from '@/components/ui/PortalName'
 import { FORMS_HOME } from '@/lib/routes'
+import ProgressRing from '@/components/welcome/ProgressRing'
+import WireJourney, { type FormStep } from '@/components/welcome/WireJourney'
 
 function getInitials(name: string) {
   return name.split(' ').filter(Boolean).map(n => n[0]).join('').toUpperCase().slice(0, 2)
@@ -98,7 +100,36 @@ function WelcomeVideo() {
   )
 }
 
-export default function WelcomePage() {
+// About AEM: a short version in station 1, and the full text behind "Read more about AEM"
+const ABOUT_SHORT =
+  'Advanced Energy Management Ltd. is one of Canada’s leading energy management companies, operating across ' +
+  'multiple provinces with a team committed to smarter, more sustainable energy solutions. Our work spans energy ' +
+  'auditing, building automation, retrofits and project management.'
+
+const ABOUT_FULL = (
+  <>
+    <h3>Powering Canada&apos;s energy future — together.</h3>
+    <p>
+      Advanced Energy Management Ltd. is one of Canada&apos;s leading energy management companies,
+      operating across multiple provinces with a team of dedicated professionals committed to
+      delivering smarter, more sustainable energy solutions. Since our founding, we&apos;ve built a
+      reputation for technical excellence, safety-first operations, and long-lasting client relationships.
+    </p>
+    <p>
+      Our work spans energy auditing, building automation, retrofits, and project management —
+      helping businesses and institutions reduce costs and their environmental footprint. Whether
+      you&apos;re joining us in the field, in the office, or remotely, you&apos;re now part of a team that
+      genuinely cares about the work it does and the people it works with.
+    </p>
+    <p>
+      This is just the beginning. We&apos;re excited to see what you&apos;ll bring to AEM.
+    </p>
+  </>
+)
+
+// The welcome page's client part (video, sign-out, name from /api/me). steps and doneCount: the
+// hire's real progress (computeHireStatus), worked out on the server (app/newhire/welcome/page.tsx).
+export default function WelcomeView({ steps, doneCount }: { steps: FormStep[]; doneCount: number }) {
   const { me } = useMe()
   const displayName = me?.name ?? ''
 
@@ -114,7 +145,7 @@ export default function WelcomePage() {
   const heroLast  = nameParts.length > 1 ? nameParts[nameParts.length - 1] : ''
 
   return (
-    <div className="welcome-page" data-portal="newhire">
+    <div className="welcome-page wire-theme" data-portal="newhire">
 
       {/* ── NAV ── */}
       <nav className="welcome-nav">
@@ -124,6 +155,9 @@ export default function WelcomePage() {
           <PortalIdentity role="newhire" tone="light" />
         </div>
         <div className="welcome-nav-right">
+          <Link href={FORMS_HOME} className="wl-forms-pill" aria-label={`Continue my forms, ${doneCount} of ${steps.length} done`}>
+            Continue my forms <span aria-hidden="true">&middot; {doneCount}/{steps.length} &rarr;</span>
+          </Link>
           <div className="welcome-nav-user">
             <div className="welcome-nav-avatar">{initials}</div>
             {displayName && <span className="welcome-nav-name">{displayName}</span>}
@@ -167,15 +201,15 @@ export default function WelcomePage() {
               }
             </div>
             <p className="welcome-hero-sub">
-              We&apos;re so glad you&apos;re here. This portal will guide you through
-              everything you need to get set up — at your own pace, all in one place.
+              We&apos;re so glad you&apos;re here. Follow the wire to see what to expect, then finish
+              your steps at your own pace, all in one place.
             </p>
             <div className="welcome-hero-badges">
               <div className="welcome-hero-badge">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                   <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>
                 </svg>
-                4 forms to complete
+                5 steps to complete
               </div>
               <div className="welcome-hero-badge">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -193,101 +227,21 @@ export default function WelcomePage() {
             </div>
           </div>
 
-          <div className="welcome-hero-logo-wrap">
-            <Image src="/logo.png" alt="AEM" width={200} height={80} />
+          <div className="welcome-hero-ring">
+            <ProgressRing done={doneCount} total={steps.length} variant="banner" />
           </div>
         </div>
       </div>
 
-      {/* ── BODY ── */}
-      <div className="welcome-body">
-
-        {/* VIDEO */}
-        <section className="welcome-fade-up" style={{ animationDelay: '0.1s' }}>
-          <div className="welcome-section-header">
-            <span className="welcome-section-tag">Welcome video</span>
-            <div className="welcome-section-line" />
-          </div>
-          <div className="welcome-video-wrap">
-            <WelcomeVideo />
-            <div className="welcome-video-footer">
-              <div>
-                <div className="welcome-video-title">Welcome to Advanced Energy Management</div>
-                <div className="welcome-video-meta">A message from our leadership team · ~5 min</div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* ABOUT */}
-        <section className="welcome-fade-up" style={{ animationDelay: '0.2s' }}>
-          <div className="welcome-section-header">
-            <span className="welcome-section-tag">About AEM</span>
-            <div className="welcome-section-line" />
-          </div>
-          <div className="welcome-about-grid">
-            <div className="welcome-about-main">
-              <h2>Powering Canada&apos;s energy future — together.</h2>
-              <p>
-                Advanced Energy Management Ltd. is one of Canada&apos;s leading energy management companies,
-                operating across multiple provinces with a team of dedicated professionals committed to
-                delivering smarter, more sustainable energy solutions. Since our founding, we&apos;ve built a
-                reputation for technical excellence, safety-first operations, and long-lasting client relationships.
-              </p>
-              <p>
-                Our work spans energy auditing, building automation, retrofits, and project management —
-                helping businesses and institutions reduce costs and their environmental footprint. Whether
-                you&apos;re joining us in the field, in the office, or remotely, you&apos;re now part of a team that
-                genuinely cares about the work it does and the people it works with.
-              </p>
-              <p>
-                This is just the beginning. We&apos;re excited to see what you&apos;ll bring to AEM.
-              </p>
-            </div>
-
-            <div className="welcome-stat-card stat-navy">
-              <div className="welcome-stat-num">20+</div>
-              <div className="welcome-stat-label">Years in operation</div>
-              <div className="welcome-stat-sub">Serving Canadian businesses since 2003</div>
-            </div>
-
-            <div className="welcome-stat-card stat-amber">
-              <div className="welcome-stat-num">5</div>
-              <div className="welcome-stat-label">Provinces served</div>
-              <div className="welcome-stat-sub">From Ontario to British Columbia</div>
-            </div>
-
-            <div className="welcome-stat-card stat-green">
-              <div className="welcome-stat-num">500+</div>
-              <div className="welcome-stat-label">Projects completed</div>
-              <div className="welcome-stat-sub">Energy audits, retrofits &amp; automation</div>
-            </div>
-
-            <div className="welcome-stat-card stat-purple">
-              <div className="welcome-stat-num">100%</div>
-              <div className="welcome-stat-label">Safety committed</div>
-              <div className="welcome-stat-sub">Zero compromise on workplace safety</div>
-            </div>
-          </div>
-        </section>
-
-        {/* NEXT STEPS BANNER */}
-        <section className="welcome-fade-up" style={{ animationDelay: '0.3s' }}>
-          <div className="welcome-next">
-            <div className="welcome-next-text">
-              <h3>Ready to get started?</h3>
-              <p>
-                Your next step is to complete your onboarding forms. It only takes about 15 minutes
-                and everything is saved automatically as you go.
-              </p>
-            </div>
-            <Link href={FORMS_HOME} className="welcome-next-btn">
-              Go to my forms
-              <span className="welcome-next-btn-arrow">→</span>
-            </Link>
-          </div>
-        </section>
-
+      {/* ── BODY: follow the wire ── */}
+      <div className="wl-body">
+        <WireJourney
+          video={<WelcomeVideo />}
+          aboutShort={ABOUT_SHORT}
+          aboutFull={ABOUT_FULL}
+          steps={steps}
+          doneCount={doneCount}
+        />
       </div>
     </div>
   )

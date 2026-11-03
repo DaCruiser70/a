@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Welcome page with career entry card</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Lora:wght@500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#F4F2EE}
+a{text-decoration:none}
+button:focus-visible,a:focus-visible{outline:3px solid #C8920A;outline-offset:3px}
+@keyframes flow{to{stroke-dashoffset:-60}}
+.flow{stroke-dasharray:4 26;animation:flow 2.4s linear infinite}
+@keyframes ping{0%{transform:scale(.8);opacity:.9}100%{transform:scale(1.9);opacity:0}}
+@keyframes slide{to{background-position:60px 0}}
+@keyframes spin{to{transform:rotate(360deg)}}
+.orbdial{position:absolute;inset:0;border-radius:50%;background:repeating-conic-gradient(var(--c) 0 5deg,transparent 5deg 15deg);-webkit-mask:radial-gradient(circle,transparent 66px,#000 67px);mask:radial-gradient(circle,transparent 66px,#000 67px);opacity:.75;animation:spin 24s linear infinite}
+.orbwire{position:absolute;left:16%;right:16%;top:64px;height:14px;border-radius:99px;background:#18284F;box-shadow:inset 0 0 0 2px #2C4577}
+.orbwire::after{content:"";position:absolute;inset:4px 6px;border-radius:99px;background:repeating-linear-gradient(90deg,#FFD36B 0 6px,transparent 6px 30px);background-size:60px 6px;animation:slide 1.6s linear infinite;filter:drop-shadow(0 0 6px #FFD36B)}
+.trackbase{position:absolute;left:10%;right:10%;top:21px;height:6px;border-radius:99px;background:repeating-linear-gradient(90deg,#C9D2E0 0 8px,transparent 8px 16px)}
+.trackdone{position:absolute;left:10%;width:20%;top:20px;height:8px;border-radius:99px;background:linear-gradient(90deg,#0D5C46,#22C58A);box-shadow:0 0 14px rgba(34,197,138,.6)}
+@media (max-width:860px){.orbs{grid-template-columns:1fr!important}.orbwire{display:none}.formtrack{grid-template-columns:repeat(5,minmax(70px,1fr))!important;overflow-x:auto;padding-bottom:8px}}
+@media (prefers-reduced-motion:reduce){.orbdial,.orbwire::after{animation:none}}
+.careercard{transition:transform .25s,box-shadow .25s}
+.careercard:hover{transform:translateY(-4px);box-shadow:0 30px 70px -20px rgba(6,11,26,.7),0 0 60px -10px rgba(255,211,107,.45)}
+@media (max-width:860px){.two{grid-template-columns:1fr!important}.vis{display:none!important}}
+@media (prefers-reduced-motion:reduce){.flow{animation:none}}
+</style>
+</helmet>
+<div style="min-height:100%;background:#F4F2EE;font-family:'Plus Jakarta Sans',system-ui,sans-serif;color:#1E2A3B;font-size:16px;line-height:1.6">
+
+  <header style="background:#1B3A6B;color:#fff;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;padding:14px clamp(16px,3vw,40px)">
+    <div style="display:flex;align-items:baseline;gap:12px"><span style="font-family:'Lora',Georgia,serif;font-size:26px;font-weight:700;color:#F2C14E">AEM</span><span style="font-size:11.5px;font-weight:800;letter-spacing:.16em;color:#B9C8E4">NEW HIRE PORTAL</span></div>
+    <div style="font-size:14px;color:#D6E0F2">Priya Nair &middot; Sign out</div>
+  </header>
+
+  <main style="max-width:1160px;margin:0 auto;padding:36px clamp(16px,3vw,40px) 64px;display:flex;flex-direction:column;gap:32px;box-sizing:border-box">
+
+    <section>
+      <div style="font-size:12.5px;font-weight:800;letter-spacing:.18em;color:#C8920A">WELCOME TO AEM</div>
+      <h1 style="margin:6px 0 8px;font-family:'Lora',Georgia,serif;font-size:clamp(34px,4.4vw,52px);font-weight:600;color:#1B3A6B;line-height:1.1">Welcome, Priya. We&rsquo;re glad you&rsquo;re here.</h1>
+      <p style="margin:0;font-size:18px;color:#4B5563;max-width:700px">Start with a short welcome from our team, see where a career here can take you, then work through your forms at your own pace.</p>
+    </section>
+
+    <section class="two" style="display:grid;grid-template-columns:1.4fr 1fr;gap:24px">
+      <div style="aspect-ratio:16/9;border-radius:20px;background:linear-gradient(135deg,#1B3A6B,#0F2548);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px;color:#fff;box-shadow:0 10px 30px -12px rgba(20,30,50,.5)">
+        <span style="width:76px;height:76px;border-radius:50%;background:#C8920A;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 8px rgba(200,146,10,.25)"><svg width="26" height="26" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2l10 6-10 6z" fill="#fff"/></svg></span>
+        <b style="font-size:17px">A welcome from the AEM team (2 min)</b>
+      </div>
+      <div style="background:#fff;border:1px solid #E7E3DC;border-radius:20px;padding:26px;display:flex;flex-direction:column;gap:10px">
+        <h2 style="margin:0;font-family:'Lora',Georgia,serif;font-size:24px;color:#1B3A6B;font-weight:600">About AEM</h2>
+        <p style="margin:0;color:#4B5563">Advanced Energy Management is a Canadian controls and energy company with teams in offices across the country. We design, install and look after the systems that keep buildings running.</p>
+        <p style="margin:0;color:#4B5563">We believe in people who feel valued, respected and empowered.</p>
+      </div>
+    </section>
+
+    <!-- BELIEVE -->
+    <section style="position:relative;overflow:hidden;border-radius:48px 48px 120px 48px;padding:48px clamp(20px,3vw,48px) 52px;background:radial-gradient(ellipse at 15% 0%,#16306A,#060B1A 70%);color:#fff;box-shadow:0 28px 70px -28px rgba(6,11,26,.8)">
+      <div style="font-size:12px;font-weight:800;letter-spacing:.2em;color:#9FB2D3;text-align:center">HERE&rsquo;S WHAT WE BELIEVE</div>
+      <h2 style="margin:8px 0 36px;text-align:center;font-family:'Lora',Georgia,serif;font-size:clamp(28px,3.4vw,42px);font-weight:600;color:#fff">The power runs on people.</h2>
+      <div class="orbs" style="position:relative;display:grid;grid-template-columns:repeat(3,1fr);gap:28px 20px">
+        <span class="orbwire" aria-hidden="true"></span>
+        <div style="text-align:center;position:relative;display:flex;flex-direction:column;align-items:center;gap:8px;--c:#FFD36B">
+          <div style="position:relative;width:148px;height:148px">
+            <span class="orbdial"></span>
+            <span style="position:absolute;inset:14px;border-radius:50%;background:radial-gradient(circle at 35% 28%,#22376A,#0A1330);border:3px solid #FFD36B;box-shadow:0 0 0 6px #060B1A,0 0 46px -4px #FFD36B;display:flex;align-items:center;justify-content:center"><svg width="46" height="46" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l3 7 7 .6-5.3 4.7 1.7 7.2L12 17.8 5.6 21.5l1.7-7.2L2 9.6 9 9z" fill="#FFD36B"/></svg></span>
+          </div>
+          <div style="font-size:12px;font-weight:800;letter-spacing:.18em;color:#9FB2D3;margin-top:6px">01</div>
+          <div style="font-family:'Lora',Georgia,serif;font-size:38px;font-weight:600;color:#FFD36B;text-shadow:0 0 26px #FFD36B66;line-height:1.1">Valued</div>
+          <p style="margin:0;color:#B8C7E3;font-size:16px;max-width:280px">Your work is seen, your ideas count, and your wins get noticed.</p>
+        </div>
+        <div style="text-align:center;position:relative;display:flex;flex-direction:column;align-items:center;gap:8px;--c:#3BA4FF">
+          <div style="position:relative;width:148px;height:148px">
+            <span class="orbdial"></span>
+            <span style="position:absolute;inset:14px;border-radius:50%;background:radial-gradient(circle at 35% 28%,#22376A,#0A1330);border:3px solid #3BA4FF;box-shadow:0 0 0 6px #060B1A,0 0 46px -4px #3BA4FF;display:flex;align-items:center;justify-content:center"><svg width="46" height="46" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-8-5.2-8-11a4.5 4.5 0 018-2.8A4.5 4.5 0 0120 10c0 5.8-8 11-8 11z" fill="#3BA4FF"/></svg></span>
+          </div>
+          <div style="font-size:12px;font-weight:800;letter-spacing:.18em;color:#9FB2D3;margin-top:6px">02</div>
+          <div style="font-family:'Lora',Georgia,serif;font-size:38px;font-weight:600;color:#3BA4FF;text-shadow:0 0 26px #3BA4FF66;line-height:1.1">Respected</div>
+          <p style="margin:0;color:#B8C7E3;font-size:16px;max-width:280px">We listen first, trust each other, and treat every teammate well.</p>
+        </div>
+        <div style="text-align:center;position:relative;display:flex;flex-direction:column;align-items:center;gap:8px;--c:#22C58A">
+          <div style="position:relative;width:148px;height:148px">
+            <span class="orbdial"></span>
+            <span style="position:absolute;inset:14px;border-radius:50%;background:radial-gradient(circle at 35% 28%,#22376A,#0A1330);border:3px solid #22C58A;box-shadow:0 0 0 6px #060B1A,0 0 46px -4px #22C58A;display:flex;align-items:center;justify-content:center"><svg width="46" height="46" viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2L4 14h6l-1 8 9-12h-6z" fill="#22C58A"/></svg></span>
+          </div>
+          <div style="font-size:12px;font-weight:800;letter-spacing:.18em;color:#9FB2D3;margin-top:6px">03</div>
+          <div style="font-family:'Lora',Georgia,serif;font-size:38px;font-weight:600;color:#22C58A;text-shadow:0 0 26px #22C58A66;line-height:1.1">Empowered</div>
+          <p style="margin:0;color:#B8C7E3;font-size:16px;max-width:280px">You get the training, tools and room to grow into what is next.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- THE ENTRY CARD -->
+    <a href="#career" class="careercard two" style="position:relative;overflow:hidden;display:grid;grid-template-columns:1.1fr .9fr;gap:20px;align-items:center;border-radius:24px;padding:36px clamp(22px,3vw,44px);background:radial-gradient(ellipse at 80% 50%,#14275A,#060B1A 70%);color:#fff;box-shadow:0 24px 60px -22px rgba(6,11,26,.65);border:1.5px solid rgba(255,211,107,.35)">
+      <div>
+        <div style="font-size:12px;font-weight:800;letter-spacing:.2em;color:#FFD36B">YOUR PATH AT AEM</div>
+        <h2 style="margin:8px 0 10px;font-family:'Lora',Georgia,serif;font-size:clamp(28px,3.4vw,42px);font-weight:600;line-height:1.1;color:#fff">Where could <span style="color:#FFD36B;text-shadow:0 0 22px rgba(255,211,107,.6)">you</span> go?</h2>
+        <p style="margin:0 0 20px;color:#B8C7E3;font-size:16.5px;max-width:480px">Follow the circuit through four career tracks and meet teammates who have walked the paths. It takes about three minutes and you can come back any time.</p>
+        <span style="display:inline-flex;align-items:center;gap:10px;min-height:50px;padding:0 24px;border-radius:99px;background:#FFD36B;color:#1A1200;font-weight:800;box-shadow:0 0 28px rgba(255,211,107,.4)">Explore career paths &rarr;</span>
+      </div>
+      <div class="vis" aria-hidden="true">
+        <svg viewBox="0 0 440 220" width="100%" style="display:block">
+          <defs><filter id="g" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
+          <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10 110 H90 Q110 110 110 90 V40 Q110 20 130 20 H430" stroke="#18284F" stroke-width="20"/><path d="M10 110 H90 Q110 110 110 90 V40 Q110 20 130 20 H430" stroke="#04091A" stroke-width="13"/><path class="flow" d="M10 110 H90 Q110 110 110 90 V40 Q110 20 130 20 H430" stroke="#22C58A" stroke-width="3.5" filter="url(#g)"/>
+            <path d="M10 110 H90 Q110 110 110 90 V80 Q110 70 130 70 H430" stroke="#18284F" stroke-width="20"/><path d="M10 110 H90 Q110 110 110 90 V80 Q110 70 130 70 H430" stroke="#04091A" stroke-width="13"/><path class="flow" style="animation-delay:-.6s" d="M10 110 H90 Q110 110 110 90 V80 Q110 70 130 70 H430" stroke="#3BA4FF" stroke-width="3.5" filter="url(#g)"/>
+            <path d="M10 110 H90 Q110 110 110 130 V140 Q110 150 130 150 H430" stroke="#18284F" stroke-width="20"/><path d="M10 110 H90 Q110 110 110 130 V140 Q110 150 130 150 H430" stroke="#04091A" stroke-width="13"/><path class="flow" style="animation-delay:-1.2s" d="M10 110 H90 Q110 110 110 130 V140 Q110 150 130 150 H430" stroke="#F2B01E" stroke-width="3.5" filter="url(#g)"/>
+            <path d="M10 110 H90 Q110 110 110 130 V180 Q110 200 130 200 H430" stroke="#18284F" stroke-width="20"/><path d="M10 110 H90 Q110 110 110 130 V180 Q110 200 130 200 H430" stroke="#04091A" stroke-width="13"/><path class="flow" style="animation-delay:-1.8s" d="M10 110 H90 Q110 110 110 130 V180 Q110 200 130 200 H430" stroke="#C9D4E8" stroke-width="3.5" filter="url(#g)"/>
+          </g>
+          <circle cx="10" cy="110" r="10" fill="#FFD36B"/>
+          <g stroke-width="3" fill="#0A1330"><circle cx="230" cy="20" r="11" stroke="#22C58A"/><circle cx="330" cy="70" r="11" stroke="#3BA4FF"/><circle cx="260" cy="150" r="11" stroke="#F2B01E"/><circle cx="360" cy="200" r="11" stroke="#C9D4E8"/></g>
+        </svg>
+      </div>
+    </a>
+
+    <!-- STATS -->
+    <section style="position:relative;overflow:hidden;border-radius:140px 48px 48px 48px;padding:52px clamp(20px,3vw,48px) 48px;background:radial-gradient(ellipse at 85% 0%,#12896A,#0A4A39 45%,#062E25 100%);color:#fff;box-shadow:0 28px 70px -28px rgba(13,92,70,.9)">
+      <svg aria-hidden="true" viewBox="0 0 1200 120" preserveAspectRatio="none" style="position:absolute;left:0;right:0;top:50%;width:100%;height:120px;transform:translateY(-10%);opacity:.5"><path class="flow" d="M0 60 Q150 10 300 60 T600 60 T900 60 T1200 60" fill="none" stroke="#FFD36B" stroke-width="3" stroke-linecap="round"/></svg>
+      <h2 style="position:relative;margin:0 0 6px;text-align:center;font-family:'Lora',Georgia,serif;font-size:clamp(28px,3.4vw,42px);font-weight:600;color:#fff">Build a career that lasts.</h2>
+      <p style="position:relative;margin:0 0 34px;text-align:center;color:#CFEDE2">People come here to stay, and the numbers show it.</p>
+      <div style="position:relative;display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:26px">
+        <sc-for list="{{ stats }}" as="t" hint-placeholder-count="4">
+          <div style="display:flex;flex-direction:column;align-items:center;gap:14px;text-align:center">
+            <div style="position:relative;width:150px;height:150px">
+              <span style="{{ t.ring }}"></span>
+              <span style="position:absolute;inset:14px;border-radius:50%;background:radial-gradient(circle at 35% 28%,#0F6A52,#06352B);display:flex;align-items:center;justify-content:center;font-family:'Lora',Georgia,serif;font-size:46px;font-weight:600;box-shadow:inset 0 0 24px rgba(0,0,0,.35)">{{ t.n }}</span>
+            </div>
+            <div style="font-size:15.5px;color:#E3F6EE;font-weight:700;max-width:170px">{{ t.label }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+
+    <!-- FORMS -->
+    <section style="position:relative;overflow:hidden;border-radius:44px;padding:40px clamp(20px,3vw,48px) 36px;background:radial-gradient(ellipse at 0% 0%,#FFFFFF,#EEF2FA 70%);border:1px solid #DCE3F0;box-shadow:0 24px 60px -30px rgba(27,58,107,.45)">
+      <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:center;justify-content:space-between;margin-bottom:34px">
+        <div>
+          <div style="font-size:12px;font-weight:800;letter-spacing:.2em;color:#C8920A">STEP BY STEP</div>
+          <h2 style="margin:4px 0 0;font-family:'Lora',Georgia,serif;font-size:clamp(28px,3.4vw,40px);font-weight:600;color:#1B3A6B">Your forms</h2>
+        </div>
+        <span style="display:inline-flex;align-items:center;gap:8px;padding:8px 18px;border-radius:99px;background:#E4F3EC;color:#0D5C46;font-weight:800;font-size:14px">2 of 5 complete</span>
+      </div>
+      <div class="formtrack" style="position:relative;display:grid;grid-template-columns:repeat(5,1fr);gap:8px">
+        <span class="trackbase" aria-hidden="true"></span><span class="trackdone" aria-hidden="true"></span>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center"><span style="width:48px;height:48px;border-radius:50%;background:#0D5C46;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 5px #fff,0 0 22px rgba(13,92,70,.55)"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></span><b style="font-size:14.5px;color:#1B3A6B">Personal Info</b><span style="font-size:12px;font-weight:700;color:#0D5C46">Done</span></div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center"><span style="width:48px;height:48px;border-radius:50%;background:#0D5C46;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 5px #fff,0 0 22px rgba(13,92,70,.55)"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></span><b style="font-size:14.5px;color:#1B3A6B">Banking</b><span style="font-size:12px;font-weight:700;color:#0D5C46">Done</span></div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center"><span style="position:relative;width:48px;height:48px;border-radius:50%;background:#fff;border:4px solid #C8920A;display:flex;align-items:center;justify-content:center;font:800 17px 'Lora',serif;color:#C8920A;box-shadow:0 0 0 5px #fff,0 0 26px rgba(200,146,10,.6)"><span style="position:absolute;inset:-4px;border-radius:50%;border:3px solid #C8920A;animation:ping 2.2s ease-out infinite"></span>3</span><b style="font-size:14.5px;color:#1B3A6B">SIN</b><span style="font-size:12px;font-weight:700;color:#C8920A">Up next</span></div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center"><span style="width:48px;height:48px;border-radius:50%;background:#fff;border:3px solid #C9D2E0;display:flex;align-items:center;justify-content:center;font:700 17px 'Lora',serif;color:#8A93A0;box-shadow:0 0 0 5px #fff">4</span><b style="font-size:14.5px;color:#4B5563">Policies</b><span style="font-size:12px;font-weight:700;color:#8A93A0">To do</span></div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center"><span style="width:48px;height:48px;border-radius:50%;background:#fff;border:3px solid #C9D2E0;display:flex;align-items:center;justify-content:center;font:700 17px 'Lora',serif;color:#8A93A0;box-shadow:0 0 0 5px #fff">5</span><b style="font-size:14.5px;color:#4B5563">Documents</b><span style="font-size:12px;font-weight:700;color:#8A93A0">To do</span></div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:center;justify-content:space-between;margin-top:34px;padding-top:24px;border-top:1px dashed #C9D2E0">
+        <span style="color:#4B5563;font-size:15.5px">Save as you go. You can leave and come back any time.</span>
+        <span style="display:inline-flex;align-items:center;gap:10px;min-height:52px;padding:0 28px;border-radius:99px;background:#1B3A6B;color:#fff;font-weight:800;box-shadow:0 12px 28px -10px rgba(27,58,107,.7)">Continue my forms &rarr;</span>
+      </div>
+    </section>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1500}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const stats = [{ n: '9+', label: 'years average tenure', p: 78 }, { n: '8+', label: 'fun events every year', p: 62 }, { n: '5+', label: 'charity initiatives', p: 45 }, { n: '19+', label: 'benefits for you', p: 92 }].map((t) => ({
+      n: t.n, label: t.label,
+      ring: 'position:absolute;inset:0;border-radius:50%;background:conic-gradient(#FFD36B 0 ' + t.p + '%,rgba(255,255,255,.16) ' + t.p + '% 100%);-webkit-mask:radial-gradient(circle,transparent 62px,#000 63px);mask:radial-gradient(circle,transparent 62px,#000 63px);filter:drop-shadow(0 0 10px rgba(255,211,107,.6))'
+    }));
+    return { stats };
+  }
+}
+</script>
+</body>
+</html>

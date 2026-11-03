@@ -85,6 +85,117 @@
   --t-slow: 0.4s ease;
 }
 
+/* ─── CAREER CIRCUIT (scoped dark theme) ───────────────
+   .career-theme: the /welcome/careers page and the dark bands on the welcome page.
+   .career-sections: the welcome page's career sections (tokens only, no background). */
+.career-theme,
+.career-sections {
+  --cc-bg:            #060B1A;   /* navy-black */
+  --cc-panel:         #0E1A38;
+  --cc-panel-deep:    #09112A;
+  --cc-panel-raise:   #101C3E;
+  --cc-panel-core:    #22376A;   /* valve highlight */
+  --cc-panel-shade:   #0A1330;
+  --cc-line:          #18284F;   /* pipe wall */
+  --cc-pipe-inner:    #04091A;
+  --cc-flange:        #2C4577;
+  --cc-xlink:         #6F8CC4;
+  --cc-glow:          #FFD36B;   /* glow gold */
+  --cc-glow-soft:     #FFE79B;
+  --cc-glow-deep:     #E3A91B;
+  --cc-on-glow:       #1A1200;   /* text on gold */
+  --cc-on-track:      #06101F;   /* text on a track colour */
+  --cc-text:          #E8EEFA;
+  --cc-text-strong:   #ffffff;
+  --cc-text-2:        #C9D4E8;
+  --cc-text-3:        #B8C7E3;
+  --cc-text-muted:    #9FB2D3;
+  --cc-label:         #DCE5F6;
+  --cc-hairline:      rgba(255, 255, 255, 0.12);
+  --cc-hairline-2:    rgba(255, 255, 255, 0.22);
+  --cc-hairline-3:    rgba(255, 255, 255, 0.35);
+  --cc-wash:          rgba(255, 255, 255, 0.06);
+  --cc-grid:          rgba(60, 100, 180, 0.07);
+  --cc-glow-wash:     rgba(255, 211, 107, 0.12);
+  --cc-shadow:        rgba(0, 0, 0, 0.6);
+
+  /* The four tracks */
+  --cc-track-t:       #22C58A;   /* Field */
+  --cc-track-c:       #3BA4FF;   /* Controls */
+  --cc-track-p:       #F2B01E;   /* Projects */
+  --cc-track-b:       #C9D4E8;   /* Leadership */
+
+  /* Welcome page: the green stats band and the light "Your forms" track */
+  --cc-green-hi:      #12896A;
+  --cc-green-mid:     #0A4A39;
+  --cc-green-lo:      #062E25;
+  --cc-green-core:    #0F6A52;
+  --cc-green-core-lo: #06352B;
+  --cc-green-text:    #CFEDE2;
+  --cc-green-text-2:  #E3F6EE;
+  --cc-green-glow:    rgba(34, 197, 138, 0.6);
+  --cc-ring-track:    rgba(255, 255, 255, 0.16);
+  --cc-light-bg:      #EEF2FA;
+  --cc-light-line:    #DCE3F0;
+  --cc-light-dash:    #C9D2E0;
+  --cc-light-mute:    #6B7482;   /* 4.5:1 on white */
+  --cc-light-text:    #4B5563;
+  --cc-done-faint:    #E4F3EC;
+}
+.career-theme {
+  background: var(--cc-bg);
+  color: var(--cc-text);
+  font-family: var(--font-sans);
+}
+
+/* ─── WELCOME WIRE (Daylight) ──────────────────────────
+   The new hire welcome page: the navy banner, the wire rail and the station panel. */
+.wire-theme {
+  --wl-bg:           #F4F2EE;
+  --wl-grid:         rgba(27, 58, 107, 0.06);
+  --wl-text:         #1B3A6B;
+  --wl-muted:        #5B6B86;                 /* 5:1 on --wl-bg */
+  --wl-pipe-wall:    #BFCBE2;
+  --wl-pipe-bore:    #FFFFFF;
+  --wl-pipe-flow:    #1B3A6B;
+  --wl-lit:          #E3A91B;
+  --wl-station-bg:   #FFFFFF;
+  --wl-station-line: #8FA3C7;
+  --wl-done-ring:    #0D9A6E;
+  --wl-done-bg:      #0D5C46;
+  --wl-gold:         #9A6B00;
+  --wl-gold-text:    #7A5400;
+  --wl-gold-line:    #C8920A;
+  --wl-pill-bg:      #FFF4D6;
+  --wl-glow:         #FFD36B;
+  --wl-on-glow:      #1A1200;
+  --wl-panel-hi:     #2B5498;
+  --wl-panel:        #1B3A6B;
+  --wl-panel-lo:     #173260;
+  --wl-core:         #12294F;
+  --wl-core-hi:      #1C3B7A;
+  --wl-orb-core-hi:  #22376A;
+  --wl-ring:         #1E4079;
+  --wl-panel-text:   #D3DFF3;
+  --wl-panel-strong: #FFFFFF;
+  --wl-panel-line:   rgba(255, 255, 255, 0.22);
+  --wl-panel-rule:   rgba(255, 255, 255, 0.10);
+  --wl-ring-track:   rgba(255, 255, 255, 0.16);
+  --wl-done:         #22C58A;
+  --wl-on-done:      #06101F;
+  --wl-video-hi:     #1B3A6B;
+  --wl-video-lo:     #0F2548;
+  --wl-shadow:       rgba(27, 58, 107, 0.38);
+  /* Banner */
+  --wl-banner:       #1B3A6B;
+  --wl-banner-deep:  #10285A;
+  --wl-banner-text:  #B9C8E4;
+  --wl-banner-chip:  #E3ECFA;
+  --wl-banner-icon:  #CBD8EF;
+  --wl-banner-tag:   #F2C14E;
+  --wl-banner-gold:  #E3A91B;
+}
+
 /* ─── RESET ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 

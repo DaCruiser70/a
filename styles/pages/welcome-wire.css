@@ -1,0 +1,290 @@
+/* Welcome page, "follow the wire" (Daylight): the banner adjustments, the rail of five stations and
+   the station panel (components/welcome/WireJourney.tsx, ProgressRing.tsx). Colours are the
+   .wire-theme tokens (and the Career Circuit tokens for the track colours) in styles/globals.css.
+   Every animation is CSS and stops under prefers-reduced-motion. */
+
+@keyframes wl-flow  { to { stroke-dashoffset: -60; } }
+@keyframes wl-spin  { to { transform: rotate(360deg); } }
+@keyframes wl-enter { from { opacity: 0; transform: translateX(26px); } to { opacity: 1; transform: none; } }
+
+.welcome-page.wire-theme {
+  background-color: var(--wl-bg);
+  background-image:
+    linear-gradient(var(--wl-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--wl-grid) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+.wire-theme :is(a, button, [tabindex="-1"]):focus-visible { outline: 3px solid var(--wl-gold-line); outline-offset: 3px; }
+.wl-panel :is(a, button, [tabindex="-1"]):focus-visible { outline-color: var(--wl-glow); }
+.wl-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+
+/* ── Header: the forms shortcut (the logo, user and sign out are unchanged) ── */
+.wl-forms-pill {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 16px; border-radius: var(--r-pill);
+  border: 1.5px solid var(--wl-gold-line); background: var(--wl-pill-bg); color: var(--wl-gold-text);
+  font-weight: 800; font-size: 13.5px; text-decoration: none; white-space: nowrap;
+}
+.wl-forms-pill:hover { background: var(--color-surface); }
+
+/* ── Banner: Daylight colours, the five-step chips and the progress ring ── */
+.wire-theme .welcome-hero { padding: 34px clamp(16px, 3vw, 40px); margin-bottom: 36px; background: linear-gradient(115deg, var(--wl-banner) 0%, var(--wl-banner-deep) 55%, var(--wl-banner) 100%); }
+.wire-theme .welcome-hero-inner { max-width: 1240px; gap: 24px 40px; flex-wrap: wrap; }
+.wire-theme .welcome-hero-tag { color: var(--wl-banner-tag); font-size: 11.5px; letter-spacing: .16em; }
+.wire-theme .welcome-hero-greeting { color: var(--wl-banner-text); font-weight: 500; }
+.wire-theme .welcome-hero-name em { color: var(--wl-banner-gold); }
+.wire-theme .welcome-hero-sub { color: var(--wl-banner-text); font-size: 16px; font-weight: 400; max-width: 520px; }
+.wire-theme .welcome-hero-badges { margin-top: 18px; }
+.wire-theme .welcome-hero-badge { color: var(--wl-banner-chip); font-size: 13.5px; font-weight: 600; padding: 9px 16px; border-color: color-mix(in srgb, var(--wl-banner-chip) 22%, transparent); }
+.wire-theme .welcome-hero-badge svg { color: var(--wl-banner-icon); opacity: 1; }
+.welcome-hero-ring { flex-shrink: 0; }
+
+/* The N/5 ring (banner: gold with DONE; station 5: green) */
+.wl-ring { position: relative; flex: 0 0 auto; }
+.wl-ring-arc {
+  position: absolute; inset: 0; border-radius: 50%;
+  background: conic-gradient(var(--ring-c) 0 var(--p), var(--wl-ring-track) var(--p) 100%);
+  -webkit-mask: radial-gradient(circle, transparent var(--ring-hole), #000 calc(var(--ring-hole) + 1px));
+          mask: radial-gradient(circle, transparent var(--ring-hole), #000 calc(var(--ring-hole) + 1px));
+  filter: drop-shadow(0 0 10px color-mix(in srgb, var(--ring-c) 60%, transparent));
+}
+.wl-ring-value { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--wl-panel-strong); }
+.wl-ring-value b { font-family: var(--font-serif); font-weight: 600; line-height: 1; }
+.wl-ring-value span { font-size: 11px; font-weight: 700; letter-spacing: .1em; color: var(--wl-banner-text); margin-top: 4px; }
+.wl-ring-banner { width: 120px; height: 120px; --ring-c: var(--wl-banner-gold); --ring-hole: 47px; }
+.wl-ring-banner b { font-size: 30px; }
+.wl-ring-forms { width: 96px; height: 96px; --ring-c: var(--wl-done); --ring-hole: 38px; }
+.wl-ring-forms b { font-size: 28px; font-weight: 700; }
+
+/* ── Layout: rail and panel ── */
+.wl-body { max-width: 1240px; margin: 0 auto; padding: 0 clamp(16px, 3vw, 40px) 48px; box-sizing: border-box; }
+.wl-layout { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 48px; align-items: start; }
+.wl-minirail { display: none; }
+
+/* The wire */
+.wl-rail { position: relative; width: 300px; height: 680px; }
+.wl-rail-svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.wl-rail-svg path { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.wl-pipe-wall { stroke: var(--wl-pipe-wall); stroke-width: 24; }
+.wl-pipe-bore { stroke: var(--wl-pipe-bore); stroke-width: 16; }
+.wl-pipe-flow { stroke: var(--wl-pipe-flow); stroke-width: 2.5; opacity: .6; stroke-dasharray: 4 26; animation: wl-flow 2.4s linear infinite; }
+/* The lit part draws itself to the active station (the offset is set per station) */
+.wl-pipe-lit {
+  stroke: var(--wl-lit); stroke-width: 5; stroke-dasharray: 100;
+  transition: stroke-dashoffset 1s cubic-bezier(.5, 0, .2, 1);
+}
+
+/* Stations: passed (green check), active (gold), to come (outlined) */
+.wl-station {
+  position: absolute; width: 56px; height: 56px; border: 0; padding: 0; background: none; cursor: pointer;
+  transform: translate(-50%, -50%); --c: var(--wl-station-line);
+}
+.wl-station.on   { --c: var(--wl-lit); }
+.wl-station.done { --c: var(--wl-done-ring); }
+.wl-station-dial {
+  position: absolute; inset: -7px; border-radius: 50%;
+  background: repeating-conic-gradient(var(--c) 0 5deg, transparent 5deg 15deg);
+  -webkit-mask: radial-gradient(circle, transparent 29px, #000 30px);
+          mask: radial-gradient(circle, transparent 29px, #000 30px);
+  opacity: .5; transition: opacity .3s;
+}
+.wl-station:hover .wl-station-dial, .wl-station.on .wl-station-dial { opacity: 1; animation: wl-spin 6s linear infinite; }
+.wl-station-core {
+  position: absolute; inset: 0; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-serif); font-weight: 700; font-size: 18px;
+  border: 3px solid var(--c); background: var(--wl-station-bg); color: var(--wl-text);
+  box-shadow: 0 0 0 5px var(--wl-bg), 0 0 10px -2px var(--c); transition: transform .25s;
+}
+.wl-station:hover .wl-station-core { transform: scale(1.1); }
+.wl-station.on .wl-station-core { background: var(--wl-glow); color: var(--wl-on-glow); transform: scale(1.12); box-shadow: 0 0 0 5px var(--wl-bg), 0 0 30px -2px var(--c); }
+.wl-station.done .wl-station-core { background: var(--wl-done-bg); color: var(--wl-panel-strong); }
+.wl-station:focus-visible { outline: none; }
+.wl-station:focus-visible .wl-station-core { box-shadow: 0 0 0 5px var(--wl-bg), 0 0 0 8px var(--wl-gold-line); }
+/* Labels: 30px from the node, on the side away from the pipe */
+.wl-station-label {
+  position: absolute; top: 50%; transform: translateY(-50%); pointer-events: none; line-height: 1.25;
+  display: flex; flex-direction: column; gap: 2px; padding: 3px 0;
+}
+.wl-station-label.right { left: calc(100% + 30px); text-align: left; width: 150px; }
+.wl-station-label.left  { right: calc(100% + 30px); text-align: right; width: 140px; }
+.wl-station-label b { font-size: 14.5px; color: var(--wl-text); }
+.wl-station-label span { font-size: 12px; font-weight: 600; color: var(--wl-muted); }
+.wl-station.on .wl-station-label b { color: var(--wl-gold-text); }
+
+/* The panel: two cut corners */
+.wl-panel-shadow { filter: drop-shadow(0 16px 30px var(--wl-shadow)); min-width: 0; }
+.wl-panel {
+  min-height: 680px; box-sizing: border-box; position: relative; display: flex; flex-direction: column;
+  padding: 46px 60px 36px 76px; color: var(--wl-panel-text);
+  background: linear-gradient(150deg, var(--wl-panel-hi), var(--wl-panel) 62%, var(--wl-panel-lo));
+  clip-path: polygon(64px 0, 100% 0, 100% calc(100% - 56px), calc(100% - 56px) 100%, 0 100%, 0 64px);
+}
+.wl-stage { display: flex; flex-direction: column; gap: 20px; flex: 1; animation: wl-enter .5s cubic-bezier(.2, .8, .2, 1) both; }
+.wl-eyebrow { font-size: 11.5px; font-weight: 800; letter-spacing: .2em; color: var(--wl-panel-text); }
+.wl-h2 { margin: 0; font-family: var(--font-serif); font-size: 32px; font-weight: 600; line-height: 1.15; color: var(--wl-panel-strong); }
+.wl-h2:focus { outline: none; }
+.wl-h2:focus-visible { outline: 3px solid var(--wl-glow); outline-offset: 4px; border-radius: 4px; }
+.wl-text { margin: 0; font-size: 15px; color: var(--wl-panel-text); max-width: 620px; }
+.wl-you { color: var(--wl-glow); text-shadow: 0 0 22px color-mix(in srgb, var(--wl-glow) 60%, transparent); }
+.wl-push { margin-top: auto; padding-top: var(--s2); }
+
+.wl-gold-btn {
+  display: inline-flex; align-items: center; gap: 10px; min-height: 48px; padding: 0 24px; border-radius: var(--r-pill);
+  background: var(--wl-glow); color: var(--wl-on-glow); font-weight: 800; font-size: 15px; text-decoration: none;
+  box-shadow: 0 0 28px color-mix(in srgb, var(--wl-glow) 40%, transparent); transition: transform .2s;
+}
+.wl-gold-btn:hover { transform: translateY(-2px); }
+
+/* Station 1: the video in a chamfered window (the player itself is unchanged), About AEM */
+.wl-video-window {
+  clip-path: polygon(0 0, calc(100% - 28px) 0, 100% 28px, 100% 100%, 28px 100%, 0 calc(100% - 28px));
+  background: linear-gradient(135deg, var(--wl-video-hi), var(--wl-video-lo));
+}
+.wl-video-window .welcome-video-frame { border-radius: 0; }
+.wl-about { display: flex; flex-direction: column; align-items: flex-start; gap: var(--s2); max-width: 680px; }
+.wl-about-text p { margin: 0 0 var(--s3); font-size: 15px; line-height: 1.65; color: var(--wl-panel-text); }
+.wl-about-text p:last-child { margin-bottom: 0; }
+.wl-about-text h3 { margin: 0 0 var(--s3); font-family: var(--font-serif); font-size: 20px; font-weight: 600; color: var(--wl-panel-strong); }
+.wl-textbtn {
+  min-height: 44px; padding: 0; border: 0; background: none; cursor: pointer;
+  font-family: var(--font-sans); font-size: 14.5px; font-weight: 700; color: var(--wl-glow);
+  text-decoration: underline; text-underline-offset: 4px;
+}
+
+/* Station 2: three orbs climbing a curved pipe */
+.wl-orbs { position: relative; width: 100%; max-width: 760px; aspect-ratio: 760 / 390; margin-top: 22px; --orb: 92px; }
+.wl-orbs-svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.wl-orbs-svg path { fill: none; stroke-linecap: round; }
+.wl-orb-wall { stroke: var(--cc-line); stroke-width: 22; }
+.wl-orb-bore { stroke: var(--cc-pipe-inner); stroke-width: 14; }
+.wl-orb-flow { stroke: var(--wl-glow); stroke-width: 3.5; stroke-dasharray: 4 26; animation: wl-flow 2.4s linear infinite; }
+.wl-orb {
+  position: absolute; transform: translate(-50%, -50%); padding: 0; border: 0; background: none; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; opacity: .85; transition: opacity .25s;
+}
+.wl-orb.on, .wl-orb:hover { opacity: 1; }
+.wl-orb-ring { position: relative; display: block; width: var(--orb); height: var(--orb); }
+.wl-orb-dial {
+  position: absolute; inset: -7px; border-radius: 50%;
+  background: repeating-conic-gradient(var(--c) 0 5deg, transparent 5deg 15deg);
+  -webkit-mask: radial-gradient(circle, transparent calc(var(--orb) / 2 - 1px), #000 calc(var(--orb) / 2));
+          mask: radial-gradient(circle, transparent calc(var(--orb) / 2 - 1px), #000 calc(var(--orb) / 2));
+  opacity: .6;
+}
+.wl-orb:hover .wl-orb-dial, .wl-orb.on .wl-orb-dial { opacity: 1; animation: wl-spin 7s linear infinite; }
+.wl-orb-core {
+  position: absolute; inset: 10px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(circle at 35% 28%, var(--wl-orb-core-hi), var(--wl-core));
+  border: 3px solid var(--c); box-shadow: 0 0 0 5px var(--wl-core), 0 0 16px -2px var(--c);
+}
+.wl-orb.on .wl-orb-core { box-shadow: 0 0 0 5px var(--wl-core), 0 0 40px -2px var(--c); }
+.wl-orb-icon { fill: var(--c); }
+.wl-orb-word { position: absolute; top: 100%; margin-top: 16px; white-space: nowrap; font-family: var(--font-serif); font-size: 21px; font-weight: 700; color: var(--c); }
+.wl-orb.on .wl-orb-word { text-shadow: 0 0 22px color-mix(in srgb, var(--c) 60%, transparent); }
+.wl-believe { margin: 34px 0 0; font-family: var(--font-serif); font-size: 22px; line-height: 1.4; color: var(--wl-panel-strong); max-width: 620px; min-height: 62px; }
+
+/* Station 3: the four-track circuit */
+.wl-circuit { max-width: 640px; margin: 2px 0 4px; }
+
+/* Station 4: four rings on a wave (ring fill is decoration only) */
+.wl-rings { position: relative; flex: 1; min-height: 300px; margin-top: 4px; }
+.wl-wave { position: absolute; inset: 0; width: 100%; height: 100%; }
+.wl-wave path { fill: none; stroke: var(--wl-glow); stroke-width: 3; stroke-linecap: round; opacity: .7; stroke-dasharray: 4 26; animation: wl-flow 2.4s linear infinite; }
+.wl-ring-row { list-style: none; margin: 0; padding: 0; position: relative; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; }
+.wl-stat { display: flex; flex-direction: column; align-items: center; gap: 18px; margin-top: var(--drop, 0); }
+.wl-stat-ring { position: relative; width: 132px; height: 132px; }
+.wl-stat-arc {
+  position: absolute; inset: 0; border-radius: 50%;
+  background: conic-gradient(var(--wl-glow) 0 var(--p), var(--wl-ring-track) var(--p) 100%);
+  -webkit-mask: radial-gradient(circle, transparent 54px, #000 55px);
+          mask: radial-gradient(circle, transparent 54px, #000 55px);
+  filter: drop-shadow(0 0 10px color-mix(in srgb, var(--wl-glow) 60%, transparent));
+}
+.wl-stat-core {
+  position: absolute; inset: 13px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(circle at 35% 28%, var(--wl-core-hi), var(--wl-core));
+  font-family: var(--font-serif); font-size: 36px; font-weight: 600; color: var(--wl-panel-strong);
+  box-shadow: inset 0 0 22px color-mix(in srgb, var(--wl-core) 70%, transparent);
+}
+.wl-stat-label { font-size: 14px; font-weight: 700; color: var(--wl-panel-strong); max-width: 130px; text-align: center; text-shadow: 0 2px 8px var(--wl-ring); }
+
+/* Station 5: your forms */
+.wl-forms-head { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+.wl-forms-head .wl-text { margin-top: 6px; }
+.wl-forms { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; max-width: 560px; }
+.wl-form { display: flex; align-items: center; gap: 14px; padding: 14px 0; border-bottom: 1px solid var(--wl-panel-rule); }
+.wl-form-dot {
+  flex: 0 0 30px; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  font-weight: 800; font-size: 14px; box-sizing: border-box;
+  border: 2px solid var(--wl-panel-line); color: var(--wl-panel-text);
+}
+.wl-form-name { flex: 1; font-weight: 700; font-size: 16px; color: var(--wl-panel-strong); }
+.wl-form-tag { font-size: 12.5px; font-weight: 800; color: var(--wl-panel-text); }
+.wl-form.done .wl-form-dot { background: var(--wl-done); border-color: var(--wl-done); color: var(--wl-on-done); }
+.wl-form.done .wl-form-tag { color: var(--wl-done); }
+.wl-form.next .wl-form-dot { background: var(--wl-core); border: 3px solid var(--wl-glow); color: var(--wl-glow); box-shadow: 0 0 16px color-mix(in srgb, var(--wl-glow) 60%, transparent); }
+.wl-form.next .wl-form-tag { color: var(--wl-glow); }
+.wl-form.review .wl-form-dot { border-style: dashed; border-color: var(--wl-panel-text); }
+
+/* Back / Next */
+.wl-nav {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;
+  margin-top: 30px; padding-top: 20px; border-top: 1px dashed var(--wl-panel-line);
+}
+.wl-nav-label { font-size: 12.5px; font-weight: 700; letter-spacing: .08em; color: var(--wl-panel-text); }
+.wl-outline-btn {
+  display: inline-flex; align-items: center; gap: var(--s2); min-height: 48px; padding: 0 20px; border-radius: var(--r-pill);
+  border: 1.5px solid color-mix(in srgb, var(--wl-panel-strong) 35%, transparent); background: transparent;
+  color: var(--wl-panel-strong); font-family: var(--font-sans); font-weight: 700; font-size: 14.5px; cursor: pointer;
+}
+.wl-outline-btn:hover { background: var(--wl-panel-rule); }
+.wl-outline-btn.gold { border-color: var(--wl-glow); color: var(--wl-glow); }
+.wl-outline-btn.hidden { visibility: hidden; }
+
+/* A narrower panel (rail beside it): the four rings sit two by two */
+@media (max-width: 1180px) {
+  .wl-ring-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px 12px; justify-items: center; }
+  .wl-stat { margin-top: 0; }
+  .wl-wave { display: none; }
+}
+
+/* ── Small screens: step pills on top, a rounded panel full width ── */
+@media (max-width: 979px) {
+  .wl-layout { grid-template-columns: minmax(0, 1fr); }
+  .wl-rail { display: none; }
+  .wl-minirail { display: flex; gap: var(--s2); margin-bottom: var(--s4); overflow-x: auto; padding-bottom: 6px; }
+  .wl-minipill {
+    flex: 0 0 auto; min-height: 44px; padding: 0 16px; border-radius: var(--r-pill); cursor: pointer;
+    font-family: var(--font-sans); font-weight: 700; font-size: 13.5px;
+    border: 1.5px solid var(--wl-station-line); background: transparent; color: var(--wl-text);
+  }
+  .wl-minipill.on { border-color: var(--wl-gold-line); background: var(--wl-pill-bg); color: var(--wl-gold-text); }
+  .wl-panel { clip-path: none; border-radius: 24px; min-height: 0; padding: 30px clamp(18px, 4vw, 36px) 26px; }
+}
+@media (max-width: 720px) {
+  .wl-forms-pill { display: none; }   /* station 5 and the banner ring cover it */
+}
+@media (max-width: 600px) {
+  /* The orbs sit in a row, without the climbing pipe */
+  .wl-orbs { aspect-ratio: auto; display: flex; justify-content: space-around; padding-bottom: 48px; --orb: 72px; }
+  .wl-orbs-svg { display: none; }
+  .wl-orb { position: relative; left: auto !important; top: auto !important; transform: none; }
+  .wl-orb-word { font-size: 18px; }
+  .wl-orb-core svg { width: 26px; height: 26px; }
+  .wl-h2 { font-size: 26px; }
+  .wl-stat-ring { width: 112px; height: 112px; }
+  .wl-stat-arc { -webkit-mask: radial-gradient(circle, transparent 45px, #000 46px); mask: radial-gradient(circle, transparent 45px, #000 46px); }
+  .wl-stat-core { inset: 11px; font-size: 30px; }
+  .wl-nav-label { display: none; }
+  .wire-theme .welcome-hero-ring { display: none; }
+}
+
+/* ── Reduced motion: nothing moves; the lit pipe jumps ── */
+@media (prefers-reduced-motion: reduce) {
+  .wl-pipe-flow, .wl-orb-flow, .wl-wave path, .wl-stage,
+  .wl-station:hover .wl-station-dial, .wl-station.on .wl-station-dial,
+  .wl-orb:hover .wl-orb-dial, .wl-orb.on .wl-orb-dial,
+  .wire-theme .welcome-hero-tag-dot { animation: none !important; }
+  .wl-pipe-lit { transition: none; }
+  .wl-station:hover .wl-station-core, .wl-gold-btn:hover { transform: none; }
+  .wl-station.on .wl-station-core { transform: scale(1.12); }
+}
