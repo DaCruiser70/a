@@ -3,12 +3,13 @@ import { createServiceClient } from '@/lib/supabase/server'
 import { requireRole } from '@/lib/roles'
 import { rateLimit, rateLimitKey } from '@/lib/rate-limit'
 import { ownedPlan } from '@/lib/manager-access'
-import { queueNotification, hrNotifyEmails, appUrl } from '@/lib/notify'
+import { queueNotification } from '@/lib/notify'
 import {
   PlanPutSchema, answersFromRow, fieldErrors, isPlanOverdue, todayIso, PLAN_TEXT_FIELDS,
 } from '@/lib/manager-plan'
 import { getClearanceRequirements } from '@/lib/clearance'
-import { syncPmRequest } from '@/lib/pm-server'
+import { pmHeldInOtherRegion, syncPmRequest } from '@/lib/pm-server'
+import { esc } from '@/lib/safe-html'
 import { syncClearancePackage } from '@/lib/clearance-package'
 import type { Database } from '@/types'
 
@@ -138,18 +139,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   await admin.from('audit_log').insert({ user_id: id, performed_by: user.id, ...audit })
 
   if (firstSubmit) {
-    const { data: hire } = await admin.from('profiles').select('full_name').eq('id', id).maybeSingle()
-    await queueNotification({
-      template:  'manager_plan_submitted',
-      to:        hrNotifyEmails(),
-      dedupeKey: `manager_plan_submitted:${id}`,
-      payload:   {
-        newhireId: id,
-        managerId: existing.manager_id,
-        hireName:  hire?.full_name ?? '',
-        link:      appUrl(`/hr/newhire/${id}`),
-      },
-    })
+    await queueNotification({ template: 'manager_plan_submitted', hireId: id, payload: {} })
   }
 
   // Clearance unlocked: the hire's form appears once the submitted plan asks for RCMP or PSPC & RCMP.
@@ -157,20 +147,27 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const wasRequired = getClearanceRequirements(existing).required
   const nowRequired = getClearanceRequirements({ status: saved[0].status, clearance_type: answers.clearance_type }).required
   if (!wasRequired && nowRequired) {
-    const { data: hire } = await admin.from('profiles').select('full_name, personal_email, aem_email').eq('id', id).maybeSingle()
-    const to = hire?.personal_email || hire?.aem_email
-    if (to) {
-      await queueNotification({
-        template:  'clearance_unlocked',
-        to,
-        dedupeKey: `clearance_unlocked:${id}`,
-        payload:   { newhireId: id, hireName: hire?.full_name ?? '', link: appUrl('/newhire/forms/clearance') },
-      })
-    }
+    await queueNotification({ template: 'clearance_unlocked', hireId: id, payload: {} })
   }
 
-  // Regional project management: open, reopen or cancel the hire's request to match the plan
-  await syncPmRequest(admin, id)
+  // Every change of the project region is audited (regions only)
+  const newRegion = answers.clearance_type === 'pspc_rcmp' ? answers.project_region || null : existing.project_region
+  const regionChanged = newRegion !== existing.project_region
+  if (regionChanged) {
+    await admin.from('audit_log').insert({
+      user_id: id, performed_by: user.id, action_type: 'navy',
+      message: `<strong>Manager</strong> changed the project region from ${esc(existing.project_region ?? 'not set')} to ${esc(newRegion ?? 'not set')}`,
+    })
+  }
+
+  // Regional project management: open, move, reopen or cancel the hire's request to match the plan
+  await syncPmRequest(admin, id, { by: user.id, label: 'Manager' })
+  if (regionChanged && newRegion && await pmHeldInOtherRegion(admin, id, newRegion)) {
+    await admin.from('audit_log').insert({
+      user_id: id, performed_by: user.id, action_type: 'amber',
+      message: `Project management request was not moved to ${esc(newRegion)}: it is already claimed or done. HR has been warned.`,
+    })
+  }
   // The plan's project number and region are part of the PSPC & RCMP clearance package
   await syncClearancePackage(admin, id, user.id)
 

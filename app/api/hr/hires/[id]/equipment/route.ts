@@ -5,6 +5,7 @@ import { requireRole } from '@/lib/roles'
 import { rateLimit, rateLimitKey } from '@/lib/rate-limit'
 import { hasCompanyVehicle, recomputeProfileStatus } from '@/lib/hire-status'
 import { cancelVehicleRequest } from '@/lib/vehicle-server'
+import { queueHireApproved } from '@/lib/notify'
 
 // Item ids are short snake_case keys (lib/equipment-items.ts, plus retired ones still saved on old rows)
 const BodySchema = z.strictObject({
@@ -64,7 +65,11 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const hadVehicle = hasCompanyVehicle(before?.items)
   const hasVehicle = hasCompanyVehicle(items)
   if (hadVehicle && !hasVehicle) await cancelVehicleRequest(admin, id, user.id)
-  if (hadVehicle !== hasVehicle) await recomputeProfileStatus(admin, id)
+  if (hadVehicle !== hasVehicle) {
+    // Unticking the vehicle can make the hire's ID requirement met, and so approve the hire
+    const { enteredPayrollQueue } = await recomputeProfileStatus(admin, id)
+    if (enteredPayrollQueue) await queueHireApproved(id)
+  }
 
   return NextResponse.json({ ok: true })
 }

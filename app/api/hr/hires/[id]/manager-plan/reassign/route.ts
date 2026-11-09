@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { createServiceClient } from '@/lib/supabase/server'
 import { requireRole } from '@/lib/roles'
 import { rateLimit, rateLimitKey } from '@/lib/rate-limit'
-import { queueNotification, appUrl } from '@/lib/notify'
+import { queueNotification } from '@/lib/notify'
 import { syncPmRequest } from '@/lib/pm-server'
 
 const BodySchema = z.strictObject({ managerId: z.uuid() })
@@ -49,17 +49,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (result === 'no_hire')    return NOT_FOUND()
   if (result === 'no_manager') return NextResponse.json({ error: 'Please choose a manager from the list.' }, { status: 400 })
 
-  const [{ data: manager }, { data: hire }] = await Promise.all([
-    admin.from('managers').select('id, full_name, email').eq('id', managerId).maybeSingle(),
-    admin.from('profiles').select('full_name').eq('id', id).maybeSingle(),
-  ])
+  const { data: manager } = await admin.from('managers').select('id, full_name, email').eq('id', managerId).maybeSingle()
 
   if (result === 'unchanged') {
     return NextResponse.json({ ok: true, unchanged: true, manager: manager ? { id: manager.id, name: manager.full_name } : null })
   }
 
   // Keep the regional project-management request in step with the plan (idempotent)
-  await syncPmRequest(admin, id)
+  await syncPmRequest(admin, id, { by: user.id, label: 'HR' })
 
   await admin.from('audit_log').insert({
     user_id:      id,
@@ -72,15 +69,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     // The sequence makes a return to a former manager a new request; a retry of the same
     // assignment produces the same key and is ignored as a duplicate
     await queueNotification({
-      template:  'manager_plan_requested',
-      to:        manager.email,
-      dedupeKey: `manager_plan_request:${id}:${manager.id}:${seq}`,
-      payload:   {
-        newhireId: id,
-        managerId: manager.id,
-        hireName:  hire?.full_name ?? '',
-        link:      appUrl(`/manager/newhire/${id}`),
-      },
+      template: 'manager_plan_requested',
+      hireId:   id,
+      payload:  { managerId: manager.id },
+      version:  String(seq),
     })
   }
 

@@ -84,24 +84,14 @@ export function ClearanceChipBadge({ status, href }: { status: ClearanceStatus; 
 }
 
 // Project management chip: open → amber (waiting), claimed → copper (the project portal's colour),
-// done → green, needs region → red (HR must set the hire's region)
+// done → green, needs region → red (the manager plan has no project region)
 const PM_CHIP_TONE: Record<PmChip, string> = {
   open: 'draft', claimed: 'pm', done: 'submitted', needs_region: 'overdue',
 }
 
-// With setRegionHref, "Set region" becomes a link that opens the hire's Region editor; with href,
-// every other state links to the hire's Plan & Project tab (HR dashboard)
-export function PmChipBadge({ state, claimedByName, setRegionHref, href }: { state: PmChip; claimedByName?: string | null; setRegionHref?: string; href?: string }) {
+// With href, the chip links to the hire's Plan & Project tab (HR dashboard)
+export function PmChipBadge({ state, claimedByName, href }: { state: PmChip; claimedByName?: string | null; href?: string }) {
   const label = state === 'claimed' && claimedByName ? `Claimed by ${claimedByName}` : PM_CHIP_LABELS[state]
-  if (state === 'needs_region' && setRegionHref) {
-    return (
-      <Link href={setRegionHref} className={`plan-chip ${PM_CHIP_TONE[state]} action`} onClick={e => e.stopPropagation()}>
-        <span className="plan-chip-dot" aria-hidden="true" />
-        Project mgmt · {label}
-        <span aria-hidden="true">→</span>
-      </Link>
-    )
-  }
   if (href) {
     return (
       <Link href={href} className={`plan-chip ${PM_CHIP_TONE[state]} action`} onClick={e => e.stopPropagation()}>

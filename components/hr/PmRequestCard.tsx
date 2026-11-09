@@ -11,7 +11,7 @@ import type { PmChip } from '@/types'
 type Data =
   | { needed: false }
   | {
-      needed: true; state: PmChip; region: string | null
+      needed: true; state: PmChip; region: string | null; warnings: string[]
       claimed_by_name: string | null; claimed_at: string | null
       completed_by_name: string | null; completed_at: string | null
       details: PmDetails
@@ -19,10 +19,9 @@ type Data =
 
 // Regional project management on the HR hire page: status, who has it, and HR's release action.
 // Shown only for hires whose submitted manager plan asks for PSPC & RCMP.
-export default function PmRequestCard({ hireId, onToast, onSetRegion }: {
+export default function PmRequestCard({ hireId, onToast }: {
   hireId: string
   onToast: (msg: string) => void
-  onSetRegion: () => void   // opens the Region editor in Hire Details
 }) {
   const [data, setData]       = useState<Data | null>(null)
   const [attempt, setAttempt] = useState(0)
@@ -79,10 +78,11 @@ export default function PmRequestCard({ hireId, onToast, onSetRegion }: {
       </div>
 
       <div className="clr-hr-body">
+        {data.warnings?.map(w => <div key={w} className="clr-hr-error" role="alert">{w}</div>)}
         {data.state === 'needs_region' && (
           <div className="clr-hr-hint">
-            This hire has no region yet. Set it (Ontario, New Brunswick or Nova Scotia) so the request
-            opens for that region&apos;s team.
+            The manager plan has no project region. The request opens for that region&apos;s team once
+            the manager chooses one.
           </div>
         )}
         {data.state === 'open' && <div className="clr-hr-hint">Waiting for someone on the regional team to claim it.</div>}
@@ -114,12 +114,6 @@ export default function PmRequestCard({ hireId, onToast, onSetRegion }: {
         </div>
       )}
 
-      {data.state === 'needs_region' && (
-        <div className="clr-hr-actions">
-          <button type="button" className="clr-hr-btn primary" onClick={onSetRegion}>Set region</button>
-        </div>
-      )}
-
       {data.state === 'claimed' && (
         <div className="clr-hr-actions">
           <button type="button" className="clr-hr-btn" onClick={() => { setError(''); setConfirm(true) }}>Release claim</button>
@@ -129,7 +123,7 @@ export default function PmRequestCard({ hireId, onToast, onSetRegion }: {
       {confirm && (
         <Modal
           title="Release this claim?"
-          description="The request goes back to the regional team's Open list so someone else can claim it."
+          description="The request goes back to an Open list so someone else can claim it. If the plan's project region has changed, it moves to that region's team."
           onClose={() => setConfirm(false)}
           busy={busy}
         >

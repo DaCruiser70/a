@@ -4,7 +4,6 @@ import { createServiceClient } from '@/lib/supabase/server'
 import { requireRole } from '@/lib/roles'
 import { rateLimit, rateLimitKey } from '@/lib/rate-limit'
 import { esc } from '@/lib/safe-html'
-import { hrNotifyEmails } from '@/lib/notify'
 import {
   VehicleDetailsSchema, GasCardSchema, cleanDetails, VEHICLE_FIELDS, VEHICLE_FIELD_LABELS, GAS_CARD_LABEL,
   VEHICLE_TASK_KEY, VEHICLE_TASK_NAME, VEHICLE_TASK_KEYS, VEHICLE_STEP_ORDER,
@@ -157,10 +156,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ hir
   await admin.from('audit_log').insert({ user_id: hireId, action_type: body.step === 'marley' ? 'green' : 'navy', message, performed_by: user.id })
 
   // Next person's notice, or HR's when all three are done. After Heather, Marley's step (and her
-  // notice) starts here only if the licence is already approved; otherwise HR's approval starts it.
-  if (body.step === 'rob')     await queueVehicleNotice(admin, hireId, 'heather', accounts.heather!.email)
-  if (body.step === 'heather') await tryStartInsurance(admin, hireId)
-  if (body.step === 'marley')  await queueVehicleNotice(admin, hireId, 'complete', hrNotifyEmails())
+  // notice) starts here only if the licence is already approved; otherwise HR's approval starts it,
+  // and HR is told the licence is what the insurance step is waiting for.
+  if (body.step === 'rob') await queueVehicleNotice(hireId, 'heather')
+  if (body.step === 'heather' && !(await tryStartInsurance(admin, hireId))) {
+    if ((await driversLicense(admin, hireId)).status !== 'approved') await queueVehicleNotice(hireId, 'license')
+  }
+  if (body.step === 'marley') await queueVehicleNotice(hireId, 'complete')
 
   return NextResponse.json({ ok: true })
 }

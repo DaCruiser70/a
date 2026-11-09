@@ -4,7 +4,7 @@ import { createServiceClient } from '@/lib/supabase/server'
 import { requireRole } from '@/lib/roles'
 import { rateLimit, rateLimitKey } from '@/lib/rate-limit'
 import { esc } from '@/lib/safe-html'
-import { pmMemberOr401, queuePmDone } from '@/lib/pm-server'
+import { pmMemberOr401, queuePmDone, syncPmRequest } from '@/lib/pm-server'
 import { syncClearancePackage } from '@/lib/clearance-package'
 import { PM_DETAIL_LABELS, PM_REQUIRED_FIELDS, missingPmFields } from '@/lib/pm'
 
@@ -108,6 +108,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     message:      `<strong>${esc(member.member_name)}</strong> (project management) ${MESSAGES[action]}`,
     performed_by: auth.user.id,
   })
+
+  // Released: if the plan's project region changed while it was claimed, it can move now
+  if (action === 'release') await syncPmRequest(admin, id, { by: auth.user.id, label: 'Project management' })
 
   if (action === 'done') {
     await queuePmDone(admin, id)

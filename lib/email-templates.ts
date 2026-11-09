@@ -1,4 +1,5 @@
 import { esc } from '@/lib/safe-html'
+import type { NotificationTemplate } from '@/lib/notification-templates'
 
 // Email templates (HTML + plain text) for lib/mailer.ts. Everything interpolated is escaped.
 // No remote images or fonts: the header is text, and the fonts fall back to Georgia and Arial.
@@ -165,6 +166,162 @@ export function passwordResetEmail({ firstName, link, ttlSeconds }: {
     link,
     hours: Math.round(ttlSeconds / 3600),
   })
+}
+
+// ── Notifications (lib/notify-dispatch.ts) ──
+// Names, dates and one portal link only. Never SIN, banking, date of birth, clearance details, ID
+// numbers, document contents or an HR note. Subjects are short and carry at most the hire's name.
+
+export type NoticeContext = {
+  hireName:   string          // '' when unknown
+  firstName:  string          // the recipient's first name, for notices to the hire
+  startDate:  string | null   // readable date
+  section:    string | null   // item_flagged: the section label (never the note)
+  taskNames:  string[]        // stakeholder_tasks_created: fixed task labels
+  link:       string
+}
+
+type NoticeParts = { subject: string; heading: string; paragraphs: string[]; details: string[]; button: string }
+
+// Removes line breaks and runs of spaces from a name before it goes into a subject or a sentence
+function oneLine(value: string): string {
+  return value.replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80)
+}
+
+function noticeParts(template: NotificationTemplate, c: NoticeContext): NoticeParts {
+  const name  = oneLine(c.hireName) || 'a new hire'
+  const Name  = oneLine(c.hireName) || 'A new hire'
+  const forName = (prefix: string) => oneLine(c.hireName) ? `${prefix}: ${oneLine(c.hireName)}` : prefix
+  const starts  = c.startDate ? [`Start date: ${c.startDate}`] : []
+  const hi      = oneLine(c.firstName) ? `Hi ${oneLine(c.firstName)},` : 'Hello,'
+
+  switch (template) {
+    case 'manager_plan_requested': return {
+      subject: c.startDate ? `New hire starting ${c.startDate}` : forName('New hire on your team'),
+      heading: 'A new hire is joining your team',
+      paragraphs: [`${Name} is joining your team. Please fill in their onboarding plan in the portal.`],
+      details: [`New hire: ${name}`, ...starts], button: 'Open the onboarding plan',
+    }
+    case 'manager_plan_submitted': return {
+      subject: forName('Manager plan submitted'), heading: 'Onboarding plan submitted',
+      paragraphs: [`The manager has submitted the onboarding plan for ${name}.`],
+      details: starts, button: 'Open the hire record',
+    }
+    case 'clearance_unlocked': return {
+      subject: 'Your security clearance form is ready', heading: 'Your security clearance form is ready',
+      paragraphs: [hi, 'There is one more form for you to complete in the onboarding portal: the security clearance form.'],
+      details: [], button: 'Open the clearance form',
+    }
+    case 'clearance_submitted': return {
+      subject: forName('Clearance form submitted'), heading: 'Security clearance form submitted',
+      paragraphs: [`${Name} has submitted the security clearance form. It is ready for your review in the portal.`],
+      details: [], button: 'Open the hire record',
+    }
+    case 'onboarding_complete': return {
+      subject: forName('Ready for review'), heading: 'Onboarding items ready for review',
+      paragraphs: [`${Name} has sent all five onboarding items. They are ready for your review.`],
+      details: starts, button: 'Open the hire record',
+    }
+    case 'pm_request_created': return {
+      subject: forName('Project details needed'), heading: 'Project details needed',
+      paragraphs: [`Project management details are needed for ${name}. Anyone on your regional team can pick this up in the portal.`],
+      details: starts, button: 'Open the request',
+    }
+    case 'pm_request_done': return {
+      subject: forName('Project details complete'), heading: 'Project details complete',
+      paragraphs: [`Project management has finished the project details for ${name}.`],
+      details: [], button: 'Open the hire record',
+    }
+    case 'clearance_package_sent': return {
+      subject: forName('Clearance package ready'), heading: 'A clearance package is ready for review',
+      paragraphs: [`The clearance package for ${name} is ready for your review in the portal.`],
+      details: [], button: 'Open the package',
+    }
+    case 'clearance_package_returned': return {
+      subject: forName('Clearance package returned'), heading: 'Clearance package returned',
+      paragraphs: [`The clearance reviewer sent the package for ${name} back to HR. See the portal for details.`],
+      details: [], button: 'Open the clearance tab',
+    }
+    case 'clearance_package_done': return {
+      subject: forName('Clearance package done'), heading: 'Clearance package done',
+      paragraphs: [`The clearance reviewer marked the package for ${name} as done.`],
+      details: [], button: 'Open the clearance tab',
+    }
+    case 'vehicle_rob_task': return {
+      subject: forName('Company vehicle details needed'), heading: 'Company vehicle: your step',
+      paragraphs: [`${Name} needs a company vehicle. Please fill in the vehicle details in the portal.`],
+      details: starts, button: 'Open the vehicle request',
+    }
+    case 'vehicle_heather_task': return {
+      subject: forName('Company vehicle details to check'), heading: 'Company vehicle: your step',
+      paragraphs: [`The vehicle details for ${name} are ready for you to check and complete in the portal.`],
+      details: starts, button: 'Open the vehicle request',
+    }
+    case 'vehicle_license_review': return {
+      subject: forName('Driver’s Licence to approve'), heading: 'Driver’s Licence approval needed',
+      paragraphs: [`The company vehicle details for ${name} are complete. The insurance step starts once the hire’s Driver’s Licence is uploaded and approved by HR.`],
+      details: [], button: 'Open the hire record',
+    }
+    case 'vehicle_insurance_task': return {
+      subject: forName('Company vehicle insurance'), heading: 'Company vehicle: your step',
+      paragraphs: [`The company vehicle for ${name} is ready for insurance. Please confirm it in the portal.`],
+      details: starts, button: 'Open the vehicle request',
+    }
+    case 'vehicle_complete': return {
+      subject: forName('Company vehicle complete'), heading: 'Company vehicle steps complete',
+      paragraphs: [`All company vehicle steps for ${name} are complete.`],
+      details: [], button: 'Open the equipment tab',
+    }
+    case 'item_flagged': return {
+      subject: 'Action needed on your onboarding', heading: 'One section needs a fix',
+      paragraphs: [hi, `Your onboarding team has asked you to update the ${c.section ?? 'flagged'} section. See the portal for details.`],
+      details: [], button: 'Open my forms',
+    }
+    case 'hire_approved': return {
+      subject: forName('Ready for payroll'), heading: 'Ready for payroll',
+      paragraphs: [`HR has approved every onboarding item for ${name}. They are now in the payroll queue.`],
+      details: starts, button: 'Open the payroll queue',
+    }
+    case 'hire_all_set': return {
+      subject: 'You’re all set', heading: 'You’re all set',
+      paragraphs: [hi, 'HR has approved all of your onboarding items. There is nothing more for you to do. We look forward to your first day.'],
+      details: starts, button: 'Open the portal',
+    }
+    case 'payroll_done': return {
+      subject: forName('Payroll complete'), heading: 'Payroll complete',
+      paragraphs: [`Payroll has finished setting up ${name}.`],
+      details: [], button: 'Open the hire record',
+    }
+    case 'stakeholder_tasks_created': return {
+      subject: forName('New onboarding task'), heading: c.taskNames.length > 1 ? 'New onboarding tasks' : 'New onboarding task',
+      paragraphs: [`You have ${c.taskNames.length > 1 ? 'new tasks' : 'a new task'} for ${name}.`],
+      details: [...c.taskNames.map(t => `Task: ${oneLine(t)}`), ...starts], button: 'Open the tasks',
+    }
+  }
+}
+
+export function noticeEmail(template: NotificationTemplate, ctx: NoticeContext): EmailContent {
+  const { subject, heading, paragraphs, details, button } = noticeParts(template, ctx)
+  const fallback = 'If the button does not work, copy this link into your browser:'
+  const signIn   = 'You will be asked to sign in.'
+  const bodyHtml = `
+<h1 style="margin:0 0 12px;font-family:${HEAD_FONT};font-size:22px;line-height:1.3;color:${NAVY};font-weight:700;">${esc(heading)}</h1>
+${paragraphs.map(p => `<p style="margin:0 0 16px;">${esc(p)}</p>`).join('\n')}
+${details.length ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 20px;"><tr><td style="background:#F7F4EE;border-left:4px solid ${AMBER};border-radius:8px;padding:12px 18px;font-family:${BODY_FONT};font-size:14px;line-height:1.7;color:${TEXT};">${details.map(d => esc(d)).join('<br>')}</td></tr></table>` : ''}
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:4px 0 20px;">
+<tr><td style="border-radius:10px;background:${NAVY};">
+<a href="${esc(ctx.link)}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:14px 26px;font-family:${BODY_FONT};font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:10px;border-bottom:3px solid ${AMBER};">${esc(button)}</a>
+</td></tr>
+</table>
+<p style="margin:0 0 12px;color:${MUTED};font-size:13px;">${esc(signIn)}</p>
+<p style="margin:0 0 6px;color:${MUTED};font-size:13px;">${esc(fallback)}</p>
+<p style="margin:0 0 20px;font-size:13px;word-break:break-all;"><a href="${esc(ctx.link)}" target="_blank" rel="noopener noreferrer" style="color:${NAVY};">${esc(ctx.link)}</a></p>`
+  const text = [
+    heading, '', ...paragraphs.flatMap(p => [p, '']),
+    ...(details.length ? [...details, ''] : []),
+    `${button}:`, ctx.link, signIn, '', FOOTER, '',
+  ].join('\n')
+  return { subject, html: layout({ title: subject, preview: paragraphs[paragraphs.length - 1], bodyHtml }), text }
 }
 
 // scripts/test-email.ts: a harmless message to check delivery

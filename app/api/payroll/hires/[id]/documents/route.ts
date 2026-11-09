@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase/server'
 import { requireRole } from '@/lib/roles'
 import { recomputeProfileStatus } from '@/lib/hire-status'
 import { esc } from '@/lib/safe-html'
+import { queueNotification, queueHireApproved } from '@/lib/notify'
 
 const ALLOWED_DOC_TYPES = new Set(['td1_federal', 'td1_provincial', 'direct_deposit'])
 
@@ -29,7 +30,7 @@ export async function PATCH(
   // Verify document belongs to this hire and is a payroll-visible type
   const { data: doc } = await admin
     .from('newhire_documents')
-    .select('id, user_id, document_type, document_label')
+    .select('id, user_id, document_type, document_label, uploaded_at')
     .eq('id', documentId)
     .maybeSingle()
 
@@ -58,7 +59,12 @@ export async function PATCH(
 
   // Documents are one of the 5 onboarding items: refresh the stored status (and payroll queueing)
   // (a hire already in the payroll queue stays visible to payroll: lib/payroll-access.ts)
-  await recomputeProfileStatus(admin, id)
+  const { enteredPayrollQueue } = await recomputeProfileStatus(admin, id)
+  if (enteredPayrollQueue) await queueHireApproved(id)
+  // Rejected: the hire is told the Documents section needs a fix (once per upload, never the reason)
+  if (action === 'reject') {
+    await queueNotification({ template: 'item_flagged', hireId: id, payload: { section: 'documents' }, version: `${doc.id}:${doc.uploaded_at}` })
+  }
 
   return NextResponse.json({ ok: true })
 }

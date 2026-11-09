@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { createServiceClient } from '@/lib/supabase/server'
 import { requireRole } from '@/lib/roles'
 import { rateLimit, rateLimitKey } from '@/lib/rate-limit'
-import { describePmRequests, memberNames, pmMemberOr401 } from '@/lib/pm-server'
+import { describePmRequests, memberNames, pmMemberOr401, pmRequestInRegion } from '@/lib/pm-server'
 import { missingPmFields } from '@/lib/pm'
 
 const NOT_FOUND = () => NextResponse.json({ error: 'Not found' }, { status: 404 })
@@ -29,13 +29,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   if (!z.uuid().safeParse(id).success) return NOT_FOUND()
 
   const admin = createServiceClient()
-  const { data: req } = await admin
-    .from('pm_requests')
-    .select('newhire_id, status, claimed_by, claimed_at, completed_by, completed_at, region, dcc, standing_offer, project_name, project_location')
-    .eq('newhire_id', id)
-    .eq('region', member.region)
-    .neq('status', 'cancelled')
-    .maybeSingle()
+  const req = await pmRequestInRegion(admin, member.region, id)
   if (!req) return NOT_FOUND()
 
   const [[card], { data: plan }, completers] = await Promise.all([

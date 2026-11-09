@@ -75,7 +75,9 @@ const text = z.string().trim().max(MAX_PLAN_TEXT, `Please keep this under ${MAX_
 const trainingItems = z.array(z.enum(TRAINING_KEYS, { error: 'Choose training from the list.' })).max(TRAINING_KEYS.length)
   .refine(v => new Set(v).size === v.length, 'Each training can be chosen once.')
 const otherText = z.string().trim().max(TRAINING_OTHER_MAX, `Please keep this under ${TRAINING_OTHER_MAX} characters.`)
-const region = z.union([z.enum(REGIONS), z.literal('')])
+// Only the shared region list (or empty on a draft): no free text, so a value can never differ from
+// what region_teams uses
+const region = z.union([z.enum(REGIONS), z.literal('')], { error: 'Choose the project region from the list.' })
 
 // Save draft: any field may be empty. Unchecking "Other" clears its text.
 export const PlanDraftSchema = z.strictObject({

@@ -1,7 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database, RegionName, RegionTeamMember } from '@/types'
-import { isRegion, needsPmRequest, type PmProjectBlock } from '@/lib/pm'
-import { queueNotification, hrNotifyEmails, appUrl } from '@/lib/notify'
+import { isRegion, needsPmRequest, type PmProjectBlock, type PmTab } from '@/lib/pm'
+import { esc } from '@/lib/safe-html'
+import { queueNotification } from '@/lib/notify'
 
 // Server-only helpers for regional project management.
 
@@ -62,16 +63,32 @@ export async function memberNames(admin: Admin, ids: (string | null | undefined)
 
 export type PmSyncResult = 'not_needed' | 'needs_region' | 'open' | 'claimed' | 'done' | 'cancelled'
 
+// Who or what caused a sync, for the audit entry. label is a fixed word, never a person's name.
+export type PmActor = { by: string | null; label: 'Manager' | 'HR' | 'Project management' | 'One-time fix' }
+
+async function auditPm(admin: Admin, hireId: string, actor: PmActor, message: string) {
+  const { error } = await admin.from('audit_log').insert({
+    user_id: hireId, action_type: 'navy', performed_by: actor.by,
+    message: `${message} (project region on the manager plan; triggered by <strong>${esc(actor.label)}</strong>)`,
+  })
+  if (error) console.error(`[pm] audit insert failed (code ${error.code})`)
+}
+
 // Keeps the hire's pm_requests row in step with the manager plan. Idempotent; safe to call after
-// every plan save or reassignment.
-//   PSPC & RCMP submitted, valid region → request exists (created, or reopened if it was cancelled)
-//   PSPC & RCMP submitted, no region    → no request; HR sees "Set region"
-//   region changed while open/claimed   → moved to the new region's team, unclaimed
-//   anything else                       → an open or claimed request is cancelled (done is kept)
-export async function syncPmRequest(admin: Admin, hireId: string): Promise<PmSyncResult> {
-  const [{ data: plan }, { data: hire }, { data: existing }] = await Promise.all([
-    admin.from('manager_plans').select('status, clearance_type').eq('newhire_id', hireId).maybeSingle(),
-    admin.from('profiles').select('full_name, region').eq('id', hireId).maybeSingle(),
+// every plan save, reassignment or release. The plan's project region alone decides the team; the
+// hire's own region is never read.
+//   PSPC & RCMP submitted, valid project region → request exists (created, or reopened if cancelled)
+//   PSPC & RCMP submitted, no project region    → no request; HR sees "No project region"
+//   project region changed, request open        → moved to the new region's team
+//   project region changed, request claimed     → stays; HR is warned (pmRegionWarnings). Once the
+//                                                 claim is released, the next sync moves it
+//   project region changed, request done        → never changes
+//   not PSPC & RCMP any more                    → an open or claimed request is cancelled (done is kept)
+// The team's notice uses the time of the change as its dedupe version: a conditional UPDATE means
+// only one caller gets here per change, and a later move back to a region is not swallowed.
+export async function syncPmRequest(admin: Admin, hireId: string, actor: PmActor): Promise<PmSyncResult> {
+  const [{ data: plan }, { data: existing }] = await Promise.all([
+    admin.from('manager_plans').select('status, clearance_type, project_region').eq('newhire_id', hireId).maybeSingle(),
     admin.from('pm_requests').select('id, status, region').eq('newhire_id', hireId).maybeSingle(),
   ])
   const now = new Date().toISOString()
@@ -86,7 +103,8 @@ export async function syncPmRequest(admin: Admin, hireId: string): Promise<PmSyn
     return existing?.status === 'done' ? 'done' : existing ? 'cancelled' : 'not_needed'
   }
 
-  const region = isRegion(hire?.region) ? hire.region : null
+  // No guess and no fallback: without a valid project region nothing is created or moved
+  const region = isRegion(plan?.project_region) ? plan.project_region : null
   if (!region) return existing && existing.status !== 'cancelled' ? existing.status : 'needs_region'
 
   let becameOpen = false
@@ -96,40 +114,76 @@ export async function syncPmRequest(admin: Admin, hireId: string): Promise<PmSyn
       .upsert({ newhire_id: hireId, region, status: 'open' }, { onConflict: 'newhire_id', ignoreDuplicates: true })
       .select('id')
     becameOpen = (inserted?.length ?? 0) > 0
+    if (becameOpen) await auditPm(admin, hireId, actor, `Project management request opened for the <strong>${esc(region)}</strong> team`)
   } else if (existing.status === 'cancelled') {
-    // Moved back to PSPC & RCMP: reopen, unclaimed, in the hire's current region
+    // Moved back to PSPC & RCMP: reopen, unclaimed, in the plan's project region
     const { data: reopened } = await admin.from('pm_requests')
       .update({ status: 'open', region, claimed_by: null, claimed_at: null, updated_at: now })
       .eq('newhire_id', hireId)
       .eq('status', 'cancelled')
       .select('id')
     becameOpen = (reopened?.length ?? 0) > 0
-  } else if ((existing.status === 'open' || existing.status === 'claimed') && existing.region !== region) {
-    // The hire's region changed while the request was open or claimed: the old region's request is
-    // cancelled and a fresh, unclaimed one opens for the new region's team. A done request never changes.
+    if (becameOpen) {
+      await auditPm(admin, hireId, actor, existing.region === region
+        ? `Project management request reopened for the <strong>${esc(region)}</strong> team`
+        : `Project management request reopened and moved from <strong>${esc(existing.region)}</strong> to <strong>${esc(region)}</strong>`)
+    }
+  } else if (existing.status === 'open' && existing.region !== region) {
+    // Unclaimed: moves to the new region's team. The conditions make it one move, whoever races it
     const { data: moved } = await admin.from('pm_requests')
-      .update({ status: 'open', region, claimed_by: null, claimed_at: null, updated_at: now })
+      .update({ region, updated_at: now })
       .eq('newhire_id', hireId)
-      .in('status', ['open', 'claimed'])
-      .neq('region', region)
+      .eq('status', 'open')
+      .eq('region', existing.region)
       .select('id')
     becameOpen = (moved?.length ?? 0) > 0
+    if (becameOpen) await auditPm(admin, hireId, actor, `Project management request moved from <strong>${esc(existing.region)}</strong> to <strong>${esc(region)}</strong>`)
+    else return 'open'
   } else {
     return existing.status
   }
 
+  // Goes to the new region's team only; its active members are looked up when it is sent. An empty
+  // team shows on HR's card as "No active team for …" (pmRegionWarnings).
   if (becameOpen) {
-    const team = await activeRegionMembers(admin, region)
-    if (team.length > 0) {
-      await queueNotification({
-        template:  'pm_request_created',
-        to:        team.map(m => m.member_email),
-        dedupeKey: `pm_request_created:${hireId}:${region}`,
-        payload:   { newhireId: hireId, hireName: hire?.full_name ?? '', link: appUrl(`/project-mgmt/newhire/${hireId}`) },
-      })
-    }
+    await queueNotification({ template: 'pm_request_created', hireId, payload: { region }, version: now })
   }
   return 'open'
+}
+
+// True when a claimed or finished request is held by a team other than this project region
+export async function pmHeldInOtherRegion(admin: Admin, hireId: string, region: string): Promise<boolean> {
+  const { data } = await admin.from('pm_requests').select('status, region').eq('newhire_id', hireId).maybeSingle()
+  return !!data && (data.status === 'claimed' || data.status === 'done') && data.region !== region
+}
+
+// ── What a team member may see. The region always comes from the signed-in member's session. ──
+
+export async function pmRequestInRegion(admin: Admin, region: RegionName, hireId: string) {
+  const { data } = await admin
+    .from('pm_requests')
+    .select('newhire_id, status, claimed_by, claimed_at, completed_by, completed_at, region, dcc, standing_offer, project_name, project_location')
+    .eq('newhire_id', hireId)
+    .eq('region', region)
+    .neq('status', 'cancelled')
+    .maybeSingle()
+  return data
+}
+
+//   open → unclaimed requests · mine → claimed by this member · done → completed
+export async function pmRequestsInRegion(
+  admin: Admin, { region, memberId, tab, limit, offset }: { region: RegionName; memberId: string; tab: PmTab; limit: number; offset: number },
+) {
+  let query = admin
+    .from('pm_requests')
+    .select('newhire_id, status, claimed_by, claimed_at, completed_at, region', { count: 'exact' })
+    .eq('region', region)
+
+  if (tab === 'open')      query = query.eq('status', 'open').order('created_at', { ascending: true })
+  else if (tab === 'mine') query = query.eq('status', 'claimed').eq('claimed_by', memberId).order('claimed_at', { ascending: false })
+  else                     query = query.eq('status', 'done').order('completed_at', { ascending: false })
+
+  return query.range(offset, offset + limit - 1)
 }
 
 // Project block for HR: number and region from the manager plan, the four details from the
@@ -155,14 +209,8 @@ export async function loadProjectBlock(admin: Admin, hireId: string): Promise<{ 
 }
 
 // Queued once when a request is marked done
-export async function queuePmDone(admin: Admin, hireId: string): Promise<void> {
-  const { data: hire } = await admin.from('profiles').select('full_name').eq('id', hireId).maybeSingle()
-  await queueNotification({
-    template:  'pm_request_done',
-    to:        hrNotifyEmails(),
-    dedupeKey: `pm_request_done:${hireId}`,
-    payload:   { newhireId: hireId, hireName: hire?.full_name ?? '', link: appUrl(`/hr/newhire/${hireId}`) },
-  })
+export async function queuePmDone(_admin: Admin, hireId: string): Promise<void> {
+  await queueNotification({ template: 'pm_request_done', hireId, payload: {} })
 }
 
 // Card fields for a set of requests: hire name and start date, project number and manager from

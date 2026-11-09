@@ -6,22 +6,35 @@ import '../../../styles/pages/hr-dashboard.css'
 import '../../../styles/pages/hr-outbox.css'
 import PortalSwitcher from '@/components/ui/PortalSwitcher'
 import { PortalIdentity } from '@/components/ui/PortalName'
-import { NOTIFICATION_TEMPLATES, TEMPLATE_LABELS, type NotificationTemplate } from '@/lib/notification-templates'
+import { NOTIFICATION_TEMPLATES, TEMPLATE_LABELS, ERROR_CODE_LABELS, type NotificationTemplate } from '@/lib/notification-templates'
 import type { OutboxStatus } from '@/types'
 
 type OutboxItem = {
   id:         string
   template:   string
   hire_name:  string | null
-  recipients: string[]
+  audience:   string[]          // role labels, never addresses
   status:     OutboxStatus
   attempts:   number
+  error_code: string | null
   created_at: string
   sent_at:    string | null
 }
+type MailMode = 'console' | 'test' | 'live' | 'off'
+type RowAction = 'retry' | 'send_now'
 
 const PAGE_SIZE = 25
-const STATUS_LABELS: Record<OutboxStatus, string> = { pending: 'Pending', sent: 'Sent', failed: 'Failed' }
+const MAX_ATTEMPTS = 5
+const STATUS_LABELS: Record<OutboxStatus, string> = {
+  queued: 'Queued', sending: 'Sending', sent: 'Sent', failed: 'Failed', dead: 'Dead',
+}
+
+const MODE_NOTES: Record<MailMode, { title: string; text: string }> = {
+  live:    { title: 'Email is on.', text: 'Notifications are sent to the real recipients. Failed ones are retried automatically up to five times.' },
+  test:    { title: 'Test mode.', text: 'Every notification goes to the test mailbox only, with the real recipients named at the top. Nobody else receives anything.' },
+  console: { title: 'Email is off (console mode).', text: 'Nothing is sent. Notifications stay queued here until email is switched on.' },
+  off:     { title: 'Email is not set up.', text: 'Nothing is sent. Notifications stay queued here until the email settings are complete.' },
+}
 
 function templateLabel(key: string) {
   return (TEMPLATE_LABELS as Record<string, string>)[key] ?? key
@@ -31,16 +44,19 @@ function fmtDateTime(iso: string) {
   return new Date(iso).toLocaleString('en-CA', { dateStyle: 'medium', timeStyle: 'short' })
 }
 
-// Read-only list of queued notifications. All data comes from GET /api/hr/outbox.
+// Queued notifications and their delivery state. All data comes from GET /api/hr/outbox; Retry and
+// Send now go through POST /api/hr/outbox/[id] (HR can never change recipients or content).
 export default function OutboxPage() {
   const [status, setStatus]     = useState<'' | OutboxStatus>('')
   const [template, setTemplate] = useState<'' | NotificationTemplate>('')
   const [offset, setOffset]     = useState(0)
   const [items, setItems]       = useState<OutboxItem[]>([])
   const [total, setTotal]       = useState(0)
+  const [mode, setMode]         = useState<MailMode | null>(null)
   const [state, setState]       = useState<'loading' | 'ready' | 'error'>('loading')
   const [attempt, setAttempt]   = useState(0)
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
+  const [busy, setBusy]         = useState<string | null>(null)
+  const [notice, setNotice]     = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -49,10 +65,11 @@ export default function OutboxPage() {
     if (template) qs.set('template', template)
     fetch(`/api/hr/outbox?${qs}`, { cache: 'no-store' })
       .then(r => (r.ok ? r.json() : Promise.reject()))
-      .then((d: { items: OutboxItem[]; total: number }) => {
+      .then((d: { items: OutboxItem[]; total: number; mode: MailMode }) => {
         if (cancelled) return
         setItems(d.items)
         setTotal(d.total)
+        setMode(d.mode)
         setState('ready')
       })
       .catch(() => { if (!cancelled) setState('error') })
@@ -62,14 +79,39 @@ export default function OutboxPage() {
   function changeFilter(update: () => void) {
     update()
     setOffset(0)
-    setExpanded({})
+    setNotice(null)
     setState('loading')
   }
 
   function goTo(next: number) {
     setOffset(next)
-    setExpanded({})
+    setNotice(null)
     setState('loading')
+  }
+
+  async function act(item: OutboxItem, action: RowAction) {
+    setBusy(`${item.id}:${action}`)
+    setNotice(null)
+    try {
+      const res = await fetch(`/api/hr/outbox/${item.id}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action }),
+      })
+      if (res.ok) {
+        setNotice({ kind: 'ok', text: action === 'retry' ? 'Queued again. It will be sent shortly.' : 'Sending now. Refreshing the list…' })
+      } else if (res.status === 404) {
+        setNotice({ kind: 'error', text: 'That notification has already moved on. The list has been refreshed.' })
+      } else if (res.status === 429) {
+        setNotice({ kind: 'error', text: 'Too many requests. Please wait a few minutes and try again.' })
+      } else {
+        setNotice({ kind: 'error', text: 'That didn’t work. Please try again.' })
+      }
+    } catch {
+      setNotice({ kind: 'error', text: 'That didn’t work. Please check your connection and try again.' })
+    } finally {
+      setBusy(null)
+      // Give the immediate send a moment, then show the new state
+      setTimeout(() => setAttempt(a => a + 1), 1500)
+    }
   }
 
   async function signOut() {
@@ -133,14 +175,20 @@ export default function OutboxPage() {
         </div>
 
         <main className="hr-content">
-          <div className="obx-note" role="note">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-              <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
-            </svg>
-            <div>
-              <strong>Read-only.</strong> Email is not switched on yet, so nothing listed here has been sent.
-              Until then this page is a testing aid that shows what would go out; once email is on it becomes the delivery log.
+          {mode && (
+            <div className="obx-note" role="note">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
+              </svg>
+              <div>
+                <strong>{MODE_NOTES[mode].title}</strong> {MODE_NOTES[mode].text}{' '}
+                Recipients are shown by role; addresses are looked up when each email is sent.
+              </div>
             </div>
+          )}
+
+          <div className="obx-live" aria-live="polite">
+            {notice && <div className={`obx-flash ${notice.kind}`} role={notice.kind === 'error' ? 'alert' : undefined}>{notice.text}</div>}
           </div>
 
           <div className="hr-table-card">
@@ -184,49 +232,61 @@ export default function OutboxPage() {
                 <div className="obx-empty-title">Nothing queued</div>
                 {status || template
                   ? 'No notifications match these filters.'
-                  : 'Notifications appear here when HR adds a new hire or a manager submits a plan.'}
+                  : 'Notifications appear here as hires, managers and teams move through onboarding.'}
               </div>
             )}
 
             {state === 'ready' && items.length > 0 && (
               <ul className="obx-list">
                 <li className="obx-row obx-head" aria-hidden="true">
-                  <span>Notification</span><span>Hire</span><span>Recipients</span><span>Created</span><span>Status</span>
+                  <span>Notification</span><span>Hire</span><span>Recipients</span><span>Attempts</span>
+                  <span>Created · Sent</span><span>Status</span><span>Action</span>
                 </li>
                 {items.map(item => {
-                  const open = !!expanded[item.id]
-                  const panelId = `obx-recipients-${item.id}`
+                  const label   = templateLabel(item.template)
+                  const canRetry = item.status === 'failed' || item.status === 'dead'
+                  const canSend  = item.status === 'queued' || item.status === 'failed'
                   return (
                     <li key={item.id} className="obx-item">
                       <div className="obx-row">
-                        <span className="obx-cell" data-label="Notification">{templateLabel(item.template)}</span>
+                        <span className="obx-cell" data-label="Notification">{label}</span>
                         <span className="obx-cell" data-label="Hire">{item.hire_name || '—'}</span>
-                        <span className="obx-cell" data-label="Recipients">
-                          <button
-                            type="button"
-                            className="obx-expand"
-                            aria-expanded={open}
-                            aria-controls={panelId}
-                            onClick={() => setExpanded(e => ({ ...e, [item.id]: !open }))}
-                          >
-                            {item.recipients.length} recipient{item.recipients.length !== 1 ? 's' : ''}
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
-                              <polyline points="6 9 12 15 18 9"/>
-                            </svg>
-                          </button>
+                        <span className="obx-cell" data-label="Recipients">{item.audience.length ? item.audience.join(', ') : '—'}</span>
+                        <span className="obx-cell" data-label="Attempts">{item.attempts} of {MAX_ATTEMPTS}</span>
+                        <span className="obx-cell" data-label="Created · Sent">
+                          {fmtDateTime(item.created_at)}
+                          <span className="obx-sub">{item.sent_at ? `Sent ${fmtDateTime(item.sent_at)}` : 'Not sent yet'}</span>
                         </span>
-                        <span className="obx-cell" data-label="Created">{fmtDateTime(item.created_at)}</span>
                         <span className="obx-cell" data-label="Status">
                           <span className={`obx-status ${item.status}`}>{STATUS_LABELS[item.status] ?? item.status}</span>
+                          {item.error_code && (
+                            <span className="obx-sub">{ERROR_CODE_LABELS[item.error_code] ?? ERROR_CODE_LABELS.unknown}</span>
+                          )}
+                        </span>
+                        <span className="obx-cell obx-actions" data-label="Action">
+                          {canRetry && (
+                            <button
+                              type="button" className="obx-act"
+                              disabled={busy !== null}
+                              aria-label={`Retry: ${label}${item.hire_name ? `, ${item.hire_name}` : ''}`}
+                              onClick={() => act(item, 'retry')}
+                            >
+                              {busy === `${item.id}:retry` ? 'Retrying…' : 'Retry'}
+                            </button>
+                          )}
+                          {canSend && (
+                            <button
+                              type="button" className="obx-act"
+                              disabled={busy !== null}
+                              aria-label={`Send now: ${label}${item.hire_name ? `, ${item.hire_name}` : ''}`}
+                              onClick={() => act(item, 'send_now')}
+                            >
+                              {busy === `${item.id}:send_now` ? 'Sending…' : 'Send now'}
+                            </button>
+                          )}
+                          {!canRetry && !canSend && <span className="obx-sub">—</span>}
                         </span>
                       </div>
-                      {open && (
-                        <div id={panelId} className="obx-recipients">
-                          <div className="obx-recipients-title">Recipients</div>
-                          <ul>{item.recipients.map(r => <li key={r}>{r}</li>)}</ul>
-                          {item.sent_at && <div className="obx-sent">Sent {fmtDateTime(item.sent_at)}</div>}
-                        </div>
-                      )}
                     </li>
                   )
                 })}

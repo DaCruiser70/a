@@ -32,22 +32,51 @@ export function maskEmail(email: string): string {
   return `${local[0]}•••@${domain}`
 }
 
-// HR chip state for one hire
+// HR chip state for one hire. planRegion: the project region on the manager plan, the only thing
+// that decides which team gets the request.
 export function pmChipState(
   needed: boolean,
   request: { status: PmRequestStatus } | null | undefined,
-  hireRegion: unknown,
+  planRegion: unknown,
 ): PmChip | null {
   if (!needed) return null
   if (request && request.status !== 'cancelled') return request.status as Exclude<PmRequestStatus, 'cancelled'>
-  return isRegion(hireRegion) ? null : 'needs_region'
+  return isRegion(planRegion) ? null : 'needs_region'
+}
+
+// What HR must be told about a request's team: a claimed or finished request that no longer matches
+// the plan's project region (it is never moved silently), and a region with nobody active.
+export function pmRegionWarnings(
+  request: { status: PmRequestStatus; region: string } | null | undefined,
+  planRegion: unknown,
+  activeMembers: number,
+): string[] {
+  if (!request || request.status === 'cancelled') return []
+  const out: string[] = []
+  if (isRegion(planRegion) && planRegion !== request.region) {
+    out.push(request.status === 'claimed'
+      ? `The manager plan's project region is now ${planRegion}, but this request is claimed and stays with the ${request.region} team. Release the claim to move it to ${planRegion}.`
+      : `The manager plan's project region is now ${planRegion}, but this request was handled by the ${request.region} team.`)
+  }
+  if (request.status !== 'done' && activeMembers === 0) out.push(`No active team for ${request.region}`)
+  return out
+}
+
+// The dashboard greeting: a person's first name, or the whole name when a shared or team name is
+// on the list ("New Brunswick Team" must not become "New")
+export function pmGreetingName(name: string): string {
+  const clean = name.trim().replace(/\s+/g, ' ')
+  const lower = clean.toLowerCase()
+  const shared = REGIONS.some(r => lower.startsWith(r.toLowerCase()))
+    || /\b(team|shared|group|office|department|dept|project|projects|pm)\b/.test(lower)
+  return shared ? clean : clean.split(' ')[0]
 }
 
 export const PM_CHIP_LABELS: Record<PmChip, string> = {
   open:         'Open',
   claimed:      'Claimed',
   done:         'Done',
-  needs_region: 'Set region',
+  needs_region: 'No project region',
 }
 
 // ── Project details (entered by project management on the request) ───────────

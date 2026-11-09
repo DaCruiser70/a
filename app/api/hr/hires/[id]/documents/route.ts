@@ -5,6 +5,7 @@ import { recomputeProfileStatus } from '@/lib/hire-status'
 import { syncClearancePackage } from '@/lib/clearance-package'
 import { DRIVERS_LICENSE_TYPE } from '@/lib/required-documents'
 import { tryStartInsurance } from '@/lib/vehicle-server'
+import { queueNotification, queueHireApproved } from '@/lib/notify'
 
 export async function GET(
   _request: Request,
@@ -50,7 +51,7 @@ export async function PATCH(
   // Verify document belongs to the specified hire
   const { data: doc } = await admin
     .from('newhire_documents')
-    .select('id, user_id, document_type')
+    .select('id, user_id, document_type, uploaded_at')
     .eq('id', documentId)
     .maybeSingle()
 
@@ -67,7 +68,12 @@ export async function PATCH(
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   // Documents are one of the 5 onboarding items: refresh the stored status (and payroll queueing)
-  await recomputeProfileStatus(admin, id)
+  const { enteredPayrollQueue } = await recomputeProfileStatus(admin, id)
+  if (enteredPayrollQueue) await queueHireApproved(id)
+  // Rejected: the hire is told the Documents section needs a fix (once per upload, never the reason)
+  if (action === 'reject') {
+    await queueNotification({ template: 'item_flagged', hireId: id, payload: { section: 'documents' }, version: `${doc.id}:${doc.uploaded_at}` })
+  }
   // An ID document (driver's licence or alternate ID) is part of the clearance package
   await syncClearancePackage(admin, id, user.id)
   // An approved Driver's License may be the last thing Marley's insurance step was waiting for.

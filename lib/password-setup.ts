@@ -57,7 +57,8 @@ export function isNewhireAccount(p: { role: string; roles: string[] | null }): b
 type Recipient = { to: string; firstName: string; startDate: string | null; office: string | null }
 
 // The personal email when HR gave one, otherwise the login email. Null for anything but a newhire.
-async function loadRecipient(admin: Admin, userId: string): Promise<Recipient | null> {
+// Also the hire's address for notifications (lib/notify-dispatch.ts).
+export async function loadRecipient(admin: Admin, userId: string): Promise<Recipient | null> {
   const { data: p } = await admin
     .from('profiles')
     .select('full_name, preferred_name, aem_email, contact_email, start_date, office_location, role, roles')
@@ -73,7 +74,7 @@ async function loadRecipient(admin: Admin, userId: string): Promise<Recipient | 
 }
 
 // 2026-11-02 → "Monday, November 2, 2026" (a calendar date, so no time zone shift)
-function readableDate(isoDate: string): string {
+export function readableDate(isoDate: string): string {
   const d = new Date(`${isoDate.slice(0, 10)}T12:00:00Z`)
   if (Number.isNaN(d.getTime())) return isoDate
   return d.toLocaleDateString('en-CA', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' })

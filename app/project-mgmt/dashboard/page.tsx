@@ -8,7 +8,7 @@ import '../../../styles/pages/pm.css'
 import { useMe } from '@/lib/use-me'
 import PortalHeader from '@/components/ui/PortalHeader'
 import { formatPlanDate } from '@/components/ui/PlanBadges'
-import { PM_STATUS_LABELS, PM_TABS, type PmTab } from '@/lib/pm'
+import { PM_STATUS_LABELS, PM_TABS, pmGreetingName, type PmTab } from '@/lib/pm'
 import type { PmRequestStatus } from '@/types'
 
 type PmCard = {
@@ -122,7 +122,7 @@ export default function PmDashboard() {
             <span className="mgr-hero-dot" style={{ background: openCount ? '#F59E0B' : '#34D399' }} aria-hidden="true" />
             {region ? `${region} team` : 'Regional team'}
           </div>
-          <h1>{name ? `Welcome back, ${name.split(' ')[0]}.` : 'Project requests'}</h1>
+          <h1>{name ? `Welcome back, ${pmGreetingName(name)}.` : 'Project requests'}</h1>
           <p>
             {openCount === null ? 'Loading requests…'
               : openCount === 0 ? 'No open requests right now.'

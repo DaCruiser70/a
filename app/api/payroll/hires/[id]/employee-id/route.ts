@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase/server'
 import { requireRole } from '@/lib/roles'
 import { inPayrollQueue } from '@/lib/payroll-access'
 import { esc } from '@/lib/safe-html'
+import { queueNotification } from '@/lib/notify'
 
 export async function POST(
   request: Request,
@@ -45,6 +46,9 @@ export async function POST(
     message:      `<strong>Payroll</strong> assigned employee ID <strong>${esc(trimmed)}</strong> — payroll processing complete`,
     performed_by: user.id,
   })
+
+  // HR is told once per hire (a corrected employee ID later sends nothing)
+  await queueNotification({ template: 'payroll_done', hireId: id, payload: {} })
 
   return NextResponse.json({ ok: true, employeeId: trimmed })
 }

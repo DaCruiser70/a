@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@/types'
 import { esc } from '@/lib/safe-html'
-import { queueNotification, hrNotifyEmails, appUrl } from '@/lib/notify'
+import { queueNotification } from '@/lib/notify'
 import { loadProjectBlock } from '@/lib/pm-server'
 import { missingPmFields, PM_DETAIL_LABELS } from '@/lib/pm'
 import { REVIEWER_MOVES, type PackageStage, type ReviewerAction } from '@/lib/clearance'
@@ -48,29 +48,10 @@ async function nameOf(admin: Admin, id: string | null | undefined): Promise<stri
   return data?.full_name ?? null
 }
 
-// Everyone holding the 'clearance' role
-export async function clearanceReviewerEmails(admin: Admin): Promise<string[]> {
-  const { data } = await admin.from('profiles').select('aem_email').contains('roles', ['clearance'])
-  return [...new Set((data ?? []).map(p => p.aem_email).filter((e): e is string => !!e))]
-}
-
-async function notifyPackage(admin: Admin, hireId: string, event: 'sent' | 'returned' | 'done', at: string) {
-  const hireName = (await nameOf(admin, hireId)) ?? ''
-  if (event === 'sent') {
-    const to = await clearanceReviewerEmails(admin)
-    if (to.length === 0) return
-    await queueNotification({
-      template: 'clearance_package_sent', to, dedupeKey: `clearance_package_sent:${hireId}:${at}`,
-      payload:  { newhireId: hireId, hireName, link: appUrl(`/clearance/newhire/${hireId}`) },
-    })
-  } else {
-    await queueNotification({
-      template:  event === 'returned' ? 'clearance_package_returned' : 'clearance_package_done',
-      to:        hrNotifyEmails(),
-      dedupeKey: `clearance_package_${event}:${hireId}:${at}`,
-      payload:   { newhireId: hireId, hireName, link: appUrl(`/hr/newhire/${hireId}?tab=clearance`) },
-    })
-  }
+// Sent: the clearance reviewers. Returned or done: HR. at (the stage's timestamp) makes each send a
+// new notice and a retry of the same move a duplicate.
+async function notifyPackage(hireId: string, event: 'sent' | 'returned' | 'done', at: string) {
+  await queueNotification({ template: `clearance_package_${event}`, hireId, payload: {}, version: at })
 }
 
 type MoveResult = { ok: true; stage: PackageStage } | { ok: false; reason: 'conflict' | 'invalid' | 'note_required' | 'not_ready' | 'error'; waiting?: string[] }
@@ -112,7 +93,7 @@ export async function syncClearancePackage(admin: Admin, hireId: string, actorId
       user_id: hireId, action_type: 'navy', performed_by: actorId,
       message: '<strong>Portal</strong> sent the clearance package to the clearance reviewer',
     })
-    await notifyPackage(admin, hireId, 'sent', await stampedAt(admin, hireId, 'package_sent_at'))
+    await notifyPackage(hireId, 'sent', await stampedAt(admin, hireId, 'package_sent_at'))
   } catch {
     console.error('[clearance-package] sync failed')
   }
@@ -132,7 +113,7 @@ export async function resendPackage(admin: Admin, hireId: string, hrUserId: stri
     user_id: hireId, action_type: 'navy', performed_by: hrUserId,
     message: `<strong>${esc(who)}</strong> resent the clearance package to the clearance reviewer`,
   })
-  await notifyPackage(admin, hireId, 'sent', await stampedAt(admin, hireId, 'package_sent_at'))
+  await notifyPackage(hireId, 'sent', await stampedAt(admin, hireId, 'package_sent_at'))
   return result
 }
 
@@ -156,8 +137,8 @@ export async function reviewerMove(
     user_id: hireId, action_type: action === 'return' ? 'red' : action === 'done' ? 'green' : 'navy',
     performed_by: reviewerId, message,
   })
-  if (action === 'return') await notifyPackage(admin, hireId, 'returned', await stampedAt(admin, hireId, 'returned_at'))
-  if (action === 'done')   await notifyPackage(admin, hireId, 'done', await stampedAt(admin, hireId, 'done_at'))
+  if (action === 'return') await notifyPackage(hireId, 'returned', await stampedAt(admin, hireId, 'returned_at'))
+  if (action === 'done')   await notifyPackage(hireId, 'done', await stampedAt(admin, hireId, 'done_at'))
   return result
 }
 

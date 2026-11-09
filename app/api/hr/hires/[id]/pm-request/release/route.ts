@@ -3,10 +3,11 @@ import { z } from 'zod'
 import { createServiceClient } from '@/lib/supabase/server'
 import { requireRole } from '@/lib/roles'
 import { rateLimit, rateLimitKey } from '@/lib/rate-limit'
+import { syncPmRequest } from '@/lib/pm-server'
 
 const BodySchema = z.strictObject({})
 
-// HR can release any claim, putting the request back in its region's Open list.
+// HR can release any claim, putting the request in the Open list of the plan's project region.
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireRole('hr')
   if (auth instanceof NextResponse) return auth
@@ -46,6 +47,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     message:      '<strong>HR</strong> released the project management claim',
     performed_by: user.id,
   })
+
+  // If the plan's project region changed while it was claimed, it can move now
+  await syncPmRequest(admin, id, { by: user.id, label: 'HR' })
 
   return NextResponse.json({ ok: true })
 }

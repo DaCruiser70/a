@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase/server'
 import { requireRole } from '@/lib/roles'
 import { STAKEHOLDER_MAP, EQUIPMENT_LABELS } from '@/lib/stakeholder-mapping'
 import { startVehicleRequest } from '@/lib/vehicle-server'
+import { queueNotification } from '@/lib/notify'
 
 export async function POST(
   request: Request,
@@ -26,6 +27,8 @@ export async function POST(
   if (!hire) return NextResponse.json({ error: 'Hire not found' }, { status: 404 })
 
   let tasksCreated = 0
+  // New tasks per stakeholder, for one notice each (one email even when one person gets two tasks)
+  const createdFor = new Map<string, string[]>()
 
   for (const key of newlyCheckedItems as string[]) {
     // Company Vehicle is a sequence: only Rob's task now; Heather and Marley follow in turn
@@ -70,9 +73,17 @@ export async function POST(
         .from('stakeholder_tasks')
         .insert(payload)
 
-      if (!insertError) tasksCreated++
-      else console.error(`[notify] stakeholder task insert failed (code ${insertError.code})`)
+      if (!insertError) {
+        tasksCreated++
+        createdFor.set(stakeholder.id, [...(createdFor.get(stakeholder.id) ?? []), key])
+      } else console.error(`[notify] stakeholder task insert failed (code ${insertError.code})`)
     }
+  }
+
+  // The task keys are the version: saving again with the same new tasks adds nothing
+  for (const [assigneeId, keys] of createdFor) {
+    const taskKeys = [...new Set(keys)].sort()
+    await queueNotification({ template: 'stakeholder_tasks_created', hireId, payload: { assigneeId, taskKeys }, version: taskKeys.join('+') })
   }
 
   return NextResponse.json({ ok: true, tasksCreated })

@@ -139,7 +139,7 @@ export async function loadHireStatusInputs(admin: SupabaseClient<Database>, user
 export async function recomputeProfileStatus(
   admin:  SupabaseClient<Database>,
   userId: string,
-): Promise<void> {
+): Promise<{ enteredPayrollQueue: boolean }> {
   const { forms, docs, req } = await loadHireStatusInputs(admin, userId)
   const result = computeHireStatus(forms, docs, req)
 
@@ -152,8 +152,11 @@ export async function recomputeProfileStatus(
 
   // New payroll queueing only on full approval (all 5 items). Never cleared: a hire already queued
   // keeps its payroll record if it later drops out of Approved (lib/payroll-access.ts).
+  // enteredPayrollQueue: true only for the call that queued the hire (the "ready for payroll" notice)
   if (result.status === 'approved') {
-    await admin.from('profiles').update({ entered_payroll_queue_at: now })
-      .eq('id', userId).is('entered_payroll_queue_at', null)
+    const { data } = await admin.from('profiles').update({ entered_payroll_queue_at: now })
+      .eq('id', userId).is('entered_payroll_queue_at', null).select('id')
+    return { enteredPayrollQueue: (data?.length ?? 0) > 0 }
   }
+  return { enteredPayrollQueue: false }
 }

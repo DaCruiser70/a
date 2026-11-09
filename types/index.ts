@@ -173,19 +173,25 @@ export type PmRequest = {
 // Project-management state as shown on HR chips; null when the hire needs no request
 export type PmChip = 'open' | 'claimed' | 'done' | 'needs_region'
 
-export type OutboxStatus = 'pending' | 'sent' | 'failed'
+// 20261103_notification_dispatch.sql: queued → sending → sent, or failed (retry scheduled) → dead
+export type OutboxStatus = 'queued' | 'sending' | 'sent' | 'failed' | 'dead'
 
+// No addresses: recipients are looked up at send time from audience (lib/notification-templates.ts)
 export type NotificationOutboxRow = {
   id:         string
   dedupe_key: string
-  to_emails:  string[]
   template:   string
-  payload:    Record<string, unknown>
+  newhire_id: string | null
+  audience:   string[]
+  payload:    Record<string, unknown>   // ids and enum values only (managerId, assigneeId, region, section, …)
   status:     OutboxStatus
   attempts:   number
-  last_error: string | null
+  last_error: string | null              // a short error code, never a provider response
   send_after: string
+  claimed_at: string | null
+  delivered:  string[]                   // HMACs of addresses already sent to (live mode)
   created_at: string
+  updated_at: string
   sent_at:    string | null
 }
 
@@ -427,7 +433,7 @@ export type Database = {
       }
       notification_outbox: {
         Row:           NotificationOutboxRow
-        Insert:        Pick<NotificationOutboxRow, 'dedupe_key' | 'to_emails' | 'template' | 'payload'> & Partial<Omit<NotificationOutboxRow, 'id' | 'dedupe_key' | 'to_emails' | 'template' | 'payload'>>
+        Insert:        Pick<NotificationOutboxRow, 'dedupe_key' | 'template' | 'audience' | 'payload'> & Partial<Omit<NotificationOutboxRow, 'id' | 'dedupe_key' | 'template' | 'audience' | 'payload'>>
         Update:        Partial<Omit<NotificationOutboxRow, 'id' | 'dedupe_key' | 'created_at'>>
         Relationships: []
       }
@@ -578,6 +584,19 @@ export type Database = {
       reassign_manager_plan: {
         Args:    { p_newhire_id: string; p_manager_id: string }
         Returns: Array<{ outcome: 'ok' | 'unchanged' | 'no_hire' | 'no_manager'; assignment_seq: number | null }>
+      }
+      // 20261103_notification_dispatch.sql
+      claim_notifications: {
+        Args:    { p_limit: number; p_only_ids?: string[] | null }
+        Returns: NotificationOutboxRow[]
+      }
+      fail_notification: {
+        Args:    { p_id: string; p_code: string }
+        Returns: OutboxStatus | null
+      }
+      notify_active_accounts: {
+        Args:    { p_role: string; p_ids?: string[] | null }
+        Returns: Array<{ id: string; email: string; full_name: string }>
       }
     }
     Enums: {}

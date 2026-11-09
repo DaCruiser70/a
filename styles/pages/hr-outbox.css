@@ -24,7 +24,7 @@
 
 .obx-list { list-style: none; margin: 0; padding: 0; }
 .obx-row {
-  display: grid; grid-template-columns: 1.4fr 1.2fr 0.9fr 1fr 0.7fr; gap: 12px; align-items: center;
+  display: grid; grid-template-columns: 1.4fr 1.1fr 1fr 0.6fr 1.2fr 1fr 0.9fr; gap: 12px; align-items: center;
   padding: 0.85rem 1.5rem; font-size: 13px; color: #1a2e25;
 }
 .obx-head {
@@ -35,28 +35,32 @@
 .obx-item:last-child { border-bottom: none; }
 .obx-cell { min-width: 0; overflow-wrap: anywhere; }
 
-.obx-expand {
-  display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 6px;
-  border: 1px solid rgba(27,58,107,0.2); background: transparent; color: #1B3A6B;
-  font-size: 12px; font-weight: 600; font-family: inherit; cursor: pointer;
+.obx-sub { display: block; margin-top: 3px; font-size: 11px; color: #5F5E5A; }
+
+.obx-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.obx-act {
+  min-height: 44px; padding: 0 14px; border-radius: 8px;
+  border: 1.5px solid rgba(27,58,107,0.25); background: #fff; color: #1B3A6B;
+  font-size: 12px; font-weight: 700; font-family: inherit; cursor: pointer;
 }
-.obx-expand svg { width: 11px; height: 11px; transition: transform 0.15s; }
-.obx-expand[aria-expanded="true"] { background: rgba(27,58,107,0.06); }
-.obx-expand[aria-expanded="true"] svg { transform: rotate(180deg); }
+.obx-act:hover:not(:disabled) { background: rgba(27,58,107,0.06); }
+.obx-act:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.obx-live:empty { display: none; }
+.obx-flash { margin-top: 12px; padding: 10px 14px; border-radius: 8px; font-size: 13px; line-height: 1.5; }
+.obx-flash.ok    { color: #0D5C46; background: rgba(13,92,70,0.06); border: 1px solid rgba(13,92,70,0.2); }
+.obx-flash.error { color: #C0392B; background: rgba(231,76,60,0.06); border: 1px solid rgba(231,76,60,0.2); }
 
 .obx-status {
   display: inline-flex; align-items: center; gap: 5px; font-size: 10px; font-weight: 700;
   letter-spacing: 0.05em; text-transform: uppercase; padding: 3px 9px; border-radius: 100px; white-space: nowrap;
 }
 .obx-status::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
-.obx-status.pending { color: #C8920A; background: rgba(200,146,10,0.1); }
+.obx-status.queued  { color: #8A6200; background: rgba(200,146,10,0.1); }
+.obx-status.sending { color: #1B3A6B; background: rgba(27,58,107,0.08); }
 .obx-status.sent    { color: #0D5C46; background: rgba(13,92,70,0.08); }
-.obx-status.failed  { color: #E74C3C; background: rgba(231,76,60,0.08); }
-
-.obx-recipients { margin: 0 1.5rem 0.9rem; padding: 10px 14px; border-radius: 8px; background: rgba(27,58,107,0.04); border: 1px solid rgba(27,58,107,0.1); }
-.obx-recipients-title { font-size: 10px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: #888780; margin-bottom: 6px; }
-.obx-recipients ul { margin: 0; padding-left: 18px; font-size: 13px; color: #1a2e25; line-height: 1.7; }
-.obx-sent { font-size: 11px; color: #888780; margin-top: 6px; }
+.obx-status.failed  { color: #B03A2E; background: rgba(231,76,60,0.08); }
+.obx-status.dead    { color: #fff; background: #B03A2E; }
 
 .obx-state { padding: 2.5rem 1.5rem; }
 .obx-empty { text-align: center; font-size: 13px; color: #888780; }
@@ -79,7 +83,7 @@
 @keyframes obxShimmer { from { background-position: 200% 0 } to { background-position: -200% 0 } }
 @media (prefers-reduced-motion: reduce) { .obx-skeleton { animation: none; } }
 
-.obx-back:focus-visible, .obx-filter select:focus-visible, .obx-expand:focus-visible,
+.obx-back:focus-visible, .obx-filter select:focus-visible, .obx-act:focus-visible,
 .obx-error button:focus-visible, .hr-nav-item:focus-visible, .hr-pagination-btn:focus-visible {
   outline: 2px solid #C8920A; outline-offset: 2px;
 }
@@ -92,7 +96,12 @@
     content: attr(data-label); display: block; margin-bottom: 2px;
     font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #B0ABA4;
   }
-  .obx-recipients { margin: 0 1.25rem 1rem; }
+  .obx-actions { grid-column: 1 / -1; }
+}
+@media (max-width: 1100px) and (min-width: 861px) {
+  .obx-row { grid-template-columns: 1.3fr 1fr 1fr 0.6fr 1.1fr 1fr; }
+  .obx-head span:last-child { display: none; }
+  .obx-actions { grid-column: 1 / -1; justify-content: flex-end; }
 }
 @media (max-width: 768px) {
   .obx-back { display: inline-block; }

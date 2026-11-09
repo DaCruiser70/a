@@ -13,8 +13,8 @@ type Props = {
   onToast:  (msg: string) => void
 }
 
-// The hire's region on the HR hire page, shown apart from the office. HR can set or change it;
-// saving moves any open or claimed project-management request to the new region's team.
+// The hire's region on the HR hire page, shown apart from the office. HR can set or change it. It
+// does not route project-management requests: the project region on the manager plan does that.
 export default function HireRegionRow({ hireId, region, editing, onEditingChange, onSaved, onToast }: Props) {
   const [value, setValue] = useState<string>(region ?? '')
   const [busy, setBusy]   = useState(false)
@@ -23,7 +23,7 @@ export default function HireRegionRow({ hireId, region, editing, onEditingChange
   const editRef   = useRef<HTMLButtonElement>(null)
   const wasEditing = useRef(editing)
 
-  // Focus the select when editing opens (also from the "Set region" prompt) and return focus after
+  // Focus the select when editing opens and return focus after
   useEffect(() => {
     if (editing) {
       selectRef.current?.focus()
@@ -104,7 +104,7 @@ export default function HireRegionRow({ hireId, region, editing, onEditingChange
                 {REGIONS.map(r => <option key={r} value={r}>{r}</option>)}
               </select>
               <span id="hire-region-help" className="clr-hr-note" style={{ marginTop: 0 }}>
-                Separate from the office. An open or claimed project request moves to the new region&apos;s team.
+                Separate from the office. Project requests follow the project region on the manager plan, not this.
               </span>
             </div>
             {error && <div id="hire-region-error" className="clr-hr-error" role="alert" style={{ margin: '8px 0 0' }}>{error}</div>}

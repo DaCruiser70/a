@@ -5,8 +5,8 @@ import { requireRole } from '@/lib/roles'
 import { computeHireStatus, hasCompanyVehicle } from '@/lib/hire-status'
 import { planChip, PLAN_CHIP_LABELS, CLEARANCE_LABELS, todayIso } from '@/lib/manager-plan'
 import { getClearanceRequirements, computeClearanceStatus, CLEARANCE_STATUS_LABELS, PACKAGE_STAGE_LABELS } from '@/lib/clearance'
-import { needsPmRequest, pmChipState, PM_CHIP_LABELS } from '@/lib/pm'
-import { memberNames } from '@/lib/pm-server'
+import { isRegion, needsPmRequest, pmChipState, pmRegionWarnings, PM_CHIP_LABELS } from '@/lib/pm'
+import { activeRegionMembers, memberNames } from '@/lib/pm-server'
 import { equipmentProgress } from '@/lib/equipment-items'
 import {
   HIRE_FORMS, HIRE_FORM_LABELS,
@@ -50,7 +50,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     admin.from('newhire_documents').select('document_type, form_status, uploaded_at').eq('user_id', id),
     admin.from('equipment_provisioning').select('items').eq('user_id', id).maybeSingle(),
     admin.from('stakeholder_tasks').select('task_key, status').eq('newhire_id', id),
-    admin.from('manager_plans').select('status, due_date, submitted_at, clearance_type, manager_id').eq('newhire_id', id).maybeSingle(),
+    admin.from('manager_plans').select('status, due_date, submitted_at, clearance_type, manager_id, project_region').eq('newhire_id', id).maybeSingle(),
     admin.from('clearance_info').select('form_status, submitted_at').eq('user_id', id).maybeSingle(),
     admin.from('clearance_tracking').select('cleared_at, package_stage, sent_to_bgis').eq('newhire_id', id).maybeSingle(),
     admin.from('pm_requests').select('status, region, claimed_by, completed_at').eq('newhire_id', id).maybeSingle(),
@@ -94,7 +94,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 
   // ── Project management ──
   const pmNeeded = needsPmRequest(plan)
-  const pmState  = pmChipState(pmNeeded, pm, profile.region)
+  const pmState  = pmChipState(pmNeeded, pm, plan?.project_region)
   const claimer  = pmState === 'claimed' && pm?.claimed_by ? (await memberNames(admin, [pm.claimed_by]))[pm.claimed_by] ?? null : null
 
   // ── Needs your attention, in priority order ──
@@ -127,14 +127,20 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       detail: 'Read the reviewer’s note, fix it, then resend.', at: null, action: 'Open clearance', tab: 'clearance' })
   }
   if (pmState === 'needs_region') {
-    attention.push({ key: 'pm', tone: 'red', title: 'Set a region for project management',
-      detail: 'The PSPC & RCMP request opens for that region’s team once a region is set.', at: null, action: 'Set region', tab: 'overview' })
+    attention.push({ key: 'pm', tone: 'red', title: 'The manager plan has no project region',
+      detail: 'The PSPC & RCMP request opens for that region’s team once the manager chooses one.', at: null, action: 'Open plan', tab: 'plan' })
   } else if (pmState === 'open' || pmState === 'claimed') {
     attention.push({ key: 'pm', tone: 'copper',
       title: pmState === 'open' ? 'Project management request is waiting to be claimed' : 'Project management request is in progress',
       detail: pmState === 'claimed' ? `Claimed by ${claimer ?? 'a team member'}.` : `${pm?.region ?? 'Regional'} team.`,
       at: null, action: 'Open plan & project', tab: 'plan' })
   }
+  // A request that no longer matches the plan, or a region with nobody to pick it up
+  const pmTeam = pmState && pmState !== 'needs_region' && isRegion(pm?.region) ? await activeRegionMembers(admin, pm.region) : []
+  pmRegionWarnings(pmState && pmState !== 'needs_region' ? pm : null, plan?.project_region, pmTeam.length).forEach((warning, i) => {
+    attention.push({ key: `pm-warning-${i}`, tone: 'red', title: 'Project management needs attention',
+      detail: warning, at: null, action: 'Open plan & project', tab: 'plan' })
+  })
   if (chip === 'overdue') {
     attention.push({ key: 'plan', tone: 'red', title: 'Manager plan is overdue',
       detail: `${manager?.full_name ?? 'The manager'} has not submitted it${plan?.due_date ? `. Due ${shortDate(plan.due_date)}` : ''}.`,
@@ -173,7 +179,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       value: pmState ? PM_CHIP_LABELS[pmState] : 'Not needed',
       pct: pmState === 'done' ? 100 : pmState === 'claimed' ? 50 : 0,
       note: !pmState ? 'Only for PSPC & RCMP clearances'
-        : pmState === 'needs_region' ? 'The hire needs a region first'
+        : pmState === 'needs_region' ? 'The manager plan needs a project region'
         : pmState === 'done' ? [`${pm?.region ?? 'Regional'} team`, shortDate(pm?.completed_at)].filter(Boolean).join(', ')
         : pmState === 'claimed' ? `Claimed by ${claimer ?? 'a team member'}` : `${pm?.region ?? 'Regional'} team` },
   ]

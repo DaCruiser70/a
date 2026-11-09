@@ -5,7 +5,7 @@ import { requireRole } from '@/lib/roles'
 import { rateLimit, rateLimitKey } from '@/lib/rate-limit'
 import { z } from 'zod'
 import { computeHireStatus, companyVehicleHires } from '@/lib/hire-status'
-import { queueNotification, appUrl } from '@/lib/notify'
+import { queueNotification } from '@/lib/notify'
 import { planChip, todayIso } from '@/lib/manager-plan'
 import { getClearanceRequirements, computeClearanceStatus } from '@/lib/clearance'
 import { needsPmRequest, pmChipState } from '@/lib/pm'
@@ -49,7 +49,7 @@ export async function GET() {
   // request (no per-row lookups)
   const [{ data: planRows }, { data: clearanceRows }, { data: pmRows }] = hireIds.length
     ? await Promise.all([
-        admin.from('manager_plans').select('newhire_id, status, due_date, clearance_type').in('newhire_id', hireIds),
+        admin.from('manager_plans').select('newhire_id, status, due_date, clearance_type, project_region').in('newhire_id', hireIds),
         admin.from('clearance_info').select('user_id, form_status').in('user_id', hireIds),
         admin.from('pm_requests').select('newhire_id, status, claimed_by').in('newhire_id', hireIds),
       ])
@@ -98,7 +98,7 @@ export async function GET() {
         ? computeClearanceStatus(clearanceMap[p.id]?.form_status)
         : null,
       pm_chip:           (() => {
-        const state = pmChipState(needsPmRequest(planMap[p.id]), pmMap[p.id], p.region)
+        const state = pmChipState(needsPmRequest(planMap[p.id]), pmMap[p.id], planMap[p.id]?.project_region)
         if (!state) return null
         const claimer = state === 'claimed' ? pmMap[p.id]?.claimed_by : null
         return { state, claimed_by_name: claimer ? claimerNames[claimer] ?? null : null }
@@ -279,19 +279,14 @@ export async function POST(request: Request) {
   })
 
   await queueNotification({
-    template:  'manager_plan_requested',
-    to:        manager.email,
-    dedupeKey: `manager_plan_request:${newUser.user.id}:${manager.id}:${plan.assignment_seq}`,
-    payload:   {
-      newhireId: newUser.user.id,
-      managerId: manager.id,
-      hireName:  name,
-      link:      appUrl(`/manager/newhire/${newUser.user.id}`),
-    },
+    template: 'manager_plan_requested',
+    hireId:   newUser.user.id,
+    payload:  { managerId: manager.id },
+    version:  String(plan.assignment_seq),
   })
 
   // No-op until the manager submits a PSPC & RCMP plan; kept so every region save runs the sync
-  await syncPmRequest(admin, newUser.user.id)
+  await syncPmRequest(admin, newUser.user.id, { by: user.id, label: 'HR' })
 
   // The welcome email with the one-time set-password link. A failed send keeps the account; HR sees
   // a warning and can resend from here or the hire page.

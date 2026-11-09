@@ -134,7 +134,6 @@ export default function HRNewHirePage() {
   const [clearanceVersion, setClearanceVersion] = useState(0)
   // Region (separate from the office): editing can be opened from the Project Management card
   const [editingRegion, setEditingRegion]       = useState(() => searchParams?.get('setRegion') === '1')
-  const [pmVersion, setPmVersion]               = useState(0)
 
   // Overview (attention list, area cards, tab badges); refreshed after every change on the page
   const [overview, setOverview]               = useState<HireOverview | null>(null)
@@ -176,7 +175,7 @@ export default function HRNewHirePage() {
     window.history.pushState(null, '', qs ? `?${qs}` : window.location.pathname)
   }
 
-  // From an attention item or area card. The only Overview target is the region editor.
+  // From an attention item or area card
   function openFromOverview(tab: HireTab, form?: HireFormId) {
     if (tab === 'overview') { setEditingRegion(true); return }
     selectTab(tab, form)
@@ -762,7 +761,7 @@ export default function HRNewHirePage() {
                       region={hire.region}
                       editing={editingRegion}
                       onEditingChange={setEditingRegion}
-                      onSaved={region => { setHire(h => h ? { ...h, region } : h); setPmVersion(v => v + 1); refreshOverview() }}
+                      onSaved={region => { setHire(h => h ? { ...h, region } : h); refreshOverview() }}
                       onToast={showToast}
                     />
 
@@ -1445,10 +1444,8 @@ export default function HRNewHirePage() {
               />
               <div>
                 <PmRequestCard
-                  key={pmVersion}
                   hireId={hireId}
                   onToast={toastAndRefresh}
-                  onSetRegion={() => { selectTab('overview'); setEditingRegion(true) }}
                 />
                 {overview && !overview.areas.some(a => a.key === 'pm' && a.value !== 'Not needed') && (
                   <section className="hh-card">

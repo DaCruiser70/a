@@ -5,14 +5,13 @@ import { requireRole } from '@/lib/roles'
 import { rateLimit, rateLimitKey } from '@/lib/rate-limit'
 import { esc } from '@/lib/safe-html'
 import { REGIONS } from '@/lib/regions'
-import { syncPmRequest } from '@/lib/pm-server'
 
 const BodySchema = z.strictObject({
   region: z.enum(REGIONS),
 })
 
-// HR sets or changes a hire's region (separate from the office). The project-management request
-// follows: an open or claimed request moves to the new region's team; a done request never changes.
+// HR sets or changes a hire's region (separate from the office). This never routes a
+// project-management request: only the project region on the manager plan does (syncPmRequest).
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireRole('hr')
   if (auth instanceof NextResponse) return auth
@@ -65,8 +64,5 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     })
   }
 
-  // Runs on every save so a missing request is created even when the region was already right
-  const pm = await syncPmRequest(admin, id)
-
-  return NextResponse.json({ ok: true, region, pm })
+  return NextResponse.json({ ok: true, region })
 }

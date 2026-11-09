@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database, FormStatus } from '@/types'
 import { computeDocumentStatus, computeSubmission, type RequiredItem, type Submission } from '@/lib/submission'
-import { queueNotification, hrNotifyEmails, appUrl } from '@/lib/notify'
+import { queueNotification } from '@/lib/notify'
 import { hasCompanyVehicle } from '@/lib/hire-status'
 
 type Admin = SupabaseClient<Database>
@@ -38,13 +38,7 @@ export async function afterHireFormSaved(admin: Admin, userId: string): Promise<
     const { submission } = await loadSubmission(admin, userId)
     if (!submission.complete) return { complete: false, justCompleted: false }
 
-    const { data: profile } = await admin.from('profiles').select('full_name').eq('id', userId).maybeSingle()
-    const firstTime = await queueNotification({
-      template:  'onboarding_complete',
-      to:        hrNotifyEmails(),
-      dedupeKey: `onboarding_complete:${userId}`,
-      payload:   { newhireId: userId, hireName: profile?.full_name ?? '', link: appUrl(`/hr/newhire/${userId}`) },
-    })
+    const firstTime = await queueNotification({ template: 'onboarding_complete', hireId: userId, payload: {} })
 
     if (firstTime) {
       await admin.from('audit_log').insert({

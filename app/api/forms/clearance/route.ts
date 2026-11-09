@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { createServiceClient } from '@/lib/supabase/server'
 import { requireRole } from '@/lib/roles'
 import { rateLimit, rateLimitKey } from '@/lib/rate-limit'
-import { queueNotification, hrNotifyEmails, appUrl } from '@/lib/notify'
+import { queueNotification } from '@/lib/notify'
 import {
   CLEARANCE_FILES_BUCKET, CLEARANCE_TEMPLATES_BUCKET, CLEARANCE_TEMPLATE_FILES,
   normalizeDcn, isValidDcn, packageLocked, type ClearanceKind,
@@ -201,13 +201,7 @@ export async function POST(request: Request) {
   })
 
   if (!existing?.submitted_at) {
-    const { data: profile } = await admin.from('profiles').select('full_name').eq('id', user.id).maybeSingle()
-    await queueNotification({
-      template:  'clearance_submitted',
-      to:        hrNotifyEmails(),
-      dedupeKey: `clearance_submitted:${user.id}`,
-      payload:   { newhireId: user.id, hireName: profile?.full_name ?? '', link: appUrl(`/hr/newhire/${user.id}`) },
-    })
+    await queueNotification({ template: 'clearance_submitted', hireId: user.id, payload: {} })
   }
 
   return NextResponse.json({ ok: true })

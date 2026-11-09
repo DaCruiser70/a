@@ -2,6 +2,8 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { FormStatus, HireStatus, Database } from '@/types'
 import { computeHireStatus, loadHireStatusInputs } from './hire-status'
 import { esc } from './safe-html'
+import { queueNotification, queueHireApproved } from './notify'
+import type { FlagSection } from './notification-templates'
 
 const FORM_TABLES: Record<string, string> = {
   personal: 'personal_info',
@@ -46,13 +48,26 @@ export async function applyFormStatus(
     .update({ status: overallStatus, progress: computed.progressPct, updated_at: now })
     .eq('id', hireId)
 
-  // Set entered_payroll_queue_at on first transition to approved (idempotent)
+  // Set entered_payroll_queue_at on first transition to approved (idempotent). The call that sets
+  // it queues "ready for payroll" and the hire's "you're all set".
   if (overallStatus === 'approved') {
-    await admin
+    const { data: queued } = await admin
       .from('profiles')
       .update({ entered_payroll_queue_at: now })
       .eq('id', hireId)
       .is('entered_payroll_queue_at', null)
+      .select('id')
+    if ((queued?.length ?? 0) > 0) await queueHireApproved(hireId)
+  }
+
+  // Sent back: the hire is told which section needs a fix, never the note. One notice per flagged
+  // submission (its submitted_at), so a second click or a re-flag of the same submission adds nothing.
+  if (newStatus === 'flagged') {
+    const { data: row } = await admin.from(table as 'personal_info').select('submitted_at').eq('user_id', hireId).maybeSingle()
+    await queueNotification({
+      template: 'item_flagged', hireId, payload: { section: formId as FlagSection },
+      version:  `${formId}:${row?.submitted_at ?? 'none'}`,
+    })
   }
 
   const actionType = newStatus === 'approved' ? 'green' : newStatus === 'flagged' ? 'red' : 'amber'

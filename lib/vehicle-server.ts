@@ -2,7 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database, VehicleRequest } from '@/types'
 import { encrypt, decrypt, isEncrypted } from '@/lib/encrypt'
 import { esc } from '@/lib/safe-html'
-import { queueNotification, appUrl } from '@/lib/notify'
+import { queueNotification } from '@/lib/notify'
 import { VEHICLE_STEP_EMAILS } from '@/lib/stakeholder-mapping'
 import { DRIVERS_LICENSE_TYPE } from '@/lib/required-documents'
 import {
@@ -55,26 +55,14 @@ export function decryptDetails(row: Pick<VehicleRequest, 'details_enc'> | null |
   }
 }
 
-async function hireName(admin: Admin, hireId: string): Promise<string> {
-  const { data } = await admin.from('profiles').select('full_name').eq('id', hireId).maybeSingle()
-  return data?.full_name ?? ''
-}
-
-// Names and links only, never vehicle values. One request per hire, so the keys are stable.
-export async function queueVehicleNotice(
-  admin: Admin, hireId: string, event: 'rob' | 'heather' | 'marley' | 'complete', to: string | string[],
-): Promise<void> {
-  const template = { rob: 'vehicle_rob_task', heather: 'vehicle_heather_task', marley: 'vehicle_insurance_task', complete: 'vehicle_complete' } as const
-  await queueNotification({
-    template:  template[event],
-    to,
-    dedupeKey: `${template[event]}:${hireId}`,
-    payload:   {
-      newhireId: hireId,
-      hireName:  await hireName(admin, hireId),
-      link:      appUrl(event === 'complete' ? `/hr/newhire/${hireId}?tab=equipment` : `/stakeholder/newhire/${hireId}`),
-    },
-  })
+// Names and links only, never vehicle values. Each step's notice goes only to that step's account
+// (or HR); one request per hire, so the keys are stable.
+export async function queueVehicleNotice(hireId: string, event: 'rob' | 'heather' | 'license' | 'marley' | 'complete'): Promise<void> {
+  const template = {
+    rob: 'vehicle_rob_task', heather: 'vehicle_heather_task', license: 'vehicle_license_review',
+    marley: 'vehicle_insurance_task', complete: 'vehicle_complete',
+  } as const
+  await queueNotification({ template: template[event], hireId, payload: {} })
 }
 
 // HR ticked Company Vehicle: create the request and Rob's task (once). Morley gets nothing.
@@ -99,7 +87,7 @@ export async function startVehicleRequest(admin: Admin, hireId: string, hrUserId
     user_id: hireId, action_type: 'navy', performed_by: hrUserId,
     message: `<strong>${esc(hr?.full_name ?? 'HR')}</strong> requested a company vehicle (stakeholder step 1: ${esc(rob.name)})`,
   })
-  await queueVehicleNotice(admin, hireId, 'rob', rob.email)
+  await queueVehicleNotice(hireId, 'rob')
   return 'started'
 }
 
@@ -143,7 +131,7 @@ export async function tryStartInsurance(admin: Admin, hireId: string): Promise<b
     user_id: hireId, action_type: 'navy', performed_by: null,
     message: `Vehicle insurance step started (stakeholder step 3: <strong>${esc(marley.name)}</strong>): vehicle details completed and Driver’s License approved`,
   })
-  await queueVehicleNotice(admin, hireId, 'marley', marley.email)
+  await queueVehicleNotice(hireId, 'marley')
   return true
 }
 

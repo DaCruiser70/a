@@ -4,7 +4,7 @@ import { createServiceClient } from '@/lib/supabase/server'
 import { requireRole } from '@/lib/roles'
 import { rateLimit, rateLimitKey } from '@/lib/rate-limit'
 import { PM_TABS } from '@/lib/pm'
-import { describePmRequests, pmMemberOr401 } from '@/lib/pm-server'
+import { describePmRequests, pmMemberOr401, pmRequestsInRegion } from '@/lib/pm-server'
 
 const QuerySchema = z.strictObject({
   tab:    z.enum(PM_TABS),
@@ -33,16 +33,7 @@ export async function GET(request: Request) {
   const { tab, limit, offset } = parsed.data
 
   const admin = createServiceClient()
-  let query = admin
-    .from('pm_requests')
-    .select('newhire_id, status, claimed_by, claimed_at, completed_at, region', { count: 'exact' })
-    .eq('region', member.region)
-
-  if (tab === 'open')      query = query.eq('status', 'open').order('created_at', { ascending: true })
-  else if (tab === 'mine') query = query.eq('status', 'claimed').eq('claimed_by', member.id).order('claimed_at', { ascending: false })
-  else                     query = query.eq('status', 'done').order('completed_at', { ascending: false })
-
-  const { data, error, count } = await query.range(offset, offset + limit - 1)
+  const { data, error, count } = await pmRequestsInRegion(admin, { region: member.region, memberId: member.id, tab, limit, offset })
   if (error) {
     console.error(`[pm/requests] list failed (code ${error.code})`)
     return NextResponse.json({ error: 'Could not load requests.' }, { status: 500 })
