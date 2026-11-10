@@ -437,6 +437,20 @@ export type Database = {
         Update:        Partial<Omit<NotificationOutboxRow, 'id' | 'dedupe_key' | 'created_at'>>
         Relationships: []
       }
+      // 20261110_notification_keys.sql: every dedupe key ever queued (outlives outbox cleanup)
+      notification_keys: {
+        Row:           { dedupe_key: string; template: string; newhire_id: string | null; reminder_date: string | null; refs: string[]; created_at: string }
+        Insert:        never   // only through enqueue_notification()
+        Update:        never
+        Relationships: []
+      }
+      // 20261109_reminder_settings.sql: one row (id = true)
+      reminder_settings: {
+        Row:           { id: boolean; paused: boolean; changed_by: string | null; changed_at: string | null; updated_at: string }
+        Insert:        { id?: boolean; paused?: boolean; changed_by?: string | null; changed_at?: string | null; updated_at?: string }
+        Update:        { paused?: boolean; changed_by?: string | null; changed_at?: string | null; updated_at?: string }
+        Relationships: []
+      }
       personal_info: {
         Row:           PersonalInfo
         Insert:        Omit<PersonalInfo, 'id' | 'updated_at'> & { submitted_at?: string }
@@ -593,6 +607,11 @@ export type Database = {
       fail_notification: {
         Args:    { p_id: string; p_code: string }
         Returns: OutboxStatus | null
+      }
+      // 20261110_notification_keys.sql
+      enqueue_notification: {
+        Args:    { p_dedupe_key: string; p_template: string; p_newhire_id: string | null; p_audience: string[]; p_payload: Record<string, unknown>; p_reminder_date?: string | null; p_refs?: string[] }
+        Returns: string | null
       }
       notify_active_accounts: {
         Args:    { p_role: string; p_ids?: string[] | null }

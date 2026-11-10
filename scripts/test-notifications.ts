@@ -24,12 +24,19 @@ import { EMPTY_PLAN, PlanPutSchema, fieldErrors } from '../lib/manager-plan'
 import { mailConfig, mailerCanDeliver, planNotice, graphMessage, sendNotice, type NoticeHooks, type NoticeMessage, type NoticeResult } from '../lib/mailer'
 import { noticeEmail } from '../lib/email-templates'
 import { GET as cronGET } from '../app/api/cron/dispatch-notifications/route'
+import { GET as cleanupGET } from '../app/api/cron/cleanup-notifications/route'
+import { createClient } from '@supabase/supabase-js'
+import { signOtpSession, OTP_SESSION_COOKIE } from '../lib/otp-session'
+import {
+  OUTBOX_RETENTION_DAYS, clearDeadAuditMessage, cleanupAuditMessage, clearDeadNotifications, purgeOldNotifications,
+} from '../lib/notify-retention'
 
 const admin = createServiceClient()
 const runId = randomBytes(6).toString('hex')
 const created: string[] = []
 let tempHireId: string | null = null
 let tempTeamIds: string[] = []
+const tempUserIds: string[] = []
 let passed = 0
 let failed = 0
 
@@ -258,6 +265,7 @@ async function main() {
   }
 
   await testPmRouting()
+  await testCleanup()
 }
 
 // Project-management routing: the plan's project region alone decides the team. The hire's own
@@ -393,6 +401,115 @@ async function testPmRouting() {
   check('greeting: a person gets their first name', pmGreetingName('Jane Doe') === 'Jane')
 }
 
+// Outbox cleanup and HR's "Clear dead notifications". Every delete here is limited to this run's
+// own rows (onlyIds); the real cleanup and the real clear are never run against other data.
+async function testCleanup() {
+  const daysAgo = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString()
+  const old = OUTBOX_RETENTION_DAYS.sent + 10
+  const rows: Record<string, string> = {}
+  const setup: [string, string, number][] = [
+    ['queued-old', 'queued', old], ['sending-old', 'sending', old], ['failed-old', 'failed', old],
+    ['sent-recent', 'sent', 2], ['sent-old', 'sent', old], ['dead-recent', 'dead', 2], ['dead-old', 'dead', old],
+  ]
+  for (const [label, status, age] of setup) {
+    rows[label] = await makeRow(`cleanup-${label}`)
+    await admin.from('notification_outbox').update({ status: status as 'sent', updated_at: daysAgo(age) }).eq('id', rows[label])
+  }
+  const ids = Object.values(rows)
+  const exists = async (label: string) => !!(await admin.from('notification_outbox').select('id').eq('id', rows[label]).maybeSingle()).data
+
+  const dry = await purgeOldNotifications(admin, { apply: false, onlyIds: ids })
+  check('cleanup: dry run counts old sent and dead rows only, deletes nothing', dry.sent === 1 && dry.dead === 1 && (await Promise.all(Object.keys(rows).map(exists))).every(Boolean))
+
+  const purged = await purgeOldNotifications(admin, { apply: true, onlyIds: ids })
+  check('cleanup: older sent and dead rows are purged', purged.sent === 1 && purged.dead === 1 && !(await exists('sent-old')) && !(await exists('dead-old')))
+  check('cleanup: queued, sending, failed and recent sent rows are untouched', await exists('queued-old') && await exists('sending-old')
+    && await exists('failed-old') && await exists('sent-recent') && await exists('dead-recent'))
+
+  // No duplicate after a purge: the same event and version is refused, though its row is gone
+  const again = await queueNotification({ template: 'onboarding_complete', hireId: null, payload: {}, version: `selftest-${runId}-cleanup-sent-old` })
+  const { count: reborn } = await admin.from('notification_outbox').select('id', { count: 'exact', head: true }).like('dedupe_key', `%:selftest-${runId}-cleanup-sent-old`)
+  check('cleanup: a purged event can never be queued (or sent) again', again === false && reborn === 0)
+  const { count: keyKept } = await admin.from('notification_keys').select('dedupe_key', { count: 'exact', head: true }).like('dedupe_key', `%:selftest-${runId}-cleanup-sent-old`)
+  check('cleanup: the dedupe key is kept, with no address or content', keyKept === 1)
+
+  // HR clear: dead rows only, any age
+  const cleared = await clearDeadNotifications(admin, { apply: true, onlyIds: ids })
+  check('clear dead: only dead rows are deleted', cleared === 1 && !(await exists('dead-recent'))
+    && await exists('queued-old') && await exists('sending-old') && await exists('failed-old') && await exists('sent-recent'))
+
+  // Audit messages: counts and fixed words only
+  const m1 = cleanupAuditMessage({ sent: 12, dead: 3 })
+  const m2 = clearDeadAuditMessage(4)
+  check('audit: cleanup and clear messages carry counts only', m1.includes('12 sent') && m1.includes('3 dead') && m2.includes('cleared 4 dead')
+    && ![m1, m2].some(m => m.includes('@') || /[0-9a-f]{8}-[0-9a-f]{4}/i.test(m)))
+
+  // Cleanup route: secret checks (never called with the right secret: it would clean real rows)
+  const env = process.env as Record<string, string | undefined>
+  const savedSecret = env.CRON_SECRET
+  try {
+    const url = 'http://localhost/api/cron/cleanup-notifications'
+    env.CRON_SECRET = randomBytes(32).toString('hex')
+    check('cleanup cron: no secret → 401', (await cleanupGET(new Request(url))).status === 401)
+    check('cleanup cron: wrong secret → 401', (await cleanupGET(new Request(url, { headers: { Authorization: `Bearer ${randomBytes(32).toString('hex')}` } }))).status === 401)
+    env.CRON_SECRET = 'short-secret'
+    check('cleanup cron: a short CRON_SECRET refuses even the matching header', (await cleanupGET(new Request(url, { headers: { Authorization: 'Bearer short-secret' } }))).status === 401)
+  } finally {
+    if (savedSecret === undefined) delete env.CRON_SECRET
+    else env.CRON_SECRET = savedSecret
+  }
+
+  await testClearDeadRefusedForNonHr(ids)
+  created.push(...ids.filter(id => !created.includes(id)))
+}
+
+// A real HTTP call to the running app (TEST_BASE_URL, default http://localhost:3000): a signed-in
+// stakeholder with a valid one-time-code session is refused, and so is a caller with no session.
+// Skipped (INFO) when the app is not running.
+async function testClearDeadRefusedForNonHr(ids: string[]) {
+  const base = (process.env.TEST_BASE_URL || 'http://localhost:3000').replace(/\/+$/, '')
+  try {
+    await fetch(`${base}/login`, { signal: AbortSignal.timeout(5000) })
+  } catch {
+    console.log('INFO  the app is not running: the non-HR clear test was skipped (start it and run again)')
+    return
+  }
+  const deadId = await makeRow('cleanup-http-dead')
+  ids.push(deadId)
+  await admin.from('notification_outbox').update({ status: 'dead' }).eq('id', deadId)
+
+  const password = randomBytes(24).toString('base64url')
+  const { data: u, error } = await admin.auth.admin.createUser({
+    email: `selftest-stake-${runId}@example.com`, password, email_confirm: true,
+    app_metadata: { role: 'stakeholder', roles: ['stakeholder'] },
+  })
+  if (error || !u.user) throw new Error('could not create the test stakeholder')
+  tempUserIds.push(u.user.id)
+  await admin.from('profiles').update({ role: 'stakeholder', roles: ['stakeholder'] }).eq('id', u.user.id)
+
+  const anon = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, { auth: { persistSession: false } })
+  const { data: signedIn } = await anon.auth.signInWithPassword({ email: `selftest-stake-${runId}@example.com`, password })
+  if (!signedIn.session) throw new Error('could not sign in the test stakeholder')
+
+  // The same cookies the app sets: the Supabase session (base64, in chunks) and a valid otp_session
+  const ref = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL!).hostname.split('.')[0]
+  const value = 'base64-' + Buffer.from(JSON.stringify(signedIn.session)).toString('base64url')
+  const chunks = value.match(/.{1,3180}/g) ?? []
+  const cookie = [
+    ...(chunks.length === 1 ? [`sb-${ref}-auth-token=${chunks[0]}`] : chunks.map((c, i) => `sb-${ref}-auth-token.${i}=${c}`)),
+    `${OTP_SESSION_COOKIE}=${await signOtpSession(u.user.id)}`,
+  ].join('; ')
+
+  const post = (headers: Record<string, string>) => fetch(`${base}/api/hr/outbox/clear-dead`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify({ confirm: true }),
+  })
+  const noSession = await post({})
+  const stakeholder = await post({ Cookie: cookie })
+  const stillThere = !!(await admin.from('notification_outbox').select('id').eq('id', deadId).maybeSingle()).data
+  check('clear dead: no session → 401', noSession.status === 401)
+  check('clear dead: a signed-in non-HR user is refused (403) and nothing is deleted', stakeholder.status === 403 && stillThere)
+}
+
 main()
   .catch(e => { failed++; console.error(`FAIL  the test run stopped early: ${e instanceof Error ? e.message : 'unknown'}`) })
   .finally(async () => {
@@ -401,6 +518,9 @@ main()
     // can only go once the request that references them is gone
     if (tempHireId) await admin.auth.admin.deleteUser(tempHireId)
     if (tempTeamIds.length) await admin.from('region_teams').delete().in('id', tempTeamIds)
+    for (const id of tempUserIds) await admin.auth.admin.deleteUser(id)
+    // This run's dedupe keys (the ledger is permanent for real notifications, not for test rows)
+    await admin.from('notification_keys').delete().like('dedupe_key', `%selftest-${runId}%`)
     console.log(`\n${passed} passed, ${failed} failed. Test rows removed: ${created.length}, temporary hire: ${tempHireId ? 1 : 0}, temporary team rows: ${tempTeamIds.length}`)
     process.exit(failed ? 1 : 0)
   })

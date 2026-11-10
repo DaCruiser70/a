@@ -9,6 +9,7 @@ export const NOTIFICATION_TEMPLATES = [
   'clearance_package_sent', 'clearance_package_returned', 'clearance_package_done',
   'vehicle_rob_task', 'vehicle_heather_task', 'vehicle_license_review', 'vehicle_insurance_task', 'vehicle_complete',
   'item_flagged', 'hire_approved', 'hire_all_set', 'payroll_done', 'stakeholder_tasks_created',
+  'daily_reminder',
 ] as const
 export type NotificationTemplate = typeof NOTIFICATION_TEMPLATES[number]
 
@@ -56,6 +57,12 @@ export const LINK_ROUTES = {
   newhire_forms:     () => '/newhire/forms',
   newhire_clearance: () => '/newhire/forms/clearance',
   newhire_welcome:   () => '/newhire/welcome',
+  // Portal homes (daily reminders list several hires, so they open the dashboard)
+  stakeholder_home:  () => '/stakeholder/dashboard',
+  manager_home:      () => '/manager/dashboard',
+  pm_home:           () => '/project-mgmt/dashboard',
+  hr_home:           () => '/hr/dashboard',
+  hr_outbox:         () => '/hr/outbox',
 } as const
 export type LinkRoute = keyof typeof LINK_ROUTES
 
@@ -65,6 +72,8 @@ const LINK_FALLBACK: Record<LinkRoute, string> = {
   manager_hire: '/manager/dashboard', pm_hire: '/project-mgmt/dashboard', clearance_hire: '/clearance/dashboard',
   stakeholder_hire: '/stakeholder/dashboard', payroll_queue: '/payroll/dashboard',
   newhire_forms: '/newhire/forms', newhire_clearance: '/newhire/forms/clearance', newhire_welcome: '/newhire/welcome',
+  stakeholder_home: '/stakeholder/dashboard', manager_home: '/manager/dashboard', pm_home: '/project-mgmt/dashboard',
+  hr_home: '/hr/dashboard', hr_outbox: '/hr/outbox',
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -98,6 +107,9 @@ export const TEMPLATE_DEFS: Record<NotificationTemplate, TemplateDef> = {
   hire_all_set:               { label: 'Hire told they are all set',                   audience: ['hire'],            link: 'newhire_welcome' },
   payroll_done:               { label: 'Payroll complete',                             audience: ['hr'],              link: 'hr_hire' },
   stakeholder_tasks_created:  { label: 'Stakeholder task assigned',                    audience: ['stakeholder'],     link: 'stakeholder_hire' },
+  // One merged email per person per day (lib/reminders.ts). Its recipients are the targets listed in
+  // the row (each re-checked at send time); the audience shown is filled from those targets.
+  daily_reminder:             { label: 'Daily reminder',                               audience: [],                  link: 'hr_home' },
 }
 
 export const TEMPLATE_LABELS: Record<NotificationTemplate, string> = Object.fromEntries(
@@ -132,5 +144,6 @@ export const ERROR_CODE_LABELS: Record<string, string> = {
   unknown_template: 'Unknown notification type',
   invalid:          'The message could not be built',
   backlog:          'Queued before email was switched on; not sent',
+  recipient_changed: 'The reminder no longer matched one person',
   unknown:          'Unknown error',
 }

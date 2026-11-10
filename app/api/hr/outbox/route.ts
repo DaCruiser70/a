@@ -5,6 +5,7 @@ import { requireRole } from '@/lib/roles'
 import { mailConfig } from '@/lib/mailer'
 import { NOTIFICATION_TEMPLATES } from '@/lib/notify'
 import { AUDIENCE_LABELS, type Audience } from '@/lib/notification-templates'
+import { countDeadNotifications } from '@/lib/notify-retention'
 
 const STATUSES = ['queued', 'sending', 'sent', 'failed', 'dead'] as const
 
@@ -47,8 +48,11 @@ export async function GET(request: Request) {
 
   const config = mailConfig()
   const total  = count ?? 0
+  // For the "Clear dead notifications" button (all dead rows, whatever the filters)
+  const deadCount = await countDeadNotifications(admin).catch(() => 0)
   return NextResponse.json({
     mode: config.ready ? config.mode : 'off',
+    dead_count: deadCount,
     items: (data ?? []).map(row => ({
       id:         row.id,
       template:   row.template,

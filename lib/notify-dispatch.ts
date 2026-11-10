@@ -2,7 +2,9 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database, NotificationOutboxRow } from '@/types'
 import { createServiceClient } from '@/lib/supabase/server'
 import { sendNotice, mailerCanDeliver, type NoticeHooks, type NoticeMessage, type NoticeResult } from '@/lib/mailer'
-import { noticeEmail } from '@/lib/email-templates'
+import { noticeEmail, reminderEmail } from '@/lib/email-templates'
+import { DailyReminderPayloadSchema, TARGET_AUDIENCE, type ReminderTarget } from '@/lib/reminder-payload'
+import { loadReminderView } from '@/lib/reminders-render'
 import {
   TEMPLATE_DEFS, AUDIENCES, AUDIENCE_LABELS, FLAG_SECTION_LABELS, linkPath, isNotificationTemplate,
   type Audience, type FlagSection, type NotificationTemplate,
@@ -96,9 +98,55 @@ async function resolveAudience(admin: Admin, audience: Audience, row: Notificati
   }
 }
 
+// A daily reminder's mailbox key: an HMAC of the address, so rows can be grouped by person without
+// storing the address
+export async function personKey(email: string): Promise<string> {
+  return (await hmacHex('notify-person', email.trim().toLowerCase())).slice(0, 32)
+}
+
+// One daily-reminder target, with the same active and role checks as every other notice. A project
+// management member must still be active and in the region named on the target.
+export async function resolveTarget(admin: Admin, target: ReminderTarget): Promise<string[]> {
+  switch (target.kind) {
+    case 'hire': {
+      if ((await activeAccounts(admin, 'newhire', [target.id])).length === 0) return []
+      const r = await loadRecipient(admin, target.id)
+      return r ? [r.to] : []
+    }
+    case 'stakeholder':
+    case 'payroll':
+      return (await activeAccounts(admin, target.kind, [target.id])).map(a => a.email)
+    case 'manager': {
+      const { data: m, error } = await admin.from('managers').select('email, user_id, active').eq('id', target.id).maybeSingle()
+      if (error) throw new LookupError()
+      if (!m?.active || !m.user_id) return []
+      return (await activeAccounts(admin, 'manager', [m.user_id])).length ? [m.email] : []
+    }
+    case 'pm_member': {
+      const { data: m, error } = await admin.from('region_teams').select('member_email')
+        .eq('id', target.id).eq('region', target.region).eq('active', true).maybeSingle()
+      if (error) throw new LookupError()
+      return m ? [m.member_email] : []
+    }
+    case 'hr': {
+      const out: string[] = []
+      for (const email of hrNotifyEmails()) if (await personKey(email) === target.h) out.push(email)
+      return out
+    }
+  }
+}
+
 export async function resolveRecipients(admin: Admin, row: NotificationOutboxRow, template: NotificationTemplate): Promise<Recipient[]> {
   const payload = (parsePayload(template, row.payload) ?? {}) as Record<string, unknown>
   const out: Recipient[] = []
+  if (template === 'daily_reminder') {
+    const parsed = DailyReminderPayloadSchema.safeParse(row.payload)
+    if (!parsed.success) return []
+    for (const target of parsed.data.to) {
+      for (const email of await resolveTarget(admin, target)) out.push({ email, audience: TARGET_AUDIENCE[target.kind] })
+    }
+    return out
+  }
   for (const audience of TEMPLATE_DEFS[template].audience) {
     for (const email of await resolveAudience(admin, audience, row, payload)) out.push({ email, audience })
   }
@@ -117,7 +165,14 @@ export function mergeRecipients(list: Recipient[]): { emails: string[]; labels: 
 
 // ── Content ──
 
+// null: a daily reminder whose items have all been dealt with since it was queued
 async function renderNotice(admin: Admin, row: NotificationOutboxRow, template: NotificationTemplate, base: string) {
+  if (template === 'daily_reminder') {
+    const parsed = DailyReminderPayloadSchema.safeParse(row.payload)
+    if (!parsed.success) return null
+    const view = await loadReminderView(admin, parsed.data, base)
+    return view ? reminderEmail(view) : null
+  }
   const payload = (parsePayload(template, row.payload) ?? {}) as Record<string, unknown>
   const { data: hire } = row.newhire_id
     ? await admin.from('profiles').select('full_name, preferred_name, start_date').eq('id', row.newhire_id).maybeSingle()
@@ -179,10 +234,19 @@ async function processRow(admin: Admin, row: NotificationOutboxRow, deps: Requir
   }
   const { emails, labels } = mergeRecipients(recipients)
   if (emails.length === 0) return { outcome: await markFailed(admin, row.id, 'no_recipients'), stopRun: false }
+  // A daily reminder is one person's merged email: if its targets no longer lead to exactly one
+  // address, nobody gets someone else's list
+  if (template === 'daily_reminder' && emails.length !== 1) {
+    return { outcome: await markFailed(admin, row.id, 'recipient_changed'), stopRun: false }
+  }
 
   const base = linkBase()
   if (!base) return { outcome: await markFailed(admin, row.id, 'no_app_url'), stopRun: false }
   const content = await renderNotice(admin, row, template, base)
+  if (!content) {
+    await markSent(admin, row.id)   // nothing left to remind about: done, nothing sent
+    return { outcome: 'sent', stopRun: false }
+  }
 
   // Delivered addresses are kept as HMACs bound to this row, so a retry skips them
   const delivered = new Set(row.delivered ?? [])

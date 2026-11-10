@@ -297,6 +297,11 @@ function noticeParts(template: NotificationTemplate, c: NoticeContext): NoticePa
       paragraphs: [`You have ${c.taskNames.length > 1 ? 'new tasks' : 'a new task'} for ${name}.`],
       details: [...c.taskNames.map(t => `Task: ${oneLine(t)}`), ...starts], button: 'Open the tasks',
     }
+    // Built by reminderEmail() instead; this is only a safe fallback
+    case 'daily_reminder': return {
+      subject: 'Onboarding reminders', heading: 'Onboarding reminders',
+      paragraphs: ['You have onboarding items waiting in the portal.'], details: [], button: 'Open the portal',
+    }
   }
 }
 
@@ -322,6 +327,39 @@ ${details.length ? `<table role="presentation" cellpadding="0" cellspacing="0" b
     `${button}:`, ctx.link, signIn, '', FOOTER, '',
   ].join('\n')
   return { subject, html: layout({ title: subject, preview: paragraphs[paragraphs.length - 1], bodyHtml }), text }
+}
+
+// ── Daily reminders (lib/reminders-render.ts builds the view) ──
+// One email per person per day: one block per kind of reminder, each with its own portal button.
+// Names, form titles, counts and dates only. Everything is escaped here.
+
+export type ReminderBlock = { heading: string; lines: string[]; items: string[]; button: string; link: string }
+export type ReminderView  = { subject: string; greeting: string | null; blocks: ReminderBlock[] }
+
+export function reminderEmail(view: ReminderView): EmailContent {
+  const subject = oneLine(view.subject)
+  const blocksHtml = view.blocks.map(b => `
+<h2 style="margin:8px 0 8px;font-family:${HEAD_FONT};font-size:18px;line-height:1.3;color:${NAVY};font-weight:700;">${esc(b.heading)}</h2>
+${b.lines.map(l => `<p style="margin:0 0 12px;">${esc(l)}</p>`).join('\n')}
+${b.items.length ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 16px;"><tr><td style="background:#F7F4EE;border-left:4px solid ${AMBER};border-radius:8px;padding:12px 18px;font-family:${BODY_FONT};font-size:14px;line-height:1.7;color:${TEXT};">${b.items.map(i => esc(oneLine(i))).join('<br>')}</td></tr></table>` : ''}
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 24px;">
+<tr><td style="border-radius:10px;background:${NAVY};">
+<a href="${esc(b.link)}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:12px 22px;font-family:${BODY_FONT};font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:10px;border-bottom:3px solid ${AMBER};">${esc(b.button)}</a>
+</td></tr>
+</table>`).join('\n')
+  const signIn = 'Each button opens the portal. You will be asked to sign in.'
+  const bodyHtml = `
+<h1 style="margin:0 0 12px;font-family:${HEAD_FONT};font-size:22px;line-height:1.3;color:${NAVY};font-weight:700;">${esc(subject)}</h1>
+${view.greeting ? `<p style="margin:0 0 16px;">${esc(view.greeting)}</p>` : ''}
+${blocksHtml}
+<p style="margin:0 0 20px;color:${MUTED};font-size:13px;">${esc(signIn)}</p>`
+  const text = [
+    subject, '', ...(view.greeting ? [view.greeting, ''] : []),
+    ...view.blocks.flatMap(b => [b.heading, ...b.lines, ...b.items.map(i => `  - ${oneLine(i)}`), `${b.button}: ${b.link}`, '']),
+    signIn, '', FOOTER, '',
+  ].join('\n')
+  const preview = view.blocks[0]?.lines[0] ?? view.blocks[0]?.heading ?? subject
+  return { subject, html: layout({ title: subject, preview, bodyHtml }), text }
 }
 
 // scripts/test-email.ts: a harmless message to check delivery

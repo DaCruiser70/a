@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import '../../../styles/pages/hr-dashboard.css'
 import '../../../styles/pages/hr-outbox.css'
 import PortalSwitcher from '@/components/ui/PortalSwitcher'
+import Modal from '@/components/ui/Modal'
 import { PortalIdentity } from '@/components/ui/PortalName'
 import { NOTIFICATION_TEMPLATES, TEMPLATE_LABELS, ERROR_CODE_LABELS, type NotificationTemplate } from '@/lib/notification-templates'
 import type { OutboxStatus } from '@/types'
@@ -57,6 +58,65 @@ export default function OutboxPage() {
   const [attempt, setAttempt]   = useState(0)
   const [busy, setBusy]         = useState<string | null>(null)
   const [notice, setNotice]     = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
+  // Daily reminders pause switch
+  const [reminders, setReminders] = useState<{ paused: boolean; changed_at: string | null } | 'error' | null>(null)
+  const [confirmPause, setConfirmPause] = useState(false)
+  // Clear dead notifications
+  const [deadCount, setDeadCount] = useState(0)
+  const [confirmClear, setConfirmClear] = useState(false)
+  const [clearBusy, setClearBusy] = useState(false)
+  const [clearError, setClearError] = useState('')
+  const [pauseBusy, setPauseBusy] = useState(false)
+  const [pauseError, setPauseError] = useState('')
+
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/hr/reminders', { cache: 'no-store' })
+      .then(r => (r.ok ? r.json() : Promise.reject()))
+      .then((d: { paused: boolean; changed_at: string | null }) => { if (!cancelled) setReminders(d) })
+      .catch(() => { if (!cancelled) setReminders('error') })
+    return () => { cancelled = true }
+  }, [])
+
+  async function clearDead() {
+    setClearBusy(true)
+    setClearError('')
+    try {
+      const res = await fetch('/api/hr/outbox/clear-dead', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ confirm: true }),
+      })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) { setClearError(body.error ?? 'That didn’t work. Please try again.'); return }
+      setConfirmClear(false)
+      setNotice({ kind: 'ok', text: `Cleared ${body.cleared} dead notification${body.cleared === 1 ? '' : 's'}.` })
+      setOffset(0)
+      setState('loading')
+      setAttempt(a => a + 1)
+    } catch {
+      setClearError('That didn’t work. Please check your connection and try again.')
+    } finally {
+      setClearBusy(false)
+    }
+  }
+
+  async function togglePause(paused: boolean) {
+    setPauseBusy(true)
+    setPauseError('')
+    try {
+      const res = await fetch('/api/hr/reminders', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ paused }),
+      })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) { setPauseError(body.error ?? 'That didn’t work. Please try again.'); return }
+      setReminders({ paused: body.paused, changed_at: body.changed_at ?? null })
+      setConfirmPause(false)
+      setNotice({ kind: 'ok', text: body.paused ? 'Daily reminders are paused.' : 'Daily reminders are back on. Anything missed catches up, one email per person per day.' })
+    } catch {
+      setPauseError('That didn’t work. Please check your connection and try again.')
+    } finally {
+      setPauseBusy(false)
+    }
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -65,11 +125,12 @@ export default function OutboxPage() {
     if (template) qs.set('template', template)
     fetch(`/api/hr/outbox?${qs}`, { cache: 'no-store' })
       .then(r => (r.ok ? r.json() : Promise.reject()))
-      .then((d: { items: OutboxItem[]; total: number; mode: MailMode }) => {
+      .then((d: { items: OutboxItem[]; total: number; mode: MailMode; dead_count?: number }) => {
         if (cancelled) return
         setItems(d.items)
         setTotal(d.total)
         setMode(d.mode)
+        setDeadCount(d.dead_count ?? 0)
         setState('ready')
       })
       .catch(() => { if (!cancelled) setState('error') })
@@ -185,6 +246,76 @@ export default function OutboxPage() {
                 Recipients are shown by role; addresses are looked up when each email is sent.
               </div>
             </div>
+          )}
+
+          {reminders === null && <div className="obx-skeleton" aria-busy="true" aria-label="Loading the reminder setting" />}
+          {reminders === 'error' && (
+            <div className="obx-error" role="alert" style={{ marginTop: 12 }}>The reminder setting could not be loaded. Reload the page to try again.</div>
+          )}
+          {reminders && reminders !== 'error' && (
+            <div className={`obx-reminders${reminders.paused ? ' paused' : ''}`} role={reminders.paused ? 'status' : undefined}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                {reminders.paused
+                  ? <><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></>
+                  : <><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></>}
+              </svg>
+              <div className="obx-reminders-text">
+                <strong>{reminders.paused ? 'Daily reminders are paused.' : 'Daily reminders are on.'}</strong>{' '}
+                {reminders.paused
+                  ? 'The morning run queues nothing. When you resume, anything missed catches up, still one email per person per day.'
+                  : 'Each business day at 9:00 (Toronto) the portal queues reminders here, at most one email per person.'}
+                {reminders.changed_at && <span className="obx-sub">Last changed {fmtDateTime(reminders.changed_at)}</span>}
+              </div>
+              <button type="button" className="obx-act" onClick={() => { setPauseError(''); setConfirmPause(true) }}>
+                {reminders.paused ? 'Resume reminders' : 'Pause reminders'}
+              </button>
+            </div>
+          )}
+          {confirmPause && reminders && reminders !== 'error' && (
+            <Modal
+              title={reminders.paused ? 'Resume daily reminders?' : 'Pause daily reminders?'}
+              description={reminders.paused
+                ? 'The next morning run queues reminders again. Anything missed while paused catches up, at most one email per person per day.'
+                : 'The morning run will queue no reminders until you resume. Other notifications keep going out as usual.'}
+              onClose={() => setConfirmPause(false)}
+              busy={pauseBusy}
+            >
+              {pauseError && <div className="ui-modal-error" role="alert">{pauseError}</div>}
+              <div className="ui-modal-actions">
+                <button type="button" className="ui-btn-cancel" disabled={pauseBusy} onClick={() => setConfirmPause(false)}>Cancel</button>
+                <button type="button" className="ui-btn-primary" disabled={pauseBusy} onClick={() => togglePause(!reminders.paused)}>
+                  {pauseBusy ? 'Saving…' : reminders.paused ? 'Resume reminders' : 'Pause reminders'}
+                </button>
+              </div>
+            </Modal>
+          )}
+
+          {deadCount > 0 && (
+            <div className="obx-dead">
+              <div className="obx-reminders-text">
+                <strong>{deadCount} dead notification{deadCount === 1 ? '' : 's'}.</strong>{' '}
+                These failed five times and will not be retried. Retry any you still need, or clear them.
+              </div>
+              <button type="button" className="obx-act" onClick={() => { setClearError(''); setConfirmClear(true) }}>
+                Clear dead notifications
+              </button>
+            </div>
+          )}
+          {confirmClear && (
+            <Modal
+              title={`Delete ${deadCount} dead notification${deadCount === 1 ? '' : 's'}?`}
+              description={`This permanently deletes the ${deadCount} notification${deadCount === 1 ? '' : 's'} with status Dead. Queued, sending and sent notifications are not touched, and none of these will be sent again.`}
+              onClose={() => setConfirmClear(false)}
+              busy={clearBusy}
+            >
+              {clearError && <div className="ui-modal-error" role="alert">{clearError}</div>}
+              <div className="ui-modal-actions">
+                <button type="button" className="ui-btn-cancel" disabled={clearBusy} onClick={() => setConfirmClear(false)}>Cancel</button>
+                <button type="button" className="ui-btn-primary" disabled={clearBusy} onClick={clearDead}>
+                  {clearBusy ? 'Deleting…' : `Delete ${deadCount}`}
+                </button>
+              </div>
+            </Modal>
           )}
 
           <div className="obx-live" aria-live="polite">

@@ -5,6 +5,7 @@ import { REGIONS } from '@/lib/regions'
 import {
   TEMPLATE_DEFS, FLAG_SECTIONS, type NotificationTemplate,
 } from '@/lib/notification-templates'
+import { DailyReminderPayloadSchema, TARGET_AUDIENCE, type DailyReminderPayload } from '@/lib/reminder-payload'
 
 // Notification outbox. queueNotification() records one row in notification_outbox; the dispatcher
 // (lib/notify-dispatch.ts) sends it. A row never holds an address: recipients come from the
@@ -39,6 +40,7 @@ export const PAYLOAD_SCHEMAS = {
   hire_all_set:               Empty,
   payroll_done:               Empty,
   stakeholder_tasks_created:  z.strictObject({ assigneeId: z.uuid(), taskKeys: z.array(z.string().regex(/^[a-z0-9_]{1,40}$/)).min(1).max(20) }),
+  daily_reminder:             DailyReminderPayloadSchema,
 } satisfies Record<NotificationTemplate, z.ZodType>
 
 export type NotificationPayload<T extends NotificationTemplate> = z.infer<typeof PAYLOAD_SCHEMAS[T]>
@@ -70,6 +72,8 @@ function audienceKey(template: NotificationTemplate, payload: Record<string, unk
   if (template === 'manager_plan_requested')    return `${base}:${payload.managerId}`
   if (template === 'pm_request_created')        return `${base}:${payload.region}`
   if (template === 'stakeholder_tasks_created') return `${base}:${payload.assigneeId}`
+  // One per person per day: the person is an HMAC of the address the reminder was grouped by
+  if (template === 'daily_reminder')            return `person:${payload.person}`
   return base
 }
 
@@ -100,30 +104,49 @@ export async function queueNotification<T extends NotificationTemplate>({
   }
   const data = parsed.data as Record<string, unknown>
 
+  const reminder = template === 'daily_reminder' ? data as DailyReminderPayload : null
+  const dedupeKey = dedupeKeyFor(template, hireId, data, version)
+  const audience  = reminder
+    ? [...new Set(reminder.to.map(t => TARGET_AUDIENCE[t.kind]))]
+    : [...TEMPLATE_DEFS[template].audience]
   try {
-    // ON CONFLICT DO NOTHING returns only rows it actually inserted
-    const { data: rows, error } = await createServiceClient()
-      .from('notification_outbox')
-      .upsert({
-        dedupe_key: dedupeKeyFor(template, hireId, data, version),
-        template,
-        newhire_id: hireId,
-        audience:   [...TEMPLATE_DEFS[template].audience],
-        payload:    data,
-        status:     'queued',
-      }, { onConflict: 'dedupe_key', ignoreDuplicates: true })
-      .select('id')
+    // The key goes into the permanent ledger (notification_keys) and the row into the outbox in one
+    // database call. A key used before, even one whose outbox row has since been cleaned up, gives
+    // null: the event is never sent twice.
+    const admin = createServiceClient()
+    const { data: rpcId, error: rpcError } = await admin.rpc('enqueue_notification', {
+      p_dedupe_key:    dedupeKey,
+      p_template:      template,
+      p_newhire_id:    hireId,
+      p_audience:      audience,
+      p_payload:       data,
+      // Daily reminders keep their date and refs in the ledger: the reminder history outlives cleanup
+      p_reminder_date: reminder?.date ?? null,
+      p_refs:          reminder?.refs ?? [],
+    })
+    let id: string | null = (rpcId as string | null) ?? null
+    let error = rpcError
+    // Only until 20261110_notification_keys.sql is run: the function does not exist yet, so queue
+    // the old way (outbox row only). Re-running statement 10 of that migration records these keys.
+    if (rpcError?.code === 'PGRST202') {
+      console.warn('[notify] enqueue_notification is missing: run 20261110_notification_keys.sql')
+      const { data: rows, error: upsertError } = await admin.from('notification_outbox')
+        .upsert({ dedupe_key: dedupeKey, template, newhire_id: hireId, audience, payload: data, status: 'queued' },
+          { onConflict: 'dedupe_key', ignoreDuplicates: true })
+        .select('id')
+      id = rows?.[0]?.id ?? null
+      error = upsertError
+    }
 
     if (error) {
       console.error(`[notify] failed to queue notification (code ${error.code})`)
       return false
     }
-    const inserted = (rows?.length ?? 0) > 0
-    if (inserted) {
+    if (id) {
       console.log(`[notify] queued ${template}`)
-      kickDispatcher(rows!.map(r => r.id))
+      kickDispatcher([id])
     }
-    return inserted
+    return !!id
   } catch {
     console.error('[notify] failed to queue notification')
     return false

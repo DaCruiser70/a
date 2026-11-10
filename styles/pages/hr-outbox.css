@@ -46,6 +46,24 @@
 .obx-act:hover:not(:disabled) { background: rgba(27,58,107,0.06); }
 .obx-act:disabled { opacity: 0.55; cursor: not-allowed; }
 
+.obx-reminders {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 12px;
+  padding: 0.85rem 1.25rem; border-radius: 14px; font-size: 13px; color: #5F5E5A; line-height: 1.6;
+  background: rgba(27,58,107,0.04); border: 1px solid rgba(27,58,107,0.15);
+}
+.obx-reminders svg { width: 18px; height: 18px; color: #1B3A6B; flex-shrink: 0; }
+.obx-reminders strong { color: #1a2e25; }
+.obx-reminders-text { flex: 1 1 240px; min-width: 0; }
+.obx-reminders.paused { background: rgba(200,146,10,0.08); border: 2px solid #C8920A; }
+.obx-reminders.paused svg { color: #8A6200; }
+
+.obx-dead {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 12px;
+  padding: 0.85rem 1.25rem; border-radius: 14px; font-size: 13px; color: #5F5E5A; line-height: 1.6;
+  background: rgba(176,58,46,0.05); border: 1px solid rgba(176,58,46,0.25);
+}
+.obx-dead strong { color: #8E2F25; }
+
 .obx-live:empty { display: none; }
 .obx-flash { margin-top: 12px; padding: 10px 14px; border-radius: 8px; font-size: 13px; line-height: 1.5; }
 .obx-flash.ok    { color: #0D5C46; background: rgba(13,92,70,0.06); border: 1px solid rgba(13,92,70,0.2); }
