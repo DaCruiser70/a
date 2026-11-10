@@ -29,9 +29,37 @@ async function readJson(res: Response): Promise<{ error?: string; [key: string]:
   try { return await res.json() } catch { return {} }
 }
 
-export default function LoginForm({ otpRequired = false }: { otpRequired?: boolean }) {
+// The Staff / New hire tabs only change what this card shows. They are never sent to the server,
+// which decides what every account can do exactly as before.
+type Audience = 'staff' | 'newhire'
+const AUDIENCES: { key: Audience; label: string }[] = [
+  { key: 'staff',   label: 'AEM staff' },
+  { key: 'newhire', label: 'New hire' },
+]
+
+export default function LoginForm({ otpRequired = false, microsoftEnabled = false }: {
+  otpRequired?: boolean
+  microsoftEnabled?: boolean
+}) {
   const router = useRouter()
   const supabase = createClient()
+  const [audience, setAudience]     = useState<Audience>('staff')
+  const tabRefs = useRef<Record<Audience, HTMLButtonElement | null>>({ staff: null, newhire: null })
+
+  // Arrow keys, Home and End move between the two tabs (and select them)
+  function handleTabKey(e: React.KeyboardEvent<HTMLButtonElement>) {
+    const i = AUDIENCES.findIndex(a => a.key === audience)
+    let next = -1
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next = (i + 1) % AUDIENCES.length
+    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') next = (i - 1 + AUDIENCES.length) % AUDIENCES.length
+    else if (e.key === 'Home') next = 0
+    else if (e.key === 'End') next = AUDIENCES.length - 1
+    if (next < 0) return
+    e.preventDefault()
+    const key = AUDIENCES[next].key
+    setAudience(key)
+    tabRefs.current[key]?.focus()
+  }
 
   const [email, setEmail]           = useState('')
   const [password, setPassword]     = useState('')
@@ -403,22 +431,15 @@ export default function LoginForm({ otpRequired = false }: { otpRequired?: boole
     return (
       <>
         <div className="login-card-body">
-          <div className="login-icon-stage">
-            <div className="login-icon-glow" />
-            <div
-              className="login-icon-core"
-              style={{
-                fontSize: '24px',
-                background: 'linear-gradient(135deg, rgba(27,58,107,0.3), rgba(27,58,107,0.5))',
-                borderColor: 'rgba(200,146,10,0.5)',
-              }}
-            >
-              <div className="login-icon-shimmer" />
-              🔐
-            </div>
+          <div className="ld-otp-badge" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="4.5" y="10.5" width="15" height="10" rx="2.5" />
+              <path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" />
+              <circle cx="12" cy="15.5" r="1.3" fill="currentColor" stroke="none" />
+            </svg>
           </div>
 
-          <div className="login-card-title">Verify your identity</div>
+          <h2 className="login-card-title">Verify your identity</h2>
           <div className="login-card-sub">
             {memberId
               ? <>A 6-digit code was sent to<br />{members.find(m => m.id === memberId)?.name ?? 'your'}&apos;s email</>
@@ -434,6 +455,8 @@ export default function LoginForm({ otpRequired = false }: { otpRequired?: boole
                   className={`otp-digit${otpError ? ' otp-digit-error' : ''}`}
                   type="text"
                   inputMode="numeric"
+                  autoComplete={i === 0 ? 'one-time-code' : 'off'}
+                  aria-label={`Digit ${i + 1} of 6`}
                   maxLength={1}
                   value={digit}
                   onChange={e => handleOtpChange(i, e.target.value)}
@@ -452,7 +475,7 @@ export default function LoginForm({ otpRequired = false }: { otpRequired?: boole
                 </button>
               ) : (
                 <span>
-                  Code expires in <strong style={{ color: '#E8B84B' }}>{formatTime(timeLeft)}</strong>
+                  Code expires in <strong className="otp-time">{formatTime(timeLeft)}</strong>
                 </span>
               )}
             </div>
@@ -461,7 +484,6 @@ export default function LoginForm({ otpRequired = false }: { otpRequired?: boole
               type="submit"
               className="login-btn"
               disabled={otpLoading || otp.join('').length < 6}
-              style={{ opacity: otp.join('').length < 6 ? 0.6 : 1 }}
             >
               <span className="login-btn-text">{otpLoading ? 'Verifying...' : 'Verify & Sign In'}</span>
               <span className="login-btn-arrow">{otpLoading ? '...' : '→'}</span>
@@ -470,21 +492,18 @@ export default function LoginForm({ otpRequired = false }: { otpRequired?: boole
 
           {devOtp && (
             <div className="otp-hint">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
-                style={{ width: '12px', height: '12px', flexShrink: 0 }}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
                 <circle cx="12" cy="12" r="10"/>
                 <line x1="12" y1="8" x2="12" y2="12"/>
                 <line x1="12" y1="16" x2="12.01" y2="16"/>
               </svg>
-              Dev mode — code: <strong style={{ color: '#E8B84B' }}>{devOtp}</strong>
+              Dev mode — code: <strong className="otp-time">{devOtp}</strong>
             </div>
           )}
         </div>
 
         <div className="login-card-foot">
-          <span style={{ cursor: 'pointer', color: 'rgba(255,255,255,0.4)' }} onClick={handleBackToLogin}>
-            ← Back to sign in
-          </span>
+          <button type="button" className="login-back-link" onClick={handleBackToLogin}>← Back to sign in</button>
         </div>
       </>
     )
@@ -494,78 +513,119 @@ export default function LoginForm({ otpRequired = false }: { otpRequired?: boole
   return (
     <>
       <div className="login-card-body">
-        <div className="login-icon-stage">
-          <div className="login-orbit login-orbit-a"><div className="login-odot" /></div>
-          <div className="login-orbit login-orbit-b"><div className="login-odot" /></div>
-          <div className="login-orbit login-orbit-c">
-            <div className="login-odot" />
-            <div className="login-odot-2" />
-          </div>
-          <div className="login-icon-glow" />
-          <div className="login-icon-core">
-            <div className="login-icon-shimmer" />
-            A
-          </div>
+        <h2 className="login-card-title">Welcome back</h2>
+        <p className="login-card-sub">Pick the way you sign in at AEM.</p>
+
+        <div className="ld-tabs" role="tablist" aria-label="How you sign in">
+          {AUDIENCES.map(a => (
+            <button
+              key={a.key}
+              ref={el => { tabRefs.current[a.key] = el }}
+              type="button"
+              role="tab"
+              id={`ld-tab-${a.key}`}
+              aria-selected={audience === a.key}
+              aria-controls="ld-tabpanel"
+              tabIndex={audience === a.key ? 0 : -1}
+              className="ld-tab"
+              onClick={() => setAudience(a.key)}
+              onKeyDown={handleTabKey}
+            >
+              {a.label}
+            </button>
+          ))}
         </div>
 
-        <div className="login-card-title">Welcome back</div>
-        <div className="login-card-sub">
-          Sign in with your email and the password you set.<br />
-          First time here? Use the link in your welcome email.
+        <div className="ld-tabpanel" role="tabpanel" id="ld-tabpanel" aria-labelledby={`ld-tab-${audience}`}>
+          {/* Both intros share one grid cell, so the card keeps the taller one's height on either tab
+              and nothing on the page moves. The other tab's intro is invisible, inert and hidden
+              from screen readers. */}
+          <div className="ld-lead">
+            {microsoftEnabled && <div className={`ld-lead-item${audience === 'staff' ? '' : ' ld-lead-off'}`}
+              inert={audience !== 'staff'} aria-hidden={audience !== 'staff' || undefined}>
+              {microsoftEnabled && (
+                <>
+                  <a className="ld-ms-btn" href="/api/auth/microsoft/start">
+                    <span className="ld-ms-mark" aria-hidden="true"><i /><i /><i /><i /></span>
+                    Sign in with Microsoft
+                  </a>
+                  <p className="ld-ms-note">Approve with the Authenticator app when asked.</p>
+                  <div className="ld-divider"><span>Or with email</span></div>
+                </>
+              )}
+            </div>}
+            {(microsoftEnabled || audience === 'newhire') && (
+              <div className={`ld-lead-item${audience === 'newhire' ? '' : ' ld-lead-off'}`}
+                inert={audience !== 'newhire'} aria-hidden={audience !== 'newhire' || undefined}>
+                <p className="ld-hint">
+                  First time here? Use the link in your welcome email to set your password, then sign in below.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {otpRequired && !error && (
+            <div className="login-notice" role="status">Please sign in again to continue</div>
+          )}
+
+          {/* method="post" and no name attributes: before the script loads, nothing is sent, never in the URL */}
+          <form method="post" onSubmit={handleLogin}>
+            <div className="login-field">
+              <label htmlFor="username">Email</label>
+              <div className="login-inp-wrap">
+                <span className="login-inp-icon" aria-hidden="true">@</span>
+                <input
+                  type="email" id="username"
+                  autoComplete="username"
+                  placeholder="your.name@aemltd.com"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  required
+                />
+              </div>
+            </div>
+            <div className="login-field">
+              <label htmlFor="password">Password</label>
+              <div className="login-inp-wrap">
+                <span className="login-inp-icon" aria-hidden="true">•••</span>
+                <input
+                  type="password" id="password"
+                  autoComplete="current-password"
+                  placeholder="Your password"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="login-forgot">
+                <button type="button" className="login-back-link" onClick={() => { setError(''); setStage('forgot') }}>
+                  Forgot password?
+                </button>
+              </div>
+            </div>
+
+            {error && <div className="login-error" role="alert">{error}</div>}
+
+            <button type="submit" className="login-btn" disabled={loading}>
+              <span className="login-btn-text">{loading ? 'Signing in...' : 'Sign in to Portal'}</span>
+              <span className="login-btn-arrow" aria-hidden="true">{loading ? '...' : '→'}</span>
+            </button>
+          </form>
         </div>
-
-        {otpRequired && !error && (
-          <div className="login-notice" role="status">Please sign in again to continue</div>
-        )}
-
-        <form onSubmit={handleLogin}>
-          <div className="login-field">
-            <label htmlFor="username">Email</label>
-            <div className="login-inp-wrap">
-              <span className="login-inp-icon">@</span>
-              <input
-                type="email" id="username"
-                placeholder="your.name@aemltd.com"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                required
-              />
-            </div>
-          </div>
-          <div className="login-field">
-            <label htmlFor="password">Password</label>
-            <div className="login-inp-wrap">
-              <span className="login-inp-icon">•••</span>
-              <input
-                type="password" id="password"
-                placeholder="Your password"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                required
-              />
-            </div>
-            <div className="login-forgot">
-              <button type="button" className="login-back-link" onClick={() => { setError(''); setStage('forgot') }}>
-                Forgot password?
-              </button>
-            </div>
-          </div>
-
-          {error && <div className="login-error" role="alert">{error}</div>}
-
-          <button type="submit" className="login-btn" disabled={loading}>
-            <span className="login-btn-text">{loading ? 'Signing in...' : 'Sign in to Portal'}</span>
-            <span className="login-btn-arrow">{loading ? '...' : '→'}</span>
-          </button>
-        </form>
 
         <div className="login-help">
           Need help? <a href="mailto:hr@aemltd.com">hr@aemltd.com</a>
         </div>
-      </div>
 
-      <div className="login-card-foot">
-        HR staff — sign in with your <strong>@aemltd.com</strong> account
+        {/* Without the Microsoft button, the staff tab keeps the new hire hint's height down here
+            instead, as empty space under the card, so switching tabs never moves anything */}
+        {!microsoftEnabled && audience === 'staff' && (
+          <div className="ld-lead-item ld-lead-off ld-lead-ghost" inert aria-hidden="true">
+            <p className="ld-hint">
+              First time here? Use the link in your welcome email to set your password, then sign in below.
+            </p>
+          </div>
+        )}
       </div>
     </>
   )

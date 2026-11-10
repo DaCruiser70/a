@@ -35,6 +35,23 @@
   --color-on-dark-2:      rgba(255, 255, 255, 0.78);
   --color-on-dark-faint:  rgba(255, 255, 255, 0.14);
 
+  /* Daylight (login page): wires, cool neutrals and the darker golds for text on light grounds */
+  --color-wire-green:     #22C58A;
+  --color-wire-blue:      #3BA4FF;
+  --color-wire-amber:     #F2B01E;
+  --color-wire-steel:     #8FA3C7;
+  --color-gold-deep:      #A87400;   /* large text only (3.5:1 on --color-bg-warm) */
+  --color-gold-ink:       #7A5400;   /* small text: 6.6:1 on white */
+  --color-border-cool:    #E1E7F2;
+  --color-text-cool:      #4A5B7C;   /* body: 6.5:1 on white */
+  --color-text-cool-muted:#55688A;   /* muted: 5.6:1 on white */
+  --color-navy-grid:      rgba(27, 58, 107, 0.06);
+  /* The four squares of the Microsoft sign-in mark (drawn in CSS, no image) */
+  --color-ms-red:         #F25022;
+  --color-ms-green:       #7FBA00;
+  --color-ms-blue:        #00A4EF;
+  --color-ms-yellow:      #FFB900;
+
   /* Neutrals */
   --color-bg:             #F0F4F2;
   --color-surface:        #ffffff;
