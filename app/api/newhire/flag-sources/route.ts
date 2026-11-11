@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
+import { ONBOARDING_ITEMS } from '@/lib/form-order'
 import { requireRole } from '@/lib/roles'
 
 // Returns which actor ('HR' | 'Payroll') most recently flagged each form for this new hire.
@@ -20,7 +21,7 @@ export async function GET() {
     .order('created_at', { ascending: false })
     .limit(30)
 
-  const formIds = ['personal', 'banking', 'sin', 'policy', 'documents', 'clearance']
+  const formIds = [...ONBOARDING_ITEMS, 'clearance']
   const sources: Record<string, string | null> = {}
 
   for (const formId of formIds) {

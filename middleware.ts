@@ -1,6 +1,8 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import { verifyOtpSession, OTP_SESSION_COOKIE } from '@/lib/otp-session'
+import { newhireSessionAllowed } from '@/lib/session-rules'
+import { API_BODY_MAX_BYTES } from '@/lib/field-limits'
 import {
   parseRoles, isNewhireOnly, landingRole, portalForPath, portalForRole,
 } from '@/lib/portals'
@@ -12,6 +14,8 @@ const OTP_API_PREFIXES = ['/api/hr', '/api/stakeholder', '/api/payroll', '/api/m
 // Same value as SET_PASSWORD_PATH in lib/password-setup.ts (server only, not imported here)
 const SET_PASSWORD_PATH = '/set-password'
 
+const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
+
 function matchesPrefix(pathname: string, prefixes: string[]) {
   return prefixes.some(p => pathname === p || pathname.startsWith(`${p}/`))
 }
@@ -22,6 +26,15 @@ function noStore<T extends NextResponse>(response: T): T {
 }
 
 export async function middleware(request: NextRequest) {
+  // Backstop for every mutating API request: a declared body over the limit is refused before any
+  // other work. Routes also check the real size while reading (lib/field-validation.ts).
+  if (request.nextUrl.pathname.startsWith('/api/') && MUTATING.has(request.method)) {
+    const declared = Number(request.headers.get('content-length') ?? '0')
+    if (declared > API_BODY_MAX_BYTES) {
+      return noStore(NextResponse.json({ error: 'That request is too large.' }, { status: 413 }))
+    }
+  }
+
   let supabaseResponse = NextResponse.next({ request })
 
   // SSR client — used only to validate the session JWT via getUser()
@@ -67,6 +80,19 @@ export async function middleware(request: NextRequest) {
       const redirect = noStore(NextResponse.redirect(new URL('/login', request.url)))
       supabaseResponse.cookies.getAll().forEach(c => redirect.cookies.set(c))
       redirect.cookies.set(OTP_SESSION_COOKIE, '', { path: '/', maxAge: 0 })
+      return redirect
+    }
+  }
+
+  // A newhire-only session must come from a password sign-in (the verified JWT's amr claim).
+  // Anything else is ended. /api/auth stays reachable so signing out and in again works.
+  if (user && isNewhireOnly(roles) && !pathname.startsWith('/api/auth')) {
+    const { data: claimsData } = await supabase.auth.getClaims()
+    if (!newhireSessionAllowed(roles, claimsData?.claims?.amr)) {
+      if (isApi) return noStore(NextResponse.json({ error: 'Unauthorized' }, { status: 401 }))
+      await supabase.auth.signOut()
+      const redirect = noStore(NextResponse.redirect(new URL('/login', request.url)))
+      supabaseResponse.cookies.getAll().forEach(c => redirect.cookies.set(c))
       return redirect
     }
   }

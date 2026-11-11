@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 import { requireRole } from '@/lib/roles'
 import { inPayrollQueue } from '@/lib/payroll-access'
+import { formatPhone } from '@/lib/field-limits'
 import { decryptFields } from '@/lib/encrypt'
 
 // Only these document types are visible in the payroll portal
@@ -69,7 +70,7 @@ export async function GET(
         first_name:             personal.first_name,
         last_name:              personal.last_name,
         date_of_birth:          personal.date_of_birth,
-        phone:                  personal.phone,
+        phone:                  formatPhone(personal.phone),
         personal_email:         personal.personal_email,
         street:                 personal.street,
         city:                   personal.city,
@@ -77,7 +78,7 @@ export async function GET(
         postal_code:            personal.postal_code,
         emergency_name:         personal.emergency_name,
         emergency_relationship: personal.emergency_relationship,
-        emergency_phone:        personal.emergency_phone,
+        emergency_phone:        formatPhone(personal.emergency_phone),
         form_status:            personal.form_status,
         flag_reason:            personal.flag_reason ?? null,
         submitted_at:           personal.submitted_at ?? null,

@@ -1,6 +1,14 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 import { requireRole } from '@/lib/roles'
+import { z } from 'zod'
+import { FIELD_LIMITS } from '@/lib/field-limits'
+import { zOptionalText, firstIssue, readJsonBody, BODY_TOO_LARGE, INVALID_REQUEST } from '@/lib/field-validation'
+import { isUuid } from '@/lib/review-schemas'
+
+const TaskBody = z.strictObject({
+  note: zOptionalText('Note', FIELD_LIMITS.note, { multiline: true }),
+})
 import { encrypt } from '@/lib/encrypt'
 import { VEHICLE_TASK_KEYS } from '@/lib/vehicle'
 import { RETIRED_TASK_KEYS } from '@/lib/stakeholder-mapping'
@@ -15,20 +23,18 @@ export async function PATCH(
 
   const admin = createServiceClient()
 
-  // Parse and validate optional note — must be a string ≤ 1000 characters
-  let body: { note?: unknown } = {}
-  try { body = await request.json() } catch { /* empty body is fine */ }
-
-  const rawNote = body.note
-  if (rawNote !== undefined && rawNote !== null && typeof rawNote !== 'string') {
-    return NextResponse.json({ error: 'Invalid note' }, { status: 400 })
+  // Optional completion note, up to 1000 characters (an empty body is fine)
+  const read = await readJsonBody(request)
+  if (!read.ok) return NextResponse.json({ error: read.status === 413 ? BODY_TOO_LARGE : INVALID_REQUEST }, { status: read.status })
+  const parsed = TaskBody.safeParse(read.data ?? {})
+  if (!parsed.success) {
+    const { field, message } = firstIssue(parsed.error)
+    return NextResponse.json({ error: message, field }, { status: 400 })
   }
-  const trimmedNote = typeof rawNote === 'string' ? rawNote.trim() : ''
-  if (trimmedNote.length > 1000) {
-    return NextResponse.json({ error: 'Note must be 1000 characters or fewer' }, { status: 400 })
-  }
+  const trimmedNote = parsed.data.note ?? ''
 
   const { taskId } = await params
+  if (!isUuid(taskId)) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   // Verify task exists and belongs to this stakeholder
   const { data: task } = await admin
@@ -60,7 +66,10 @@ export async function PATCH(
     .update({ status: 'confirmed', confirmed_at: now, completion_note_enc: noteEnc })
     .eq('id', taskId)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    console.error(`stakeholder task update failed (code ${error.code})`)
+    return NextResponse.json({ error: 'Could not save. Please try again.' }, { status: 500 })
+  }
 
   return NextResponse.json({ ok: true })
 }

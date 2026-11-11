@@ -8,7 +8,10 @@ import { createClient } from '@/lib/supabase/client'
 import type { NewhireDocument } from '@/types'
 import { requiredDocumentSlots } from '@/lib/required-documents'
 import { computeDocumentsItem } from '@/lib/hire-status'
+import Link from 'next/link'
 import { FORMS_HOME, COMPLETE_PAGE } from '@/lib/routes'
+import { stepLabel } from '@/lib/form-order'
+import { displayFileName } from '@/lib/field-limits'
 
 function getInitials(name: string) {
   return name.split(' ').filter(Boolean).map(n => n[0]).join('').toUpperCase().slice(0, 2)
@@ -151,7 +154,7 @@ function DropZone({
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
           </svg>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontWeight: 600, fontSize: '13px', color: '#1a2e25', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{state.file.name}</div>
+            <div style={{ fontWeight: 600, fontSize: '13px', color: '#1a2e25', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayFileName(state.file.name)}</div>
             <div style={{ fontSize: '11px', color: '#888780' }}>{formatBytes(state.file.size)}</div>
           </div>
           <button onClick={() => onChange({ file: null, error: '' })} style={{ fontSize: '12px', fontWeight: 600, color: '#C0392B', background: 'none', border: 'none', cursor: 'pointer', padding: '4px 8px', borderRadius: '6px', fontFamily: 'var(--font-sans)', flexShrink: 0 }}>
@@ -248,7 +251,7 @@ function DocCard({
             <div>
               <div style={{ fontWeight: 600, fontSize: '13px', color: '#0D5C46' }}>Document Approved</div>
               <div style={{ fontSize: '12px', color: '#5F5E5A', marginTop: '2px' }}>
-                {doc?.file_name} · {doc?.file_size ? formatBytes(doc.file_size) : ''}
+                {displayFileName(doc?.file_name)} · {doc?.file_size ? formatBytes(doc.file_size) : ''}
                 {doc?.expiry_date && ` · Expires ${doc.expiry_date}`}
               </div>
             </div>
@@ -274,7 +277,7 @@ function DocCard({
                   <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
                 </svg>
                 <div style={{ fontSize: '12px', color: '#856211' }}>
-                  <strong>{doc.file_name}</strong> · {doc.file_size ? formatBytes(doc.file_size) : ''} — pending HR review. You can replace this file if needed.
+                  <strong>{displayFileName(doc.file_name)}</strong> · {doc.file_size ? formatBytes(doc.file_size) : ''} — pending HR review. You can replace this file if needed.
                 </div>
               </div>
             )}
@@ -333,6 +336,8 @@ export default function DocumentsPage() {
   const [noInsurance, setNoInsurance]       = useState(false)
   // Assigned a company vehicle: the Driver's License is the required ID (the server decides)
   const [companyVehicle, setCompanyVehicle] = useState(false)
+  // Every required item (four forms + all required documents) is sent to HR, per the server
+  const [allSent, setAllSent]               = useState(false)
 
   const [uploadStates, setUploadStates] = useState<Record<string, UploadState>>(
     () => Object.fromEntries(SINGLE_DOC_TYPES.map(t => [t, { ...EMPTY_UPLOAD }]))
@@ -363,10 +368,12 @@ export default function DocumentsPage() {
       if (!user) { router.push('/login'); return }
       setUserId(user.id)
 
-      const [{ data: profile }, docsRes] = await Promise.all([
+      const [{ data: profile }, docsRes, statusRes] = await Promise.all([
         supabase.from('profiles').select('full_name, preferred_name, office_location').eq('id', user.id).single(),
         fetch('/api/forms/documents').then(r => r.ok ? r.json() : { documents: [] }),
+        fetch('/api/newhire/status', { cache: 'no-store' }).then(r => r.ok ? r.json() : null).catch(() => null),
       ])
+      setAllSent(statusRes?.submission?.complete === true)
 
       if (profile) {
         setUserName(profile.preferred_name ?? profile.full_name ?? '')
@@ -407,8 +414,9 @@ export default function DocumentsPage() {
         throw new Error(data.error ?? 'Failed to save document')
       }
       const saved = await res.json().catch(() => ({}))
-      // The upload that sends the last required item goes to the confirmation page
-      if (saved.justCompleted) { router.replace(COMPLETE_PAGE); return }
+      // An upload never leaves this page. The server says whether every required item is now sent;
+      // only then does the summary offer the "what happens next" page.
+      setAllSent(saved.complete === true)
       await loadDocuments()
       updateUpload(docType, { ...EMPTY_UPLOAD })
     } catch (err) {
@@ -443,8 +451,9 @@ export default function DocumentsPage() {
         throw new Error(data.error ?? 'Failed to save document')
       }
       const saved = await res.json().catch(() => ({}))
-      // The upload that sends the last required item goes to the confirmation page
-      if (saved.justCompleted) { router.replace(COMPLETE_PAGE); return }
+      // An upload never leaves this page. The server says whether every required item is now sent;
+      // only then does the summary offer the "what happens next" page.
+      setAllSent(saved.complete === true)
       await loadDocuments()
       setForm({ ...EMPTY_MULTI })
     } catch (err) {
@@ -497,7 +506,7 @@ export default function DocumentsPage() {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="15 18 9 12 15 6"/></svg>
             Back to checklist
           </button>
-          <div className="form-page-step-tag">Step 5 of 5</div>
+          <div className="form-page-step-tag">{stepLabel('documents')}</div>
           <h1 className="form-page-title">Your Documents</h1>
           <p className="form-page-sub">
             Upload the required documents below. Files are kept in private storage and opened only through short-lived links — only authorized HR staff can access them.
@@ -680,7 +689,7 @@ export default function DocumentsPage() {
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: 600, fontSize: '13px', color: '#1a2e25' }}>{doc.document_label}</div>
                     <div style={{ fontSize: '11px', color: '#888780', marginTop: '2px' }}>
-                      {doc.file_name}
+                      {displayFileName(doc.file_name)}
                       {doc.expiry_date && <> · Expires {doc.expiry_date}{isExpiringSoon(doc.expiry_date) && <span style={{ color: '#C8920A', fontWeight: 700 }}> ⚠ Expiring soon</span>}</>}
                     </div>
                   </div>
@@ -768,7 +777,7 @@ export default function DocumentsPage() {
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: 600, fontSize: '13px', color: '#1a2e25' }}>{doc.document_label}</div>
                     <div style={{ fontSize: '11px', color: '#888780', marginTop: '2px' }}>
-                      {doc.file_name}
+                      {displayFileName(doc.file_name)}
                       {doc.expiry_date && <> · Expires {doc.expiry_date}{isExpiringSoon(doc.expiry_date) && <span style={{ color: '#C8920A', fontWeight: 700 }}> ⚠ Expiring soon</span>}</>}
                     </div>
                   </div>
@@ -878,6 +887,12 @@ export default function DocumentsPage() {
               : docsItem.missing.length > 0
               ? `Still needed: ${docsItem.missing.join(', ')}.`
               : 'HR will review your documents and notify you if anything needs to be corrected. You can still upload optional documents at any time.'}
+            {allSent && (
+              <p role="status" style={{ marginTop: '0.75rem', fontWeight: 600, color: '#0D5C46' }}>
+                Everything required has been sent to HR.{' '}
+                <Link href={COMPLETE_PAGE}>See what happens next →</Link>
+              </p>
+            )}
             <div style={{ marginTop: '0.75rem' }}>
               <button className="form-btn-secondary" onClick={() => router.push(FORMS_HOME)}>
                 ← Back to checklist

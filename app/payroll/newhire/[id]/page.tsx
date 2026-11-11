@@ -3,6 +3,8 @@
 import { notFound } from 'next/navigation'
 import { useEffect, useState, use } from 'react'
 import PortalHeader from '@/components/ui/PortalHeader'
+import { FIELD_LIMITS } from '@/lib/field-limits'
+import CharCount from '@/components/ui/CharCount'
 import { timeAgo } from '@/lib/time-ago'
 
 const TEAL = '#0F4C4A'
@@ -112,6 +114,8 @@ function FlagModal({
         <textarea
           value={reason}
           onChange={e => setReason(e.target.value)}
+          maxLength={FIELD_LIMITS.note}
+          aria-describedby="pr-reason-count"
           placeholder="Describe what needs to be corrected…"
           rows={4}
           style={{
@@ -120,6 +124,7 @@ function FlagModal({
             outline: 'none', boxSizing: 'border-box',
           }}
         />
+        <CharCount id="pr-reason-count" value={reason} max={FIELD_LIMITS.note} />
         <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '12px' }}>
           <button onClick={onCancel} style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid rgba(0,0,0,0.15)', background: '#fff', color: '#374151', cursor: 'pointer', fontSize: '13px', fontFamily: 'inherit', fontWeight: 500 }}>Cancel</button>
           <button
@@ -780,6 +785,7 @@ export default function PayrollNewHireDetail({ params }: { params: Promise<{ id:
                     <div style={{ display: 'flex', gap: '8px' }}>
                       <input
                         value={employeeIdInput}
+                        maxLength={FIELD_LIMITS.employeeId}
                         onChange={e => setEmployeeIdInput(e.target.value)}
                         placeholder="New employee ID"
                         style={{
@@ -810,6 +816,7 @@ export default function PayrollNewHireDetail({ params }: { params: Promise<{ id:
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <input
                       value={employeeIdInput}
+                        maxLength={FIELD_LIMITS.employeeId}
                       onChange={e => { setEmployeeIdInput(e.target.value); setAssignError('') }}
                       placeholder="e.g. EMP-1042"
                       style={{

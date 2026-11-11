@@ -13,6 +13,7 @@ import {
   CLEARANCE_FILES_BUCKET, CLEARANCE_FILE_TYPES, CLEARANCE_MAX_BYTES,
   clearancePath, fileExt, formatDcn, isValidDcn, normalizeDcn, type ClearanceKind,
 } from '@/lib/clearance'
+import { FIELD_LIMITS } from '@/lib/field-limits'
 import type { DocStatus, FormStatus } from '@/types'
 
 type OnFile = { name: string }
@@ -403,7 +404,7 @@ export default function ClearanceForm() {
                   <span className="form-label-encrypted">🔒 Encrypted</span>
                 </label>
                 <input
-                  id="clr-legal-name" className="form-input" value={legalName} maxLength={200}
+                  id="clr-legal-name" className="form-input" value={legalName} maxLength={FIELD_LIMITS.legalName}
                   autoComplete="name" aria-required="true" aria-invalid={!!fieldErrors.legalName || undefined}
                   onChange={e => setLegalName(e.target.value)}
                 />
@@ -415,7 +416,7 @@ export default function ClearanceForm() {
                   <span className="form-label-encrypted">🔒 Encrypted</span>
                 </label>
                 <input
-                  id="clr-pob" className="form-input" value={placeOfBirth} maxLength={200}
+                  id="clr-pob" className="form-input" value={placeOfBirth} maxLength={FIELD_LIMITS.placeOfBirth}
                   placeholder="City, province or state, country"
                   aria-required="true" aria-invalid={!!fieldErrors.placeOfBirth || undefined}
                   onChange={e => setPlaceOfBirth(e.target.value)}

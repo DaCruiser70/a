@@ -4,17 +4,23 @@ import { requireRole } from '@/lib/roles'
 import { afterHireFormSaved } from '@/lib/submission-server'
 import { encrypt, decrypt } from '@/lib/encrypt'
 import { recomputeProfileStatus } from '@/lib/hire-status'
+import { z } from 'zod'
+import { zSin, firstIssue, readJsonBody, BODY_TOO_LARGE, INVALID_REQUEST } from '@/lib/field-validation'
+
+// 9 digits (spaces and dashes removed) with the standard SIN checksum. Encrypted exactly as before;
+// the value is never logged, echoed or written to the audit log.
+const BodySchema = z.strictObject({ sin: zSin() })
 
 export async function POST(request: Request) {
   const auth = await requireRole('newhire')
   if (auth instanceof NextResponse) return auth
   const { user } = auth
 
-  const { sin } = await request.json()
-  const sinDigits = sin.replace(/\s/g, '')
-  if (sinDigits.length !== 9) {
-    return NextResponse.json({ error: 'SIN must be 9 digits.' }, { status: 400 })
-  }
+  const read = await readJsonBody(request)
+  if (!read.ok) return NextResponse.json({ error: read.status === 413 ? BODY_TOO_LARGE : INVALID_REQUEST }, { status: read.status })
+  const parsed = BodySchema.safeParse(read.data)
+  if (!parsed.success) return NextResponse.json({ error: firstIssue(parsed.error).message, field: 'sin' }, { status: 400 })
+  const sinDigits = parsed.data.sin
 
   const admin = createServiceClient()
 
@@ -28,7 +34,10 @@ export async function POST(request: Request) {
       submitted_at: new Date().toISOString(),
     }, { onConflict: 'user_id' })
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    console.error(`sin_info upsert failed (code ${error.code})`)
+    return NextResponse.json({ error: 'Failed to save. Please try again.' }, { status: 500 })
+  }
 
   await recomputeProfileStatus(admin, user.id)
 

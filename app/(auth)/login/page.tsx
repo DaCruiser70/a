@@ -2,6 +2,7 @@ import Image from 'next/image'
 import Typewriter from '../../../components/ui/Typewriter'
 import LoginWires from '../../../components/ui/LoginWires'
 import LoginForm from '../../../components/ui/LoginForm'
+import { staffPasswordLoginOn } from '@/lib/microsoft-auth'
 import '../../../styles/pages/login-daylight.css'
 
 // "Daylight Circuit". Presentation only: sign-in itself is LoginForm and /api/auth/*, unchanged.
@@ -15,12 +16,16 @@ const VALUES = [
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ otp_required?: string | string[] }>
+  searchParams: Promise<{ otp_required?: string | string[]; ms?: string | string[] }>
 }) {
-  const { otp_required } = await searchParams
+  const { otp_required, ms } = await searchParams
   const otpRequired = otp_required === '1'
-  // Microsoft sign-in is not built yet: no button until this is switched on
-  const microsoftEnabled = process.env.NEXT_PUBLIC_MICROSOFT_LOGIN_ENABLED === 'true'
+  // Microsoft sign-in: off until NEXT_PUBLIC_MICROSOFT_LOGIN_ENABLED is 'true'
+  const microsoftEnabled   = process.env.NEXT_PUBLIC_MICROSOFT_LOGIN_ENABLED === 'true'
+  // Server-only setting; only whether it is on reaches the browser
+  const staffPasswordLogin = staffPasswordLoginOn(process.env.STAFF_PASSWORD_LOGIN)
+  // Back from a refused Microsoft sign-in: one fixed message, never the reason
+  const microsoftRefused   = microsoftEnabled && ms === 'refused'
 
   return (
     <main className="ld-page">
@@ -43,7 +48,8 @@ export default async function LoginPage({
           <div className="ld-ripple ld-ripple-2" aria-hidden="true" />
           <div className="ld-ripple ld-ripple-3" aria-hidden="true" />
           <div className="ld-card" data-ld-card>
-            <LoginForm otpRequired={otpRequired} microsoftEnabled={microsoftEnabled} />
+            <LoginForm otpRequired={otpRequired} microsoftEnabled={microsoftEnabled}
+              staffPasswordLogin={staffPasswordLogin} microsoftRefused={microsoftRefused} />
           </div>
         </div>
 

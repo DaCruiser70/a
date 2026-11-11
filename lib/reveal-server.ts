@@ -5,6 +5,7 @@ import { decrypt, isEncrypted } from '@/lib/encrypt'
 import { hmacHex } from '@/lib/auth-secrets'
 import { esc } from '@/lib/safe-html'
 import { deliverCode, codeDeliveryPossible, devOtpEnabled } from '@/lib/code-delivery'
+import { formatPhone } from '@/lib/field-limits'
 import type { RevealGroup } from '@/lib/reveal'
 
 // Server only. The code that gates reveals of a hire's SIN, banking numbers, personal details
@@ -134,7 +135,8 @@ async function personalReveal(admin: Admin, hireId: string): Promise<{ date_of_b
     .select('date_of_birth, personal_phone')
     .eq('user_id', hireId).maybeSingle()
   const d = (v: string | null | undefined) => (!v ? null : isEncrypted(v) ? decrypt(v) : v)
-  return { date_of_birth: d(data?.date_of_birth), personal_phone: d(data?.personal_phone) }
+  const phone = d(data?.personal_phone)
+  return { date_of_birth: d(data?.date_of_birth), personal_phone: phone ? formatPhone(phone) : phone }
 }
 
 // ── Audit (no values, no codes) ──

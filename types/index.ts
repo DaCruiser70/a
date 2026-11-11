@@ -444,6 +444,26 @@ export type Database = {
         Update:        never
         Relationships: []
       }
+      // 20261111_microsoft_sign_in.sql: service role only
+      microsoft_identities: {
+        // Exactly one of profile_id (a staff account) or member_id (a project-management team member)
+        Row:           { id: string; profile_id: string | null; member_id: string | null; ms_issuer: string; ms_subject: string; created_at: string; last_sign_in_at: string }
+        Insert:        { profile_id?: string | null; member_id?: string | null; ms_issuer: string; ms_subject: string; last_sign_in_at?: string }
+        Update:        { last_sign_in_at?: string }
+        Relationships: []
+      }
+      staff_login_flags: {
+        Row:           { user_id: string; break_glass: boolean; updated_at: string }
+        Insert:        never   // set only by SQL run by hand
+        Update:        never
+        Relationships: []
+      }
+      sign_in_events: {
+        Row:           { id: string; method: 'microsoft' | 'password'; outcome: 'success' | 'refused' | 'break_glass' | 'note'; reason: string | null; user_id: string | null; member_id: string | null; created_at: string }
+        Insert:        { method: 'microsoft' | 'password'; outcome: 'success' | 'refused' | 'break_glass' | 'note'; reason?: string | null; user_id?: string | null; member_id?: string | null }
+        Update:        never
+        Relationships: []
+      }
       // 20261109_reminder_settings.sql: one row (id = true)
       reminder_settings: {
         Row:           { id: boolean; paused: boolean; changed_by: string | null; changed_at: string | null; updated_at: string }
@@ -616,6 +636,22 @@ export type Database = {
       notify_active_accounts: {
         Args:    { p_role: string; p_ids?: string[] | null }
         Returns: Array<{ id: string; email: string; full_name: string }>
+      }
+      microsoft_sign_in_candidates: {
+        Args:    { p_email: string }
+        Returns: Array<{ id: string; roles: string[]; active: boolean }>
+      }
+      remove_microsoft_identities: {
+        Args:    { p_user_id: string }
+        Returns: number
+      }
+      microsoft_member_candidates: {
+        Args:    { p_email: string }
+        Returns: Array<{ id: string; region: string; active: boolean }>
+      }
+      microsoft_pm_account: {
+        Args:    { p_region: string }
+        Returns: Array<{ id: string; active: boolean }>
       }
     }
     Enums: {}

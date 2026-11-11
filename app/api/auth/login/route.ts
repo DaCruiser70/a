@@ -8,12 +8,18 @@ import { CODE_SEND_FAILED } from '@/lib/code-delivery'
 import { accountRegion, activeRegionMembers } from '@/lib/pm-server'
 import { maskEmail } from '@/lib/pm'
 import { landingHref } from '@/lib/portals'
+import { FIELD_LIMITS } from '@/lib/field-limits'
+import {
+  staffPasswordLoginOn, passwordSignInAllowed, BREAK_GLASS_AUDIT_MESSAGE, PASSWORD_OFF_AUDIT_MESSAGE,
+} from '@/lib/microsoft-auth'
 
 const WINDOW_SECONDS  = 15 * 60
 
 const BodySchema = z.strictObject({
-  email:    z.string().trim().toLowerCase().max(254).pipe(z.email()),
-  password: z.string().min(1).max(256),
+  email:    z.string().trim().toLowerCase().max(FIELD_LIMITS.email).pipe(z.email()),
+  // Never trimmed or changed; only a length cap (lib/field-limits.ts). Supabase itself refuses
+  // passwords over 72 characters, so no existing password is affected.
+  password: z.string().min(1).max(FIELD_LIMITS.password),
 })
 
 const INVALID_CREDENTIALS = 'Invalid email or password.'
@@ -32,6 +38,20 @@ function tooMany(retryAfterSeconds: number) {
     { error: 'Too many sign-in attempts. Please wait a few minutes and try again.' },
     { status: 429, headers: { 'Retry-After': String(retryAfterSeconds) } },
   )
+}
+
+// Staff password sign-in while STAFF_PASSWORD_LOGIN is off: a refusal or a break-glass sign-in,
+// in sign_in_events and on the account's own audit trail (fixed text, no personal data)
+async function recordPasswordEvent(admin: ReturnType<typeof createServiceClient>, userId: string, outcome: 'refused' | 'break_glass') {
+  const { error } = await admin.from('sign_in_events').insert({
+    method: 'password', outcome, reason: outcome === 'refused' ? 'password_off' : null, user_id: userId,
+  })
+  if (error) console.error(`[login] event insert failed (code ${error.code})`)
+  const { error: auditError } = await admin.from('audit_log').insert({
+    user_id: userId, performed_by: userId, action_type: outcome === 'refused' ? 'amber' : 'red',
+    message: outcome === 'refused' ? PASSWORD_OFF_AUDIT_MESSAGE : BREAK_GLASS_AUDIT_MESSAGE,
+  })
+  if (auditError) console.error(`[login] audit insert failed (code ${auditError.code})`)
 }
 
 export async function POST(request: Request) {
@@ -82,6 +102,23 @@ export async function POST(request: Request) {
   if (roles.length === 1 && roles[0] === 'newhire') {
     // Newhire: session is ready, no OTP needed
     return NextResponse.json({ role: 'newhire', session: authData.session, landing: landingHref('newhire', ['newhire']) })
+  }
+
+  // STAFF_PASSWORD_LOGIN=off (go-live): staff sign in with Microsoft; a password works only for a
+  // named break-glass account. Everyone else gets the usual generic answer, and the password
+  // session that was just created is ended. New hires never reach this point.
+  const settingOn = staffPasswordLoginOn(process.env.STAFF_PASSWORD_LOGIN)
+  if (!settingOn) {
+    const { data: flag, error: flagError } = await admin
+      .from('staff_login_flags').select('break_glass').eq('user_id', userId).maybeSingle()
+    if (flagError) console.error(`[login] break-glass lookup failed (code ${flagError.code})`)
+    const decision = passwordSignInAllowed({ roles, settingOn, breakGlass: flag?.break_glass === true })
+    if (!decision.allow) {
+      await admin.auth.admin.signOut(authData.session.access_token, 'local')
+      await recordPasswordEvent(admin, userId, 'refused')
+      return invalid()
+    }
+    await recordPasswordEvent(admin, userId, 'break_glass')
   }
 
   // Shared regional project-management account: show the region's active team (names, masked

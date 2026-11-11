@@ -4,7 +4,8 @@
    ForgotPasswordForm; set-password keeps its own look from login.css.
 
    Scale: every size is in rem (or em), and from 1000px wide the page makes rem gently fluid:
-   16px up to 1440, about 18.6px at 1920, 19px at 2000, 22px at most. Phones stay at 16px.
+   15px at 1280, about 15.7px at 1440, 17.7px at 1920, 20px at most. Phones stay at 16px
+   (below 1000px nothing in the DESKTOP block applies).
    The circuit's lines, dots and the card's gold top border never grow past 1.2x their 1440
    size (--ld-line-cap), even at the top end.
    Placement: three rows (header, main, footer) filling 100dvh; in main, the text column runs
@@ -12,8 +13,8 @@
 ══════════════════════════════════════════════ */
 
 @media (min-width: 1000px) {
-  /* 16px up to 1440 wide, about 18.6px at 1920, 19px at 2000, 22px at the top end */
-  html:has(.ld-page) { font-size: clamp(16px, calc(16px + (100vw - 1440px) * 0.0055), 22px); }
+  /* 15px at 1280 wide, about 15.7px at 1440, 17.7px at 1920, 18px at 2000, 20px at the top end */
+  html:has(.ld-page) { font-size: clamp(15px, calc(15px + (100vw - 1280px) * 0.0042), 20px); }
 }
 
 .ld-page {
@@ -216,6 +217,19 @@
   color: var(--color-text-cool-muted);
 }
 .ld-divider::before, .ld-divider::after { content: ''; flex: 1; height: 1px; background: var(--color-border-cool); }
+
+/* "Admin sign-in" (STAFF_PASSWORD_LOGIN off): small and quiet, still a 44px target */
+.ld-admin { display: flex; justify-content: center; margin: 0.25rem 0 0.5rem; }
+.ld-admin-link {
+  display: inline-flex; align-items: center; min-height: 2.75rem; padding: 0 0.5rem;
+  background: none; border: none; cursor: pointer;
+  font-family: var(--font-sans); font-size: 0.75rem; font-weight: 600;
+  color: var(--color-text-cool-muted);
+  text-decoration: underline; text-underline-offset: 0.1875rem;
+}
+.ld-admin-link:hover { color: var(--color-navy); }
+.ld-admin-link:focus-visible { outline: 0.125rem solid var(--color-navy); outline-offset: 0.125rem; border-radius: 0.25rem; }
+.ld-page .ld-ms-refused { margin: 0 0 1rem; }
 
 .ld-hint {
   margin-bottom: 1rem;
@@ -502,12 +516,14 @@
 /* ── DESKTOP: header / main / footer rows filling the window ── */
 @media (min-width: 1000px) {
   .ld-page {
+    --ld-card-w:  26.5rem;
+    --ld-field-h: 2.9rem;
     display: grid;
     grid-template-rows: auto 1fr auto;
     padding: 1.25rem 3.5rem 1rem;
   }
-  .ld-logo-pill { padding: 0.45rem 1rem; }
-  .ld-logo-img { height: 2.2rem; }               /* pill about 3.2rem tall */
+  .ld-logo-pill { padding: 0.42rem 0.95rem; }
+  .ld-logo-img { height: 2.1rem; }               /* pill about 3rem tall */
   .ld-brand-label { font-size: 0.75rem; }
 
   .ld-layout {
@@ -528,19 +544,38 @@
   }
   .ld-card-wrap { grid-column: 2; grid-row: 1; align-self: center; max-width: none; }
 
-  /* 5rem, or less when a narrow column could not hold the longest phrase on one line */
-  .ld-headline { font-size: min(5rem, 10.8cqi); }
-  .ld-sub { font-size: 1.1rem; max-width: 32rem; margin-top: 1.5rem; }
-  .ld-page .login-card-body { padding: 2rem 2.5rem 1.5rem; }
-  .ld-page .login-card-title { font-size: 2rem; }
+  /* 4.6rem, or less when a narrow column could not hold the longest phrase on one line */
+  .ld-headline { font-size: min(4.6rem, 10.8cqi); }
+  .ld-sub { font-size: 1.15rem; max-width: 32rem; margin-top: 1.375rem; }
+
+  /* The card: 26.5rem wide, about 2.25rem padding; each gap halfway between the two earlier versions */
+  .ld-page .login-card-body { padding: 2rem 2.25rem 1.375rem; }
+  .ld-page .login-card-title { font-size: 1.9rem; margin-bottom: 0.3125rem; }
+  .ld-page .login-card-sub { font-size: 0.85rem; margin-bottom: 0.9375rem; }
+  .ld-tabs { margin-bottom: 0.9375rem; }
+  .ld-tab { min-height: 2.75rem; }
+  .ld-ms-note { margin-top: 0.4375rem; }
+  .ld-divider { margin: 0.875rem 0 0.75rem; }
+  .ld-hint { margin-bottom: 0.875rem; padding: 0.6875rem 0.8125rem; }
+  .ld-admin { margin: 0.1875rem 0 0.4375rem; }
+  .ld-admin-link { min-height: 2.5rem; }
+  .ld-page .ld-ms-refused { margin-bottom: 0.875rem; }
+  .ld-page .login-field { margin-bottom: 0.875rem; }
+  .ld-page .login-field input { height: var(--ld-field-h); min-height: 0; padding-top: 0; padding-bottom: 0; }
+  .ld-page .login-field label { margin-bottom: 0.3125rem; }
+  .ld-page .login-forgot { margin-top: 0.0625rem; }
+  .ld-page .login-back-link { min-height: 2.5rem; }
+  .ld-page .login-btn { margin-top: 0.875rem; }
+  .ld-page .login-help { margin-top: 0.375rem; }
+  .ld-page .login-help a { padding: 0.625rem 0.125rem; }
 
   .ld-values {
     display: grid;
-    /* Three 15rem cards and two 1rem gaps = 47rem: one row of 15rem cards from 1440 up;
+    /* Three 14.5rem cards and two 1rem gaps = 45.5rem: one row of 14.5rem cards from 1440 up;
        a narrower column (1024) shares the width and wraps */
     grid-template-columns: repeat(auto-fit, minmax(min(10.5rem, 100%), 1fr));
     gap: 1rem;
-    width: min(100%, 47rem);
+    width: min(100%, 45.5rem);
     list-style: none; margin: 0; padding: 0;
   }
   .ld-foot { margin-top: 0; text-align: left; }
@@ -552,9 +587,7 @@
   .ld-page { padding-top: 1rem; padding-bottom: 0.75rem; }
   .ld-layout { padding: 1.25rem 0; }
   .ld-sub { margin-top: 1rem; }
-  .ld-page .login-card-body { padding: 1.75rem 2.25rem 1.25rem; }
-  .ld-page .login-card-sub { margin-bottom: 1rem; }
-  .ld-tabs { margin-bottom: 1rem; }
+  .ld-page .login-card-body { padding: 1.5rem 2rem 1rem; }
 }
 
 /* ── REDUCED MOTION: the final, still state ── */

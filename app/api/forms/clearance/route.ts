@@ -13,6 +13,8 @@ import {
   verifyClearanceUpload, cleanClearanceFileName,
 } from '@/lib/clearance-server'
 import type { Database } from '@/types'
+import { FIELD_LIMITS } from '@/lib/field-limits'
+import { zName, zText, firstIssue, readJsonBody, BODY_TOO_LARGE, INVALID_REQUEST } from '@/lib/field-validation'
 
 type ClearanceUpsert = Database['public']['Tables']['clearance_info']['Insert']
 
@@ -23,8 +25,9 @@ const pathField = z.string().max(200).nullable().optional()
 const nameField = z.string().max(300).optional()
 
 const BodySchema = z.strictObject({
-  legalName:         z.string().trim().min(1).max(200),
-  placeOfBirth:      z.string().trim().min(1).max(200),
+  // Full legal name: several given names can pass 60, so the longer full-name limit
+  legalName:         zName('Full legal name', FIELD_LIMITS.legalName),
+  placeOfBirth:      zText('Place of birth', FIELD_LIMITS.placeOfBirth),
   dcn:               z.string().max(40).optional().default(''),
   fingerprintPath:   pathField,
   fingerprintName:   nameField,
@@ -90,10 +93,13 @@ export async function POST(request: Request) {
     )
   }
 
-  let raw: unknown
-  try { raw = await request.json() } catch { raw = null }
-  const parsed = BodySchema.safeParse(raw)
-  if (!parsed.success) return NextResponse.json({ error: 'Please check the form and try again.' }, { status: 400 })
+  const read = await readJsonBody(request)
+  if (!read.ok) return NextResponse.json({ error: read.status === 413 ? BODY_TOO_LARGE : INVALID_REQUEST }, { status: read.status })
+  const parsed = BodySchema.safeParse(read.data)
+  if (!parsed.success) {
+    const { field, message } = firstIssue(parsed.error)
+    return NextResponse.json({ error: message, field }, { status: 400 })
+  }
   const body = parsed.data
 
   const admin = createServiceClient()

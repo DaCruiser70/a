@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import { createServiceClient } from '@/lib/supabase/server'
 import { requireRole } from '@/lib/roles'
 import { recomputeProfileStatus } from '@/lib/hire-status'
@@ -12,6 +13,8 @@ export async function DELETE(
   const { user } = auth
 
   const { documentId } = await params
+  // A well-formed id or the same 404 as an unknown one
+  if (!z.uuid().safeParse(documentId).success) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const admin = createServiceClient()
 
   const { data: doc } = await admin

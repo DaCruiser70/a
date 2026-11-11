@@ -486,3 +486,23 @@ select.form-input {
 .form-choice input { width: 18px; height: 18px; margin: 0; accent-color: var(--color-navy); flex-shrink: 0; cursor: pointer; }
 .form-choice.selected { border-color: var(--color-navy); background: var(--color-navy-faint); }
 .form-choice:has(input:focus-visible) { outline: 2px solid var(--color-navy); outline-offset: 2px; }
+
+/* ── PHONE FIELD: fixed +1 in front of the input (components/ui/PhoneInput.tsx) ── */
+.phone-field { display: flex; align-items: stretch; width: 100%; min-width: 0; }
+.phone-prefix {
+  display: flex; align-items: center; flex-shrink: 0;
+  padding: 0 var(--s3);
+  background: var(--color-surface-2);
+  border: 1.5px solid var(--color-border-warm); border-right: 0;
+  border-radius: var(--r-md) 0 0 var(--r-md);
+  font-size: 14px; font-weight: 600; color: var(--color-text-3);
+  user-select: none;
+}
+.phone-field .phone-input { flex: 1; min-width: 0; border-radius: 0 var(--r-md) var(--r-md) 0; }
+.phone-field:focus-within .phone-prefix { border-color: var(--color-navy); }
+.phone-field .phone-input[aria-invalid="true"],
+.phone-field:has(.phone-input[aria-invalid="true"]) .phone-prefix { border-color: var(--color-red); }
+.form-sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}

@@ -27,6 +27,27 @@ export async function rateLimit(key: string, max: number, windowSeconds: number)
   }
 }
 
+// Reads a key's hits in the current window without counting one (same window alignment as
+// rate_limit_hit). Fails closed: any error reads as over the limit.
+export async function rateLimitPeek(key: string, max: number, windowSeconds: number): Promise<RateLimitResult> {
+  const nowSeconds        = Math.floor(Date.now() / 1000)
+  const retryAfterSeconds = Math.max(1, windowSeconds - (nowSeconds % windowSeconds))
+  const windowStart       = new Date((nowSeconds - (nowSeconds % windowSeconds)) * 1000).toISOString()
+  try {
+    // rate_limits is not in the generated Database type (service role only, written by rate_limit_hit)
+    const admin = createServiceClient() as unknown as { from: (t: string) => { select: (c: string) => { eq: (k: string, v: string) => { eq: (k: string, v: string) => { maybeSingle: () => Promise<{ data: { hits: number } | null; error: { code?: string } | null }> } } } } }
+    const { data, error } = await admin.from('rate_limits').select('hits').eq('key', key).eq('window_start', windowStart).maybeSingle()
+    if (error) {
+      console.error(`rate limit read failed (code ${error.code ?? 'unknown'})`)
+      return { allowed: false, retryAfterSeconds }
+    }
+    return { allowed: (data?.hits ?? 0) < max, retryAfterSeconds }
+  } catch {
+    console.error('rate limit read threw')
+    return { allowed: false, retryAfterSeconds }
+  }
+}
+
 // Keys are HMACs of the identifying value, never the raw IP or email
 export async function rateLimitKey(scope: string, value: string): Promise<string> {
   return `${scope}:${await hmacHex('rate-limit', `${scope}:${value}`)}`

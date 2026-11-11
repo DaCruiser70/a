@@ -14,7 +14,6 @@ import type { DailyReminderPayload } from '@/lib/reminder-payload'
 
 type Admin = SupabaseClient<Database>
 
-const FORM_ORDER: FlagSection[] = ['personal', 'banking', 'sin', 'policy', 'documents']
 
 async function names(admin: Admin, ids: string[]): Promise<Map<string, { name: string; start: string | null }>> {
   const unique = [...new Set(ids)]
@@ -42,7 +41,9 @@ export async function hireReminderState(admin: Admin, hireId: string) {
     loadHireStatusInputs(admin, hireId),
   ])
   const computed = computeHireStatus(inputs.forms, inputs.docs, inputs.req)
-  const items    = [...inputs.forms.map(s => s ?? 'pending'), computed.documents.status]
+  // By key, never by position: inputs.forms is personal, banking, sin, policy (loadHireStatusInputs)
+  const [personal, banking, sin, policy] = inputs.forms.map(s => s ?? 'pending')
+  const byItem: Record<FlagSection, string> = { personal, banking, sin, policy, documents: computed.documents.status }
   const done     = isHireDone({ status: profile?.status ?? null, enteredPayroll: profile?.entered_payroll_queue_at ?? null })
   const sent     = sentItemCount(inputs.forms, computed.documents)
   return {
@@ -50,7 +51,7 @@ export async function hireReminderState(admin: Admin, hireId: string) {
     sentCount:  sent,
     totalItems: TOTAL_ITEMS,
     unfinished: !done && sent < TOTAL_ITEMS,
-    flagged:    done ? [] : FORM_ORDER.filter((f, i) => items[i] === 'flagged'),
+    flagged:    done ? [] : FLAG_SECTIONS.filter(f => byItem[f] === 'flagged'),
   }
 }
 

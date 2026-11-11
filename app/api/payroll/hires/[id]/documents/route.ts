@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 import { requireRole } from '@/lib/roles'
+import { DocumentReviewBody, isUuid } from '@/lib/review-schemas'
+import { firstIssue, readJsonBody, BODY_TOO_LARGE, INVALID_REQUEST } from '@/lib/field-validation'
 import { recomputeProfileStatus } from '@/lib/hire-status'
 import { esc } from '@/lib/safe-html'
 import { queueNotification, queueHireApproved } from '@/lib/notify'
@@ -18,14 +20,15 @@ export async function PATCH(
   const admin = createServiceClient()
 
   const { id } = await params
-  const { documentId, action, reason } = await request.json()
-
-  if (action !== 'approve' && action !== 'reject') {
-    return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
+  if (!isUuid(id)) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  const read = await readJsonBody(request)
+  if (!read.ok) return NextResponse.json({ error: read.status === 413 ? BODY_TOO_LARGE : INVALID_REQUEST }, { status: read.status })
+  const parsed = DocumentReviewBody.safeParse(read.data)
+  if (!parsed.success) {
+    const { field, message } = firstIssue(parsed.error)
+    return NextResponse.json({ error: message, field }, { status: 400 })
   }
-  if (action === 'reject' && (!reason || String(reason).trim().length < 1)) {
-    return NextResponse.json({ error: 'Reason required for rejection' }, { status: 400 })
-  }
+  const { documentId, action, reason } = parsed.data
 
   // Verify document belongs to this hire and is a payroll-visible type
   const { data: doc } = await admin
@@ -40,16 +43,19 @@ export async function PATCH(
   const now = new Date().toISOString()
   const { error } = await admin.from('newhire_documents').update({
     form_status: action === 'approve' ? 'approved' : 'rejected',
-    flag_reason: action === 'reject' ? String(reason).trim() : null,
+    flag_reason: action === 'reject' ? reason : null,
     reviewed_at: now,
     reviewed_by: user.id,
     updated_at:  now,
   }).eq('id', documentId)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    console.error(`payroll document review failed (code ${error.code})`)
+    return NextResponse.json({ error: 'Could not save. Please try again.' }, { status: 500 })
+  }
 
   const actionType = action === 'approve' ? 'green' : 'red'
-  const reasonNote = action === 'reject' && reason ? ` — ${esc(String(reason).trim())}` : ''
+  const reasonNote = action === 'reject' && reason ? ` — ${esc(reason)}` : ''
   await admin.from('audit_log').insert({
     user_id:      id,
     action_type:  actionType,

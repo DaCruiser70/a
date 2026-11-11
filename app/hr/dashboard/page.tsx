@@ -18,6 +18,7 @@ import {
 } from '@/lib/hr-dashboard'
 import type { HireStatus, NewHireRow } from '@/types'
 import { TOTAL_ITEMS } from '@/lib/hire-status'
+import { FIELD_LIMITS } from '@/lib/field-limits'
 import Modal from '@/components/ui/Modal'
 
 // CSV export labels (unchanged from the previous dashboard)
@@ -406,7 +407,7 @@ export default function HRDashboard() {
                       id="hd-search-input"
                       type="search"
                       placeholder="Search by name or email"
-                      maxLength={100}
+                      maxLength={FIELD_LIMITS.search}
                       value={query}
                       onChange={e => setQuery(e.target.value)}
                     />
@@ -601,6 +602,7 @@ export default function HRDashboard() {
                   required
                   style={inputStyle}
                   placeholder="Jane Smith"
+                  maxLength={FIELD_LIMITS.legalName}
                   value={newHire.name}
                   onChange={e => setNewHire(p => ({ ...p, name: e.target.value }))}
                 />
@@ -611,6 +613,7 @@ export default function HRDashboard() {
                 <input
                   style={inputStyle}
                   placeholder="What they like to be called"
+                  maxLength={FIELD_LIMITS.personName}
                   value={newHire.preferredName}
                   onChange={e => setNewHire(p => ({ ...p, preferredName: e.target.value }))}
                 />
@@ -623,6 +626,7 @@ export default function HRDashboard() {
                   type="email"
                   style={inputStyle}
                   placeholder="jane@gmail.com"
+                  maxLength={FIELD_LIMITS.email}
                   value={newHire.personalEmail}
                   onChange={e => setNewHire(p => ({ ...p, personalEmail: e.target.value }))}
                 />
@@ -638,6 +642,7 @@ export default function HRDashboard() {
                   type="email"
                   style={inputStyle}
                   placeholder="firstname.lastname@aemltd.com"
+                  maxLength={FIELD_LIMITS.email}
                   value={newHire.aemEmail}
                   onChange={e => setNewHire(p => ({ ...p, aemEmail: e.target.value }))}
                 />
@@ -672,6 +677,7 @@ export default function HRDashboard() {
                   required
                   style={inputStyle}
                   placeholder="e.g. Energy Auditor"
+                  maxLength={FIELD_LIMITS.position}
                   value={newHire.role}
                   onChange={e => setNewHire(p => ({ ...p, role: e.target.value }))}
                 />

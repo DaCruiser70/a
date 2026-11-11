@@ -15,6 +15,10 @@ import { REGIONS } from '@/lib/regions'
 import { encrypt } from '@/lib/encrypt'
 import { sendPasswordLink } from '@/lib/password-setup'
 import type { NewHireRow } from '@/types'
+import { FIELD_LIMITS } from '@/lib/field-limits'
+import {
+  zName, zOptionalName, zEmail, zOptionalEmail, zText, firstIssue, readJsonBody, BODY_TOO_LARGE, INVALID_REQUEST,
+} from '@/lib/field-validation'
 
 export async function GET() {
   const auth = await requireRole('hr')
@@ -126,13 +130,15 @@ const PROBATION_PERIODS = ['3 Months', '6 Months', 'Waived'] as const
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(v => !Number.isNaN(Date.parse(v)))
 
 const CreateHireSchema = z.strictObject({
-  name:               z.string().trim().min(1).max(150),
-  preferredName:      z.string().trim().max(150).optional().default(''),
-  personalEmail:      z.string().trim().toLowerCase().max(254).pipe(z.email()),
+  // A full name (first and last), so the longer full-name limit; letters, accents, spaces,
+  // hyphens, apostrophes and periods only (lib/field-limits.ts)
+  name:               zName('Full name', FIELD_LIMITS.legalName),
+  preferredName:      zOptionalName('Preferred name'),
+  personalEmail:      zEmail('Personal email'),
   // Optional: where the welcome email goes (stored encrypted). Blank means the AEM email.
-  contactEmail:       z.string().trim().toLowerCase().max(254).pipe(z.union([z.literal(''), z.email()])).optional().default(''),
-  aemEmail:           z.string().trim().toLowerCase().max(254).pipe(z.email()),
-  role:               z.string().trim().min(1).max(150),
+  contactEmail:       zOptionalEmail('Welcome email address'),
+  aemEmail:           zEmail('AEM email'),
+  role:               zText('Position', FIELD_LIMITS.position),
   officeLocation:     z.enum(OFFICE_LOCATIONS),
   // Only read for Remote; every other office's region comes from lib/branches.ts
   region:             z.enum(REGIONS).optional(),
@@ -140,8 +146,8 @@ const CreateHireSchema = z.strictObject({
   startDate:          isoDate,
   formDeadline:       isoDate,
   probationPeriod:    z.enum(PROBATION_PERIODS),
-}).refine(v => v.formDeadline <= v.startDate, { path: ['formDeadline'] })
-  .refine(v => !isRemoteOffice(v.officeLocation) || !!v.region, { path: ['region'] })
+}).refine(v => v.formDeadline <= v.startDate, { path: ['formDeadline'], message: 'The form deadline must be on or before the start date.' })
+  .refine(v => !isRemoteOffice(v.officeLocation) || !!v.region, { path: ['region'], message: 'Please choose a region for this remote hire.' })
 
 export async function POST(request: Request) {
   const auth = await requireRole('hr')
@@ -156,11 +162,16 @@ export async function POST(request: Request) {
     )
   }
 
-  let raw: unknown
-  try { raw = await request.json() } catch { raw = null }
-  const parsed = CreateHireSchema.safeParse(raw)
+  const read = await readJsonBody(request)
+  if (!read.ok) return NextResponse.json({ error: read.status === 413 ? BODY_TOO_LARGE : INVALID_REQUEST }, { status: read.status })
+  const parsed = CreateHireSchema.safeParse(read.data)
   if (!parsed.success) {
-    return NextResponse.json({ error: 'Please check the form — some fields are missing or invalid.' }, { status: 400 })
+    // Our own field messages; anything else gets the general one. Never the value.
+    const { field, message } = firstIssue(parsed.error)
+    return NextResponse.json({
+      error: message === 'Please check the form and try again.' ? 'Please check the form — some fields are missing or invalid.' : message,
+      field,
+    }, { status: 400 })
   }
   const {
     name, preferredName, personalEmail, contactEmail, aemEmail,

@@ -6,55 +6,40 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 import '../../../styles/pages/forms.css'
 import type { FormStatus } from '@/types'
+import { ONBOARDING_ITEMS, ONBOARDING_ITEM_TITLES, stepOf, type OnboardingItem } from '@/lib/form-order'
 import { PortalIdentity } from '@/components/ui/PortalName'
 
-const FORMS = [
-  {
-    id: 'personal',
-    step: 1,
-    title: 'Personal Information',
+// Each item's card. The ORDER and the step numbers come from the shared list (lib/form-order.ts),
+// so the cards, the sidebar and the "next item" logic all follow it.
+const FORM_DETAILS: Record<OnboardingItem, { desc: string; time: string; tags: string[]; href: string }> = {
+  personal: {
     desc: 'Your name, address, phone number, and emergency contact details.',
-    time: '4 min',
-    tags: ['required'],
-    href: '/newhire/forms/personal',
+    time: '4 min', tags: ['required'], href: '/newhire/forms/personal',
   },
-  {
-    id: 'banking',
-    step: 2,
-    title: 'Banking & Direct Deposit',
+  banking: {
     desc: 'Institution number, transit number, and account details for payroll.',
-    time: '3 min',
-    tags: ['required', 'sensitive'],
-    href: '/newhire/forms/banking',
+    time: '3 min', tags: ['required', 'sensitive'], href: '/newhire/forms/banking',
   },
-  {
-    id: 'sin',
-    step: 3,
-    title: 'Social Insurance Number',
+  sin: {
     desc: 'Your SIN for tax and payroll purposes. Encrypted with AES-256.',
-    time: '1 min',
-    tags: ['required', 'sensitive'],
-    href: '/newhire/forms/sin',
+    time: '1 min', tags: ['required', 'sensitive'], href: '/newhire/forms/sin',
   },
-  {
-    id: 'policy',
-    step: 4,
-    title: 'Policy Acknowledgement',
-    desc: 'Read and sign off on AEM workplace policies and code of conduct.',
-    time: '5 min',
-    tags: ['required'],
-    href: '/newhire/forms/policy',
-  },
-  {
-    id: 'documents',
-    step: 5,
-    title: 'Documents',
+  documents: {
     desc: 'Your TD1 Federal and TD1 Provincial tax forms, and one ID: a Driver’s License or an Alternative ID.',
-    time: '10 min',
-    tags: ['required'],
-    href: '/newhire/forms/documents',
+    time: '10 min', tags: ['required'], href: '/newhire/forms/documents',
   },
-]
+  policy: {
+    desc: 'Read and sign off on AEM workplace policies and code of conduct.',
+    time: '5 min', tags: ['required'], href: '/newhire/forms/policy',
+  },
+}
+
+const FORMS = ONBOARDING_ITEMS.map(id => ({
+  id,
+  step:  stepOf(id),
+  title: ONBOARDING_ITEM_TITLES[id],
+  ...FORM_DETAILS[id],
+}))
 
 // Sidebar row state; text is always present for screen readers, not only colour and icon
 const ROW_STATUS_TEXT: Record<FormStatus, string> = {

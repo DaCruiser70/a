@@ -5,6 +5,7 @@ import { decryptFields } from '@/lib/encrypt'
 import { esc } from '@/lib/safe-html'
 import { rateLimit, rateLimitKey } from '@/lib/rate-limit'
 import { computeHireStatus, hasCompanyVehicle } from '@/lib/hire-status'
+import { formatPhone } from '@/lib/field-limits'
 import type { NewHireDetail, FormStatus } from '@/types'
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -113,13 +114,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     days,
     office_location:         profile.office_location          ?? null,
     region:                  profile.region                   ?? null,
-    phone:                   personal?.phone                  ?? '—',
+    phone:                   personal?.phone ? formatPhone(personal.phone) : '—',
     start_date:              profile.start_date               ?? '—',
     address:                 personal
       ? [personal.street, [personal.city, personal.province].filter(Boolean).join(' ')].filter(Boolean).join(', ') || '—'
       : '—',
     emergency_contact:       personal?.emergency_name         ?? '—',
-    emergency_phone:         personal?.emergency_phone        ?? '—',
+    emergency_phone:         personal?.emergency_phone ? formatPhone(personal.emergency_phone) : '—',
     bank_name:               banking?.bank_name               ?? '—',
     account_type:            banking?.account_type            ?? '—',
     has_banking:             !!banking?.account_number_enc,

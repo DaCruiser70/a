@@ -8,9 +8,13 @@ import { createClient } from '@/lib/supabase/client'
 import { FORMS_HOME, COMPLETE_PAGE } from '@/lib/routes'
 import {
   PROVINCES, EMERGENCY_RELATIONSHIPS, PHONE_CHOICES, PHONE_CHOICE_LABELS, WORK_PHONE_PLATFORMS,
-  WORK_PHONE_PLATFORM_LABELS, PHONE_MAX, DOB_EARLIEST, DOB_MIN_AGE, dobLatest, dobError, phoneError,
+  WORK_PHONE_PLATFORM_LABELS, DOB_MIN_AGE, dobLatest, dobEarliestDate, dobError, phoneError,
   type PhoneChoice, type WorkPhonePlatform,
 } from '@/lib/personal-info'
+import { stepLabel } from '@/lib/form-order'
+import PhoneInput from '@/components/ui/PhoneInput'
+import { formatPhoneInput } from '@/lib/phone-format'
+import { FIELD_LIMITS, INPUT_HINTS } from '@/lib/field-limits'
 
 const FlaggedBanner = ({ reason, source }: { reason?: string | null; source?: string | null }) => (
   <div style={{
@@ -82,7 +86,7 @@ export default function PersonalInfoForm() {
         firstName:             data.firstName             ?? '',
         lastName:              data.lastName              ?? '',
         dateOfBirth:           data.dateOfBirth           ?? '',
-        phone:                 data.phone                 ?? '',
+        phone:                 formatPhoneInput(data.phone ?? ''),
         email:                 data.email                 ?? '',
         street:                data.street                ?? '',
         city:                  data.city                  ?? '',
@@ -90,15 +94,21 @@ export default function PersonalInfoForm() {
         postalCode:            data.postalCode            ?? '',
         emergencyName:         data.emergencyName         ?? '',
         emergencyRelationship: data.emergencyRelationship ?? '',
-        emergencyPhone:        data.emergencyPhone        ?? '',
+        emergencyPhone:        formatPhoneInput(data.emergencyPhone ?? ''),
       })
       setPhoneChoice(data.phoneChoice ?? '')
       setWorkPlatform(data.workPhonePlatform ?? '')
-      setPersonalPhone(data.personalPhone ?? '')
+      setPersonalPhone(formatPhoneInput(data.personalPhone ?? ''))
       setFormStatus(data.formStatus ?? '')
       setFlagReason(data.flagReason ?? null)
     }).catch(() => {})
   }, [])
+
+  // Phone fields arrive already formatted by PhoneInput
+  function setPhoneField(name: 'phone' | 'emergencyPhone', value: string) {
+    setForm(prev => ({ ...prev, [name]: value }))
+    setFieldErrors(prev => (prev[name] ? { ...prev, [name]: '' } : prev))
+  }
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) {
     const { name, value } = e.target
@@ -199,7 +209,7 @@ export default function PersonalInfoForm() {
             </svg>
             Back to checklist
           </button>
-          <div className="form-page-step-tag">Step 1 of 4</div>
+          <div className="form-page-step-tag">{stepLabel('personal')}</div>
           <h1 className="form-page-title">Personal Information</h1>
           <p className="form-page-sub">
             Your basic details, contact information, and emergency contact.
@@ -228,11 +238,11 @@ export default function PersonalInfoForm() {
           <div className="form-section-body">
             <div className="form-field">
               <label className="form-label">First Name <span className="form-label-required">*</span></label>
-              <input className="form-input" name="firstName" value={form.firstName} onChange={handleChange} placeholder="John" required />
+              <input className="form-input" name="firstName" value={form.firstName} onChange={handleChange} placeholder="John" required maxLength={FIELD_LIMITS.personName} autoComplete="given-name" />
             </div>
             <div className="form-field">
               <label className="form-label">Last Name <span className="form-label-required">*</span></label>
-              <input className="form-input" name="lastName" value={form.lastName} onChange={handleChange} placeholder="Smith" required />
+              <input className="form-input" name="lastName" value={form.lastName} onChange={handleChange} placeholder="Smith" required maxLength={FIELD_LIMITS.personName} autoComplete="family-name" />
             </div>
             <div className="form-field">
               <label className="form-label" htmlFor="pi-dateOfBirth">
@@ -241,7 +251,7 @@ export default function PersonalInfoForm() {
               <input
                 id="pi-dateOfBirth" className="form-input" type="date" name="dateOfBirth"
                 value={form.dateOfBirth} onChange={handleChange} required
-                min={DOB_EARLIEST} max={dobLatest()} suppressHydrationWarning
+                min={dobEarliestDate()} max={dobLatest()} suppressHydrationWarning
                 aria-invalid={!!fieldErrors.dateOfBirth || undefined}
                 aria-describedby={fieldErrors.dateOfBirth ? 'pi-dateOfBirth-error pi-dateOfBirth-hint' : 'pi-dateOfBirth-hint'}
               />
@@ -250,15 +260,15 @@ export default function PersonalInfoForm() {
             </div>
             <div className="form-field">
               <label className="form-label">Personal Email <span className="form-label-required">*</span></label>
-              <input className="form-input" type="email" name="email" value={form.email} onChange={handleChange} placeholder="john@email.com" required />
+              <input className="form-input" type="email" name="email" value={form.email} onChange={handleChange} placeholder="john@email.com" required maxLength={FIELD_LIMITS.email} inputMode="email" autoComplete="email" />
               <span className="form-input-hint">Your personal email — not your AEM address</span>
             </div>
             <div className="form-field">
               <label className="form-label" htmlFor="pi-phone">Phone Number <span className="form-label-required">*</span></label>
-              <input
-                id="pi-phone" className="form-input" type="tel" name="phone" value={form.phone} onChange={handleChange}
-                placeholder="(905) 555-0100" required maxLength={PHONE_MAX} autoComplete="tel"
-                aria-invalid={!!fieldErrors.phone || undefined} aria-describedby={fieldErrors.phone ? 'pi-phone-error' : undefined}
+              <PhoneInput
+                id="pi-phone" name="phone" value={form.phone} required
+                onChange={v => setPhoneField('phone', v)}
+                invalid={!!fieldErrors.phone} errorId="pi-phone-error"
               />
               <FieldError id="pi-phone-error" message={fieldErrors.phone} />
             </div>
@@ -321,14 +331,13 @@ export default function PersonalInfoForm() {
                 <label className="form-label" htmlFor="pi-personalPhone">
                   Personal phone number <span className="form-label-required">*</span><span className="form-label-encrypted">Encrypted</span>
                 </label>
-                <input
-                  id="pi-personalPhone" className="form-input" type="tel" value={personalPhone}
-                  onChange={e => { setPersonalPhone(e.target.value); setFieldErrors(prev => ({ ...prev, personalPhone: '' })) }}
-                  placeholder="(905) 555-0100" required maxLength={PHONE_MAX} autoComplete="tel"
-                  aria-invalid={!!fieldErrors.personalPhone || undefined}
-                  aria-describedby={fieldErrors.personalPhone ? 'pi-personalPhone-error pi-personalPhone-hint' : 'pi-personalPhone-hint'}
+                <PhoneInput
+                  id="pi-personalPhone" value={personalPhone} required
+                  onChange={v => { setPersonalPhone(v); setFieldErrors(prev => ({ ...prev, personalPhone: '' })) }}
+                  invalid={!!fieldErrors.personalPhone} errorId="pi-personalPhone-error"
+                  extraHint="Filled in from your phone number above. Change it if you use a different phone for work."
+                  extraHintId="pi-personalPhone-hint"
                 />
-                <span id="pi-personalPhone-hint" className="form-input-hint">Filled in from your phone number above. Change it if you use a different phone for work.</span>
                 <FieldError id="pi-personalPhone-error" message={fieldErrors.personalPhone} />
               </div>
             )}
@@ -351,11 +360,11 @@ export default function PersonalInfoForm() {
           <div className="form-section-body">
             <div className="form-field span-2">
               <label className="form-label">Street Address <span className="form-label-required">*</span></label>
-              <input className="form-input" name="street" value={form.street} onChange={handleChange} placeholder="123 Main Street, Apt 4B" required />
+              <input className="form-input" name="street" value={form.street} onChange={handleChange} placeholder="123 Main Street, Apt 4B" required maxLength={FIELD_LIMITS.address} autoComplete="street-address" />
             </div>
             <div className="form-field">
               <label className="form-label">City <span className="form-label-required">*</span></label>
-              <input className="form-input" name="city" value={form.city} onChange={handleChange} placeholder="Oakville" required />
+              <input className="form-input" name="city" value={form.city} onChange={handleChange} placeholder="Oakville" required maxLength={FIELD_LIMITS.city} autoComplete="address-level2" />
             </div>
             <div className="form-field">
               <label className="form-label">Province <span className="form-label-required">*</span></label>
@@ -366,7 +375,7 @@ export default function PersonalInfoForm() {
             </div>
             <div className="form-field">
               <label className="form-label">Postal Code <span className="form-label-required">*</span></label>
-              <input className="form-input" name="postalCode" value={form.postalCode} onChange={handleChange} placeholder="L6J 1A1" required />
+              <input className="form-input" name="postalCode" value={form.postalCode} onChange={handleChange} placeholder="L6J 1A1" required maxLength={INPUT_HINTS.postalCode.maxLength} pattern={INPUT_HINTS.postalCode.pattern} autoComplete="postal-code" style={{ textTransform: 'uppercase' }} />
             </div>
           </div>
         </div>
@@ -387,7 +396,7 @@ export default function PersonalInfoForm() {
           <div className="form-section-body">
             <div className="form-field">
               <label className="form-label">Full Name <span className="form-label-required">*</span></label>
-              <input className="form-input" name="emergencyName" value={form.emergencyName} onChange={handleChange} placeholder="Jane Smith" required />
+              <input className="form-input" name="emergencyName" value={form.emergencyName} onChange={handleChange} placeholder="Jane Smith" required maxLength={FIELD_LIMITS.personName} />
             </div>
             <div className="form-field">
               <label className="form-label">Relationship <span className="form-label-required">*</span></label>
@@ -398,10 +407,11 @@ export default function PersonalInfoForm() {
             </div>
             <div className="form-field">
               <label className="form-label" htmlFor="pi-emergencyPhone">Phone Number <span className="form-label-required">*</span></label>
-              <input
-                id="pi-emergencyPhone" className="form-input" type="tel" name="emergencyPhone" value={form.emergencyPhone} onChange={handleChange}
-                placeholder="(905) 555-0199" required maxLength={PHONE_MAX}
-                aria-invalid={!!fieldErrors.emergencyPhone || undefined} aria-describedby={fieldErrors.emergencyPhone ? 'pi-emergencyPhone-error' : undefined}
+              <PhoneInput
+                id="pi-emergencyPhone" name="emergencyPhone" value={form.emergencyPhone} required
+                onChange={v => setPhoneField('emergencyPhone', v)}
+                invalid={!!fieldErrors.emergencyPhone} errorId="pi-emergencyPhone-error"
+                autoComplete="off"
               />
               <FieldError id="pi-emergencyPhone-error" message={fieldErrors.emergencyPhone} />
             </div>

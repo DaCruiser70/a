@@ -7,26 +7,39 @@ import { recomputeProfileStatus } from '@/lib/hire-status'
 import { extFromPath } from '@/lib/download-name'
 import { VOID_CHEQUE_BUCKET, VOID_CHEQUE_EXTS } from '@/lib/void-cheque'
 import type { BankingInfo, VoidChequeColumn } from '@/types'
+import { z } from 'zod'
+import { ACCOUNT_TYPES, BANK_NAMES, FIELD_LIMITS, UPLOAD_MAX_BYTES, displayFileName } from '@/lib/field-limits'
+import { zDigits, firstIssue, readJsonBody, BODY_TOO_LARGE, INVALID_REQUEST } from '@/lib/field-validation'
 
 // The void cheque is optional for submitting the banking form, so a hire may remove it.
 const VOID_CHEQUE_REQUIRED = false
 
-const MAX_NAME_LENGTH = 150
-
-// Original file name for display only (rendered as plain text). Control characters stripped, capped at 150.
-function cleanFileName(value: unknown, fallback: string): string {
-  if (typeof value !== 'string') return fallback
-  // eslint-disable-next-line no-control-regex
-  const name = value.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, MAX_NAME_LENGTH).trim()
-  return name || fallback
-}
+// Bank and account type from fixed lists; the three numbers as digits of the exact lengths.
+// Encryption is unchanged (encrypt() below), and nothing here ever logs or echoes a value.
+const BodySchema = z.strictObject({
+  bankName:          z.enum(BANK_NAMES, { error: 'Choose your bank from the list.' }),
+  accountType:       z.enum(ACCOUNT_TYPES, { error: 'Choose Chequing or Savings.' }),
+  institutionNumber: zDigits('Institution number', FIELD_LIMITS.institutionDigits),
+  transitNumber:     zDigits('Transit number', FIELD_LIMITS.transitDigits),
+  accountNumber:     zDigits('Account number', FIELD_LIMITS.accountMinDigits, FIELD_LIMITS.accountMaxDigits),
+  voidChequePath:    z.string().max(200).nullable().optional(),
+  voidChequeName:    z.string().max(500).nullable().optional(),
+  removeVoidCheque:  z.boolean().optional(),
+})
 
 export async function POST(request: Request) {
   const auth = await requireRole('newhire')
   if (auth instanceof NextResponse) return auth
   const { user } = auth
 
-  const body = await request.json()
+  const read = await readJsonBody(request)
+  if (!read.ok) return NextResponse.json({ error: read.status === 413 ? BODY_TOO_LARGE : INVALID_REQUEST }, { status: read.status })
+  const parsed = BodySchema.safeParse(read.data)
+  if (!parsed.success) {
+    const { field, message } = firstIssue(parsed.error)
+    return NextResponse.json({ error: message, field }, { status: 400 })
+  }
+  const body = parsed.data
   const { bankName, accountType, institutionNumber, transitNumber, accountNumber } = body
   const removeVoidCheque = body.removeVoidCheque === true
 
@@ -68,9 +81,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'We could not find your uploaded void cheque. Please upload it again.' }, { status: 400 })
     }
     const size = object?.metadata?.size
+    if (typeof size === 'number' && size > UPLOAD_MAX_BYTES) {
+      await admin.storage.from(VOID_CHEQUE_BUCKET).remove([newPath])
+      return NextResponse.json({ error: 'The void cheque is too large. The maximum is 10 MB.' }, { status: 400 })
+    }
     chequeColumns = {
       void_cheque_path:        newPath,
-      void_cheque_name:        cleanFileName(body.voidChequeName, `void-cheque.${extFromPath(newPath)}`),
+      void_cheque_name:        displayFileName(body.voidChequeName, `void-cheque.${extFromPath(newPath)}`),
       void_cheque_size:        typeof size === 'number' ? size : null,
       void_cheque_uploaded_at: new Date().toISOString(),
     }

@@ -3,6 +3,9 @@
 //
 // The audience here is the only source of recipients: the dispatcher (lib/notify-dispatch.ts) looks
 // up the people for each audience at send time. Nothing in a queued row can add a recipient.
+
+import { ONBOARDING_ITEMS } from './form-order'
+
 export const NOTIFICATION_TEMPLATES = [
   'manager_plan_requested', 'manager_plan_submitted', 'clearance_unlocked', 'clearance_submitted',
   'onboarding_complete', 'pm_request_created', 'pm_request_done',
@@ -121,7 +124,8 @@ export function isNotificationTemplate(value: unknown): value is NotificationTem
 }
 
 // The sections a flag notice may name (the four forms and Documents). Never the HR note.
-export const FLAG_SECTIONS = ['personal', 'banking', 'sin', 'policy', 'documents'] as const
+// The five items that can be flagged, in the shared onboarding order (lib/form-order.ts)
+export const FLAG_SECTIONS = ONBOARDING_ITEMS
 export type FlagSection = typeof FLAG_SECTIONS[number]
 export const FLAG_SECTION_LABELS: Record<FlagSection, string> = {
   personal:  'Personal information',

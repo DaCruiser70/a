@@ -4,6 +4,8 @@ import { useRouter, useParams } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import PortalHeader from '@/components/ui/PortalHeader'
 import VehicleTaskModal from '@/components/stakeholder/VehicleTaskModal'
+import { FIELD_LIMITS } from '@/lib/field-limits'
+import CharCount from '@/components/ui/CharCount'
 import { VEHICLE_TASK_KEYS, INSURANCE_TASK_KEY } from '@/lib/vehicle'
 
 type Task = {
@@ -259,7 +261,8 @@ export default function StakeholderHireDetail() {
                 </label>
                 <textarea
                   rows={3}
-                  maxLength={1000}
+                  maxLength={FIELD_LIMITS.note}
+                  aria-describedby="sh-note-count"
                   placeholder="e.g. login details, or where the card was left for the new hire"
                   value={noteText}
                   onChange={e => setNoteText(e.target.value)}
@@ -272,6 +275,7 @@ export default function StakeholderHireDetail() {
                     background: confirming ? '#F9F8F7' : '#fff',
                   }}
                 />
+                <CharCount id="sh-note-count" value={noteText} max={FIELD_LIMITS.note} />
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '5px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: '#888780' }}>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ width: '11px', height: '11px', flexShrink: 0 }}>

@@ -6,6 +6,8 @@ import { useState, useEffect } from 'react'
 import '../../../../styles/pages/form-pages.css'
 import { createClient } from '@/lib/supabase/client'
 import { FORMS_HOME, COMPLETE_PAGE } from '@/lib/routes'
+import { stepLabel } from '@/lib/form-order'
+import { INPUT_HINTS } from '@/lib/field-limits'
 
 function getInitials(name: string) {
   return name.split(' ').filter(Boolean).map(n => n[0]).join('').toUpperCase().slice(0, 2)
@@ -135,7 +137,7 @@ export default function SINForm() {
             </svg>
             Back to checklist
           </button>
-          <div className="form-page-step-tag">Step 3 of 4</div>
+          <div className="form-page-step-tag">{stepLabel('sin')}</div>
           <h1 className="form-page-title">Social Insurance Number</h1>
           <p className="form-page-sub">
             Your SIN is required for payroll and tax purposes. It is encrypted
@@ -188,6 +190,8 @@ export default function SINForm() {
                   onChange={handleSIN}
                   placeholder="000 000 000"
                   required
+                  {...INPUT_HINTS.sin}
+                  autoComplete="off"
                 />
                 <button type="button" className="form-sensitive-toggle" onClick={() => setShowSin(v => !v)} aria-label="Toggle SIN visibility">
                   {showSin ? (
@@ -217,6 +221,8 @@ export default function SINForm() {
                   onChange={handleConfirm}
                   placeholder="000 000 000"
                   required
+                  {...INPUT_HINTS.sin}
+                  autoComplete="off"
                 />
                 <button type="button" className="form-sensitive-toggle" onClick={() => setShowConfirm(v => !v)} aria-label="Toggle confirm visibility">
                   {showConfirm ? (

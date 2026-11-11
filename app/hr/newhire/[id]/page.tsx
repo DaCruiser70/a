@@ -32,6 +32,9 @@ import {
 } from '@/lib/hr-hire'
 import type { HrClearanceFullView as HrClearanceView } from '@/lib/clearance-package'
 import Link from 'next/link'
+import { FIELD_LIMITS } from '@/lib/field-limits'
+import CharCount from '@/components/ui/CharCount'
+import { ONBOARDING_ITEMS } from '@/lib/form-order'
 import type { NewHireDetail, FormStatus, HrNote, AuditEntry, NewhireDocument, StakeholderTask } from '@/types'
 
 // No decrypted SIN or banking number is ever part of this record (has_sin / has_banking only)
@@ -905,7 +908,32 @@ export default function HRNewHirePage() {
                     <span className="hh-count-inline">{approvedItems}/{totalItems} items approved</span>
                   </div>
                   <ul className="hh-formlist">
-                    {FORMS.map(f => {
+                    {/* All five items in the shared onboarding order (lib/form-order.ts). Documents is
+                        one item: it opens the Uploaded documents card below. */}
+                    {ONBOARDING_ITEMS.map(item => {
+                      if (item === 'documents') return (
+                        <li key="documents">
+                          <button
+                            type="button"
+                            className="hh-formlist-item"
+                            aria-controls="hh-docs-card"
+                            onClick={() => {
+                              const el = document.getElementById('hh-docs-card')
+                              el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                              el?.focus({ preventScroll: true })
+                            }}
+                          >
+                            <span className="hh-formlist-text">
+                              <span className="hh-formlist-name">Documents</span>
+                              <span className="hh-formlist-date">
+                                {docsItem ? `${docsItem.approved_required} of ${docsItem.total_required} required approved` : 'Loading…'}
+                              </span>
+                            </span>
+                            {docsItem && <StatusPill tone={FORM_STATUS[docsItem.status].tone}>{FORM_STATUS[docsItem.status].label}</StatusPill>}
+                          </button>
+                        </li>
+                      )
+                      const f = FORMS.find(x => x.id === item)!
                       const fs = statusOf(f.id)
                       const submittedAt = hire.form_submitted_at?.[f.id] ?? null
                       return (
@@ -928,27 +956,6 @@ export default function HRNewHirePage() {
                         </li>
                       )
                     })}
-                    {/* The fifth item: required documents. Opens the Uploaded documents card below. */}
-                    <li>
-                      <button
-                        type="button"
-                        className="hh-formlist-item"
-                        aria-controls="hh-docs-card"
-                        onClick={() => {
-                          const el = document.getElementById('hh-docs-card')
-                          el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-                          el?.focus({ preventScroll: true })
-                        }}
-                      >
-                        <span className="hh-formlist-text">
-                          <span className="hh-formlist-name">Documents</span>
-                          <span className="hh-formlist-date">
-                            {docsItem ? `${docsItem.approved_required} of ${docsItem.total_required} required approved` : 'Loading…'}
-                          </span>
-                        </span>
-                        {docsItem && <StatusPill tone={FORM_STATUS[docsItem.status].tone}>{FORM_STATUS[docsItem.status].label}</StatusPill>}
-                      </button>
-                    </li>
                   </ul>
                   {clearanceAvailable && (
                     <div className="hh-card-foot left">
@@ -1500,7 +1507,9 @@ export default function HRNewHirePage() {
                 <div className="hh-card-body">
                   <form onSubmit={handleSaveNote} className="hh-note-form">
                     <label htmlFor="hh-note-input" className="hh-label">Add an internal note</label>
-                    <textarea id="hh-note-input" className="hh-textarea" rows={3} value={noteText} onChange={e => setNoteText(e.target.value)} />
+                    <textarea id="hh-note-input" className="hh-textarea" rows={3} value={noteText} onChange={e => setNoteText(e.target.value)}
+                      maxLength={FIELD_LIMITS.note} aria-describedby="hh-note-count" />
+                    <CharCount id="hh-note-count" value={noteText} max={FIELD_LIMITS.note} />
                     <button type="submit" className="hh-btn primary">Save note</button>
                   </form>
                   {savedNotes.length === 0 ? (
@@ -1551,12 +1560,15 @@ export default function HRNewHirePage() {
               placeholder="e.g. Your transit number appears incorrect, please double check and resubmit"
               value={flagReasonInput}
               onChange={e => setFlagReasonInput(e.target.value)}
+              maxLength={FIELD_LIMITS.note}
+              aria-describedby="hh-flag-count"
               style={{
                 width:'100%', boxSizing:'border-box', resize:'vertical', padding:'10px 12px',
                 border:'1.5px solid rgba(0,0,0,0.15)', borderRadius:'8px', fontFamily:'sans-serif',
                 fontSize:'13px', lineHeight:1.5, outline:'none', color:'#1A1916',
               }}
             />
+            <CharCount id="hh-flag-count" value={flagReasonInput} max={FIELD_LIMITS.note} />
             <div style={{ display:'flex', gap:'10px', justifyContent:'flex-end', marginTop:'16px' }}>
               <button type="button" className="hh-btn secondary" onClick={() => setFlagModal(null)}>
                 Cancel
@@ -1586,8 +1598,11 @@ export default function HRNewHirePage() {
               placeholder="e.g. This document is expired — please upload a current version."
               value={rejectDocReason}
               onChange={e => setRejectDocReason(e.target.value)}
+              maxLength={FIELD_LIMITS.note}
+              aria-describedby="hh-reject-count"
               style={{ width:'100%', boxSizing:'border-box', resize:'vertical', padding:'10px 12px', border:'1.5px solid rgba(0,0,0,0.15)', borderRadius:'8px', fontFamily:'sans-serif', fontSize:'13px', lineHeight:1.5, outline:'none', color:'#1A1916' }}
             />
+            <CharCount id="hh-reject-count" value={rejectDocReason} max={FIELD_LIMITS.note} />
             <div style={{ display:'flex', gap:'10px', justifyContent:'flex-end', marginTop:'16px' }}>
               <button type="button" className="hh-btn secondary" onClick={() => { setRejectDocModal(null); setRejectDocReason('') }}>
                 Cancel

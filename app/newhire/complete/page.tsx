@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { useEffect } from 'react'
 import '../../../styles/pages/complete.css'
 import { useMe } from '@/lib/use-me'
+import { ONBOARDING_ITEMS, type OnboardingItem } from '@/lib/form-order'
 import { FORMS_HOME } from '@/lib/routes'
 
 function getInitials(name: string) {
@@ -13,13 +14,14 @@ function getInitials(name: string) {
 }
 
 // Every required item on the checklist (Security Clearance is tracked separately and not listed)
-const SUBMITTED_FORMS = [
-  { name: 'Personal Information',     badge: 'Sent to HR' },
-  { name: 'Banking & Direct Deposit', badge: 'Encrypted & sent to HR' },
-  { name: 'Social Insurance Number',  badge: 'Encrypted & sent to HR' },
-  { name: 'Policy Acknowledgement',   badge: 'Signed & sent to HR' },
-  { name: 'Document Uploads',         badge: 'Sent to HR' },
-]
+const SUBMITTED_BADGES: Record<OnboardingItem, { name: string; badge: string }> = {
+  personal:  { name: 'Personal Information',     badge: 'Sent to HR' },
+  banking:   { name: 'Banking & Direct Deposit', badge: 'Encrypted & sent to HR' },
+  sin:       { name: 'Social Insurance Number',  badge: 'Encrypted & sent to HR' },
+  documents: { name: 'Document Uploads',         badge: 'Sent to HR' },
+  policy:    { name: 'Policy Acknowledgement',   badge: 'Signed & sent to HR' },
+}
+const SUBMITTED_FORMS = ONBOARDING_ITEMS.map(item => SUBMITTED_BADGES[item])
 
 const NEXT_STEPS = [
   {

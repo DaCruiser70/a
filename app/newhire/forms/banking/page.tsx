@@ -6,6 +6,8 @@ import { useState, useRef, useEffect } from 'react'
 import '../../../../styles/pages/form-pages.css'
 import { createClient } from '@/lib/supabase/client'
 import { FORMS_HOME, COMPLETE_PAGE } from '@/lib/routes'
+import { stepLabel } from '@/lib/form-order'
+import { ACCOUNT_TYPES, BANK_NAMES, INPUT_HINTS } from '@/lib/field-limits'
 
 function ChequePreviewImage({ src }: { src: string }) {
   return <img src={src} alt="Void cheque preview" className="banking-cheque-preview-img" /> // eslint-disable-line @next/next/no-img-element
@@ -259,7 +261,7 @@ export default function BankingForm() {
             </svg>
             Back to checklist
           </button>
-          <div className="form-page-step-tag">Step 2 of 4</div>
+          <div className="form-page-step-tag">{stepLabel('banking')}</div>
           <h1 className="form-page-title">Banking &amp; Direct Deposit</h1>
           <p className="form-page-sub">
             Your banking details for payroll direct deposit. All information is
@@ -291,15 +293,7 @@ export default function BankingForm() {
               <label className="form-label">Bank Name <span className="form-label-required">*</span></label>
               <select className="form-input" name="bankName" value={form.bankName} onChange={handleChange} required>
                 <option value="">Select your bank</option>
-                <option>Royal Bank of Canada (RBC)</option>
-                <option>Toronto-Dominion Bank (TD)</option>
-                <option>Bank of Nova Scotia (Scotiabank)</option>
-                <option>Bank of Montreal (BMO)</option>
-                <option>Canadian Imperial Bank of Commerce (CIBC)</option>
-                <option>National Bank of Canada</option>
-                <option>HSBC Canada</option>
-                <option>Desjardins</option>
-                <option>Other</option>
+                {BANK_NAMES.map(b => <option key={b}>{b}</option>)}
               </select>
             </div>
 
@@ -307,8 +301,7 @@ export default function BankingForm() {
               <label className="form-label">Account Type <span className="form-label-required">*</span></label>
               <select className="form-input" name="accountType" value={form.accountType} onChange={handleChange} required>
                 <option value="">Select account type</option>
-                <option>Chequing</option>
-                <option>Savings</option>
+                {ACCOUNT_TYPES.map(t => <option key={t}>{t}</option>)}
               </select>
             </div>
 
@@ -317,7 +310,7 @@ export default function BankingForm() {
                 Institution Number <span className="form-label-required">*</span>
                 <span className="form-label-encrypted">🔒 Encrypted</span>
               </label>
-              <input className="form-input sensitive" name="institutionNumber" value={form.institutionNumber} onChange={handleChange} placeholder="3 digits" maxLength={3} required />
+              <input className="form-input sensitive" name="institutionNumber" value={form.institutionNumber} onChange={handleChange} placeholder="3 digits" required {...INPUT_HINTS.institution} autoComplete="off" />
               <span className="form-input-hint">3-digit number identifying your bank</span>
             </div>
 
@@ -326,7 +319,7 @@ export default function BankingForm() {
                 Transit Number <span className="form-label-required">*</span>
                 <span className="form-label-encrypted">🔒 Encrypted</span>
               </label>
-              <input className="form-input sensitive" name="transitNumber" value={form.transitNumber} onChange={handleChange} placeholder="5 digits" maxLength={5} required />
+              <input className="form-input sensitive" name="transitNumber" value={form.transitNumber} onChange={handleChange} placeholder="5 digits" required {...INPUT_HINTS.transit} autoComplete="off" />
               <span className="form-input-hint">5-digit branch number</span>
             </div>
 
@@ -344,6 +337,8 @@ export default function BankingForm() {
                   onChange={handleChange}
                   placeholder="7–12 digits"
                   required
+                  {...INPUT_HINTS.account}
+                  autoComplete="off"
                 />
                 <button type="button" className="form-sensitive-toggle" onClick={() => setShowAccount(v => !v)} aria-label="Toggle visibility">
                   {showAccount ? (

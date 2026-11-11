@@ -5,6 +5,7 @@ import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { readOtpSession, OTP_SESSION_COOKIE } from '@/lib/otp-session'
 import { parseRoles, isNewhireOnly, type Role } from '@/lib/portals'
 import { loadAccountMember, type PmMember } from '@/lib/pm-server'
+import { newhireSessionAllowed } from '@/lib/session-rules'
 
 export { ROLES, type Role } from '@/lib/portals'
 
@@ -34,6 +35,12 @@ export async function requireRole(...allowed: Role[]): Promise<RoleAuth | NextRe
 
   const roles = parseRoles(user.app_metadata?.roles)
   if (roles.length === 0) return forbidden()
+
+  // A newhire-only session must come from a password sign-in (same rule as the middleware)
+  if (isNewhireOnly(roles)) {
+    const { data: claimsData } = await supabase.auth.getClaims()
+    if (!newhireSessionAllowed(roles, claimsData?.claims?.amr)) return unauthorized()
+  }
 
   let memberId: string | null = null
   if (!isNewhireOnly(roles)) {

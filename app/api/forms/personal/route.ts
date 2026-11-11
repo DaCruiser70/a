@@ -7,29 +7,32 @@ import { afterHireFormSaved } from '@/lib/submission-server'
 import { recomputeProfileStatus } from '@/lib/hire-status'
 import { encryptFields, decryptFields } from '@/lib/encrypt'
 import { esc } from '@/lib/safe-html'
+import { EMERGENCY_RELATIONSHIPS, PHONE_CHOICES, WORK_PHONE_PLATFORMS } from '@/lib/personal-info'
+import { FIELD_LIMITS, normalizePhone } from '@/lib/field-limits'
+import { PHONE_ERROR } from '@/lib/phone-format'
 import {
-  PROVINCES, EMERGENCY_RELATIONSHIPS, PHONE_CHOICES, WORK_PHONE_PLATFORMS, PHONE_MAX, phoneError, dobError,
-} from '@/lib/personal-info'
+  zName, zText, zEmail, zPhone, zPostalCode, zProvince, zDateOfBirth, firstIssue, readJsonBody,
+  BODY_TOO_LARGE, INVALID_REQUEST,
+} from '@/lib/field-validation'
 
-const text  = (max: number) => z.string().trim().min(1).max(max)
-const phone = z.string().trim().max(PHONE_MAX).refine(v => phoneError(v) === null)
-
+// Every field: cleaned, length-limited and format-checked here (lib/field-limits.ts). Phones are
+// stored as 10 digits and postal codes as A1A 1A1. Messages name the field, never the value.
 const BodySchema = z.strictObject({
-  firstName:             text(100),
-  lastName:              text(100),
-  dateOfBirth:           z.string().trim().max(10).refine(v => dobError(v) === null),
-  phone,
-  email:                 z.email().max(254),
-  street:                text(200),
-  city:                  text(100),
-  province:              z.enum(PROVINCES),
-  postalCode:            text(10),
-  emergencyName:         text(200),
-  emergencyRelationship: z.enum(EMERGENCY_RELATIONSHIPS),
-  emergencyPhone:        phone,
-  phoneChoice:           z.enum(PHONE_CHOICES),
+  firstName:             zName('First name'),
+  lastName:              zName('Last name'),
+  dateOfBirth:           zDateOfBirth(),
+  phone:                 zPhone(),
+  email:                 zEmail('Email'),
+  street:                zText('Street address', FIELD_LIMITS.address),
+  city:                  zText('City', FIELD_LIMITS.city),
+  province:              zProvince,
+  postalCode:            zPostalCode(),
+  emergencyName:         zName('Emergency contact name'),
+  emergencyRelationship: z.enum(EMERGENCY_RELATIONSHIPS, { error: 'Choose the emergency contact’s relationship from the list.' }),
+  emergencyPhone:        zPhone(),
+  phoneChoice:           z.enum(PHONE_CHOICES, { error: 'Choose a company work phone or your personal phone.' }),
   workPhonePlatform:     z.enum(WORK_PHONE_PLATFORMS).nullable().optional(),
-  personalPhone:         z.string().max(PHONE_MAX).nullable().optional(),
+  personalPhone:         z.string().max(FIELD_LIMITS.phoneInput * 2).nullable().optional(),
 })
 
 export async function POST(request: Request) {
@@ -45,30 +48,27 @@ export async function POST(request: Request) {
     )
   }
 
-  let raw: unknown
-  try { raw = await request.json() } catch { raw = null }
-  const parsed = BodySchema.safeParse(raw)
+  const read = await readJsonBody(request)
+  if (!read.ok) return NextResponse.json({ error: read.status === 413 ? BODY_TOO_LARGE : INVALID_REQUEST }, { status: read.status })
+  const parsed = BodySchema.safeParse(read.data)
   if (!parsed.success) {
-    // Field names only, so the form can say which answer to fix; never the values
-    const field = parsed.error.issues[0]?.path[0]
-    const dob   = (raw as { dateOfBirth?: unknown } | null)?.dateOfBirth
-    const message =
-      field === 'dateOfBirth' ? dobError(typeof dob === 'string' ? dob : '') ?? 'Enter a valid date of birth.'
-      : field === 'phone' || field === 'emergencyPhone' ? 'Enter a valid phone number, for example (905) 555-0100.'
-      : field === 'phoneChoice' ? 'Choose a company work phone or your personal phone.'
-      : 'Please fill in all required fields.'
-    return NextResponse.json({ error: message }, { status: 400 })
+    // The field and a friendly message, so the form can say what to fix; never the value
+    const { field, message } = firstIssue(parsed.error)
+    return NextResponse.json({ error: message, field }, { status: 400 })
   }
   const body = parsed.data
 
   // Only the chosen branch is kept; the other is cleared on save
   const workPlatform  = body.phoneChoice === 'work' ? body.workPhonePlatform ?? null : null
-  const personalPhone = body.phoneChoice === 'personal' ? (body.personalPhone ?? '').trim() : null
   if (body.phoneChoice === 'work' && !workPlatform) {
-    return NextResponse.json({ error: 'Choose Apple or Android for your work phone.' }, { status: 400 })
+    return NextResponse.json({ error: 'Choose Apple or Android for your work phone.', field: 'workPhonePlatform' }, { status: 400 })
   }
-  if (body.phoneChoice === 'personal' && phoneError(personalPhone ?? '') !== null) {
-    return NextResponse.json({ error: 'Enter a valid personal phone number, for example (905) 555-0100.' }, { status: 400 })
+  let personalPhone: string | null = null
+  if (body.phoneChoice === 'personal') {
+    personalPhone = normalizePhone(body.personalPhone ?? '')
+    if (!personalPhone) {
+      return NextResponse.json({ error: PHONE_ERROR, field: 'personalPhone' }, { status: 400 })
+    }
   }
 
   const fields = {

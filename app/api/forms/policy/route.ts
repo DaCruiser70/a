@@ -3,16 +3,23 @@ import { createServiceClient } from '@/lib/supabase/server'
 import { requireRole } from '@/lib/roles'
 import { afterHireFormSaved } from '@/lib/submission-server'
 import { recomputeProfileStatus } from '@/lib/hire-status'
+import { z } from 'zod'
+import { FIELD_LIMITS } from '@/lib/field-limits'
+import { zName, firstIssue, readJsonBody, BODY_TOO_LARGE, INVALID_REQUEST } from '@/lib/field-validation'
+
+// The typed signature: a name, up to 100 characters, stored as plain text
+const BodySchema = z.strictObject({ signature: zName('Signature', FIELD_LIMITS.signature) })
 
 export async function POST(request: Request) {
   const auth = await requireRole('newhire')
   if (auth instanceof NextResponse) return auth
   const { user } = auth
 
-  const { signature } = await request.json()
-  if (!signature?.trim()) {
-    return NextResponse.json({ error: 'Signature is required.' }, { status: 400 })
-  }
+  const read = await readJsonBody(request)
+  if (!read.ok) return NextResponse.json({ error: read.status === 413 ? BODY_TOO_LARGE : INVALID_REQUEST }, { status: read.status })
+  const parsed = BodySchema.safeParse(read.data)
+  if (!parsed.success) return NextResponse.json({ error: firstIssue(parsed.error).message, field: 'signature' }, { status: 400 })
+  const { signature } = parsed.data
 
   const admin = createServiceClient()
 
@@ -20,21 +27,24 @@ export async function POST(request: Request) {
     .from('policy_acknowledgements')
     .upsert({
       user_id:     user.id,
-      signature:   signature.trim(),
+      signature,
       agreed_at:   new Date().toISOString(),
       form_status:  'review',
       flag_reason:  null,
       submitted_at: new Date().toISOString(),
     }, { onConflict: 'user_id' })
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    console.error(`policy_acknowledgements upsert failed (code ${error.code})`)
+    return NextResponse.json({ error: 'Failed to save. Please try again.' }, { status: 500 })
+  }
 
   await recomputeProfileStatus(admin, user.id)
 
   await admin.from('audit_log').insert({
     user_id:      user.id,
     action_type:  'green',
-    message:      '<strong>New hire</strong> submitted all 4 forms — ready for HR review',
+    message:      '<strong>New hire</strong> submitted the policy acknowledgement',
     performed_by: user.id,
   })
 

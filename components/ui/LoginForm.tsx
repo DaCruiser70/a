@@ -7,6 +7,8 @@ import { isRole, type Role } from '@/lib/portals'
 import { themeForRole } from '@/lib/portal-theme'
 import PortalIcon from '@/components/ui/PortalIcon'
 import ForgotPasswordForm from '@/components/ui/ForgotPasswordForm'
+import { MICROSOFT_REFUSED_MESSAGE } from '@/lib/microsoft-auth'
+import { FIELD_LIMITS } from '@/lib/field-limits'
 
 const OTP_EXPIRY = 300
 
@@ -37,13 +39,23 @@ const AUDIENCES: { key: Audience; label: string }[] = [
   { key: 'newhire', label: 'New hire' },
 ]
 
-export default function LoginForm({ otpRequired = false, microsoftEnabled = false }: {
+export default function LoginForm({
+  otpRequired = false, microsoftEnabled = false, staffPasswordLogin = true, microsoftRefused = false,
+}: {
   otpRequired?: boolean
   microsoftEnabled?: boolean
+  staffPasswordLogin?: boolean   // STAFF_PASSWORD_LOGIN; off: staff see Microsoft and a quiet "Admin sign-in"
+  microsoftRefused?: boolean     // back from a refused Microsoft sign-in
 }) {
   const router = useRouter()
   const supabase = createClient()
   const [audience, setAudience]     = useState<Audience>('staff')
+  const [adminOpen, setAdminOpen]   = useState(false)
+  // The password form: always for new hires; for staff while password sign-in is on, or once
+  // "Admin sign-in" is opened (the server still accepts only break-glass accounts then)
+  const showPasswordForm = audience === 'newhire' || staffPasswordLogin || adminOpen
+  // The staff tab has its own intro whenever Microsoft is on or password sign-in is off
+  const staffLead = microsoftEnabled || !staffPasswordLogin
   const tabRefs = useRef<Record<Audience, HTMLButtonElement | null>>({ staff: null, newhire: null })
 
   // Arrow keys, Home and End move between the two tabs (and select them)
@@ -541,7 +553,7 @@ export default function LoginForm({ otpRequired = false, microsoftEnabled = fals
               and nothing on the page moves. The other tab's intro is invisible, inert and hidden
               from screen readers. */}
           <div className="ld-lead">
-            {microsoftEnabled && <div className={`ld-lead-item${audience === 'staff' ? '' : ' ld-lead-off'}`}
+            {staffLead && <div className={`ld-lead-item${audience === 'staff' ? '' : ' ld-lead-off'}`}
               inert={audience !== 'staff'} aria-hidden={audience !== 'staff' || undefined}>
               {microsoftEnabled && (
                 <>
@@ -550,11 +562,19 @@ export default function LoginForm({ otpRequired = false, microsoftEnabled = fals
                     Sign in with Microsoft
                   </a>
                   <p className="ld-ms-note">Approve with the Authenticator app when asked.</p>
-                  <div className="ld-divider"><span>Or with email</span></div>
+                  {staffPasswordLogin && <div className="ld-divider"><span>or sign in with email and password</span></div>}
                 </>
               )}
+              {!staffPasswordLogin && (
+                <div className="ld-admin">
+                  <button type="button" className="ld-admin-link" aria-expanded={adminOpen} aria-controls="ld-password-form"
+                    onClick={() => setAdminOpen(o => !o)}>
+                    Admin sign-in
+                  </button>
+                </div>
+              )}
             </div>}
-            {(microsoftEnabled || audience === 'newhire') && (
+            {(staffLead || audience === 'newhire') && (
               <div className={`ld-lead-item${audience === 'newhire' ? '' : ' ld-lead-off'}`}
                 inert={audience !== 'newhire'} aria-hidden={audience !== 'newhire' || undefined}>
                 <p className="ld-hint">
@@ -564,18 +584,29 @@ export default function LoginForm({ otpRequired = false, microsoftEnabled = fals
             )}
           </div>
 
+          {/* On both tabs, so switching tabs never changes the card's height */}
+          {microsoftRefused && (
+            <div className="login-error ld-ms-refused" role="alert">{MICROSOFT_REFUSED_MESSAGE}</div>
+          )}
+
           {otpRequired && !error && (
             <div className="login-notice" role="status">Please sign in again to continue</div>
           )}
 
-          {/* method="post" and no name attributes: before the script loads, nothing is sent, never in the URL */}
-          <form method="post" onSubmit={handleLogin}>
+          {/* method="post" and no name attributes: before the script loads, nothing is sent, never in the URL.
+              Always laid out: while staff password sign-in is off and "Admin sign-in" is closed, it is
+              invisible, inert and hidden from screen readers, but keeps its space so the staff tab is
+              as tall as the New hire tab and the card never changes size. */}
+          <form method="post" onSubmit={handleLogin} id="ld-password-form"
+            className={showPasswordForm ? undefined : 'ld-lead-off'}
+            inert={!showPasswordForm} aria-hidden={!showPasswordForm || undefined}>
             <div className="login-field">
               <label htmlFor="username">Email</label>
               <div className="login-inp-wrap">
                 <span className="login-inp-icon" aria-hidden="true">@</span>
                 <input
                   type="email" id="username"
+                  maxLength={FIELD_LIMITS.email}
                   autoComplete="username"
                   placeholder="your.name@aemltd.com"
                   value={email}
@@ -590,6 +621,7 @@ export default function LoginForm({ otpRequired = false, microsoftEnabled = fals
                 <span className="login-inp-icon" aria-hidden="true">•••</span>
                 <input
                   type="password" id="password"
+                  maxLength={FIELD_LIMITS.password}
                   autoComplete="current-password"
                   placeholder="Your password"
                   value={password}
@@ -619,7 +651,7 @@ export default function LoginForm({ otpRequired = false, microsoftEnabled = fals
 
         {/* Without the Microsoft button, the staff tab keeps the new hire hint's height down here
             instead, as empty space under the card, so switching tabs never moves anything */}
-        {!microsoftEnabled && audience === 'staff' && (
+        {!staffLead && audience === 'staff' && (
           <div className="ld-lead-item ld-lead-off ld-lead-ghost" inert aria-hidden="true">
             <p className="ld-hint">
               First time here? Use the link in your welcome email to set your password, then sign in below.
